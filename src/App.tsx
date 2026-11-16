@@ -1,0 +1,22 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import AppLayout from './components/layout/AppLayout';
+import AdsPage from './pages/ads/AdsPage';
+import OrdersPage from './pages/orders/OrdersPage';
+import KocBookingPage from './pages/koc-booking/KocBookingPage';
+import FinancePage from './pages/finance/FinancePage';
+import NotFoundPage from './pages/NotFoundPage';
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<Navigate to="/ads" replace />} />
+        <Route path="ads" element={<AdsPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="koc-booking" element={<KocBookingPage />} />
+        <Route path="finance" element={<FinancePage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  );
+}

@@ -1,0 +1,46 @@
+{
+  "updatedAt": "2026-11-16T16:13:07Z",
+  "range": { "from": "2026-11-09", "to": "2026-11-15" },
+  "advertiser": {
+    "id": "7579465349544869906",
+    "name": "Phụ Kiện NECOTECH",
+    "currency": "VND"
+  },
+  "summary": {
+    "totalCost": 28662076,
+    "totalRevenue": 196301600,
+    "totalOrders": 483,
+    "roi": 6.8488,
+    "videosWithSpend7d": 207,
+    "boostedVideos": null,
+    "pendingSuggestions": null,
+    "activeRules": null,
+    "totalRules": null
+  },
+  "campaigns": [
+    {
+      "id": "1870948861086738",
+      "name": "Product GMV Max_Doanh thu gộp_Phụ Kiện NECOTECH_20260717152507",
+      "status": "running",
+      "selectedVideos": 198,
+      "budget": 3500000,
+      "cost": 23163574,
+      "revenue": 164539430,
+      "orders": 409,
+      "roi": 7.1034,
+      "hasSuggestion": false
+    },
+    {
+      "id": "1880807408440929",
+      "name": "Product GMV Max_Gross revenue_Phụ Kiện NECOTECH_20261103110531",
+      "status": "running",
+      "selectedVideos": 9,
+      "budget": 6000000,
+      "cost": 5498502,
+      "revenue": 31762170,
+      "orders": 74,
+      "roi": 5.7765,
+      "hasSuggestion": false
+    }
+  ]
+}

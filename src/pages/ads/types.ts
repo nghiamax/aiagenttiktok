@@ -14,6 +14,8 @@ export interface Campaign {
   revenue: number | null;
   orders: number | null;
   roi: number | null;
+  /** ROI mục tiêu của chiến dịch (roas_bid trên TikTok) */
+  targetRoi: number | null;
   hasSuggestion: boolean;
 }
 
@@ -38,4 +40,77 @@ export interface AdsSnapshot {
   advertiser: { id: string; name: string; currency: string } | null;
   summary: AdsSummary;
   campaigns: Campaign[];
+  products: AdsProduct[];
+  videos: AdsVideo[];
+}
+
+/** Tab trong card danh sách GMV Max */
+export type AdsListTab = 'campaigns' | 'products' | 'videos';
+
+/** Lời/lỗ của sản phẩm so với ROI hoà vốn */
+export type ProductMargin = 'loss' | 'near' | 'profit';
+
+export type ProductFilter = ProductMargin | 'all';
+
+/** ID nhóm video (định nghĩa trong settings.groups, Sếp tự sửa/thêm). Mặc định: authorize, cut, scale, watch, stable */
+export type VideoAction = string;
+
+/** ID nhóm hoặc 'all' */
+export type VideoActionFilter = string;
+
+/** Trạng thái phân phối creative (creative_delivery_status của TikTok) */
+export type VideoStatus =
+  | 'delivering'
+  | 'learning'
+  | 'in_queue'
+  | 'not_delivering'
+  | 'authorization_needed'
+  | 'excluded'
+  | 'unavailable'
+  | 'rejected'
+  | 'not_active'
+  | 'unknown';
+
+/** video: video TikTok; product_card: thẻ sản phẩm (item_id = -1, không phải video) */
+export type CreativeContentType = 'video' | 'product_card';
+
+/** Sản phẩm trong một chiến dịch GMV Max */
+export interface AdsProduct {
+  /** item_group_id (SPU) */
+  id: string;
+  campaignId: string;
+  name: string;
+  imageUrl: string | null;
+  videoCount: number | null;
+  cost: number | null;
+  revenue: number | null;
+  orders: number | null;
+  roi: number | null;
+}
+
+/** Video (creative) quảng cáo cho một sản phẩm */
+export interface AdsVideo {
+  /** item_id (video TikTok) */
+  id: string;
+  campaignId: string;
+  productId: string;
+  contentType: CreativeContentType | null;
+  title: string | null;
+  thumbnailUrl: string | null;
+  /** Tài khoản TikTok đăng video (tên hiển thị) */
+  identityName: string | null;
+  /** Username tác giả (không có @), dùng để tạo link video. Tra bằng scripts/resolve-video-authors.mjs */
+  authorUsername?: string | null;
+  status: VideoStatus;
+  cost: number | null;
+  revenue: number | null;
+  orders: number | null;
+  roi: number | null;
+}
+
+export type SortDir = 'asc' | 'desc';
+
+export interface SortState<K extends string> {
+  key: K;
+  dir: SortDir;
 }

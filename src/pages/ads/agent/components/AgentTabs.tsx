@@ -1,0 +1,43 @@
+import { Gauge, History, Inbox, Layers, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import type { AgentView } from '../types';
+
+interface AgentTabsProps {
+  value: AgentView;
+  onChange: (view: AgentView) => void;
+  counts: Record<AgentView, string>;
+}
+
+const TABS: { value: AgentView; label: string; icon: LucideIcon }[] = [
+  { value: 'pending', label: 'Chờ duyệt', icon: Inbox },
+  { value: 'log', label: 'Nhật ký', icon: History },
+  { value: 'impact', label: 'Hiệu quả', icon: Gauge },
+  { value: 'rules', label: 'Quy tắc', icon: SlidersHorizontal },
+  { value: 'groups', label: 'Nhóm video', icon: Layers },
+];
+
+/** Các tab của trang AI Agent (cùng kiểu với ListViewTabs) */
+export default function AgentTabs({ value, onChange, counts }: AgentTabsProps) {
+  return (
+    <div className="flex flex-wrap gap-1" role="tablist" aria-label="AI Agent">
+      {TABS.map(({ value: tab, label, icon: Icon }) => {
+        const active = tab === value;
+        return (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab)}
+            className={`flex items-center gap-2.5 rounded-xl border border-transparent px-3 py-2 text-sm transition-colors ${
+              active ? 'bg-primary-soft font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
+            }`}
+          >
+            <Icon className="size-4" />
+            {label}
+            <span className={`text-xs ${active ? 'text-primary/70' : 'text-muted'}`}>{counts[tab]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

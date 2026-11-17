@@ -1,9 +1,12 @@
 import { CalendarClock, Coins, Wand2 } from 'lucide-react';
+import SegmentedControl from '../../../components/ui/SegmentedControl';
 import type { CampaignFilter } from '../types';
+import { TOOLBAR } from './tableStyles';
 
 interface CampaignFilterBarProps {
   value: CampaignFilter;
   onChange: (value: CampaignFilter) => void;
+  onOpenBreakEven: () => void;
 }
 
 const FILTERS: { value: CampaignFilter; label: string }[] = [
@@ -19,33 +22,10 @@ const ACTIONS = [
   { label: 'Lịch ngân sách', icon: CalendarClock, color: 'text-accent-green' },
 ];
 
-export default function CampaignFilterBar({ value, onChange }: CampaignFilterBarProps) {
+export default function CampaignFilterBar({ value, onChange, onOpenBreakEven }: CampaignFilterBarProps) {
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      {/* Bộ lọc dạng segmented control */}
-      <div
-        className="inline-flex w-fit flex-wrap gap-1 rounded-xl bg-canvas p-1"
-        role="tablist"
-        aria-label="Lọc chiến dịch"
-      >
-        {FILTERS.map((f) => {
-          const active = f.value === value;
-          return (
-            <button
-              key={f.value}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onChange(f.value)}
-              className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all ${
-                active ? 'bg-white text-primary shadow-sm' : 'text-muted hover:text-ink'
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className={TOOLBAR}>
+      <SegmentedControl options={FILTERS} value={value} onChange={onChange} ariaLabel="Lọc chiến dịch" />
 
       {/* Tiện ích */}
       <div className="flex flex-wrap items-center gap-1">
@@ -53,6 +33,7 @@ export default function CampaignFilterBar({ value, onChange }: CampaignFilterBar
           <button
             key={label}
             type="button"
+            onClick={label === 'ROI hoà vốn' ? onOpenBreakEven : undefined}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink/80 transition-colors hover:bg-canvas hover:text-ink"
           >
             <Icon className={`size-4 ${color}`} />

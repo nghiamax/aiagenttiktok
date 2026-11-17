@@ -1,0 +1,49 @@
+{
+  "paused": false,
+  "lastRunAt": null,
+  "guardrails": {
+    "dailyBoostCap": 200000,
+    "maxActionsPerDay": 20,
+    "cooldownHours": 24,
+    "evaluateAfterHours": 24,
+    "maxBudgetIncreasePct": 30,
+    "maxBudgetDecreasePct": 30
+  },
+  "rules": [
+    {
+      "id": "cut-losing-video",
+      "name": "Gỡ video lỗ",
+      "trigger": "cut",
+      "actionType": "remove_creative",
+      "params": {},
+      "mode": "off",
+      "cooldownHours": 24,
+      "campaignIds": null,
+      "productIds": null
+    },
+    {
+      "id": "boost-winning-video",
+      "name": "Tăng cường video tốt",
+      "trigger": "scale",
+      "actionType": "boost_creative",
+      "params": { "boostBudget": 50000, "boostDays": 1 },
+      "mode": "off",
+      "cooldownHours": 24,
+      "campaignIds": null,
+      "productIds": null
+    },
+    {
+      "id": "remind-authorize",
+      "name": "Nhắc ủy quyền",
+      "trigger": "authorize",
+      "actionType": "remind",
+      "params": {},
+      "mode": "off",
+      "cooldownHours": 72,
+      "campaignIds": null,
+      "productIds": null
+    }
+  ],
+  "proposals": [],
+  "actions": []
+}

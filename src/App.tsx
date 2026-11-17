@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import AdsPage from './pages/ads/AdsPage';
+import AgentPage from './pages/ads/agent/AgentPage';
+import AdsLayout from './pages/ads/AdsLayout';
 import OrdersPage from './pages/orders/OrdersPage';
 import KocBookingPage from './pages/koc-booking/KocBookingPage';
 import FinancePage from './pages/finance/FinancePage';
@@ -11,7 +13,10 @@ export default function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/ads" replace />} />
-        <Route path="ads" element={<AdsPage />} />
+        <Route path="ads" element={<AdsLayout />}>
+          <Route index element={<AdsPage />} />
+          <Route path="agent" element={<AgentPage />} />
+        </Route>
         <Route path="orders" element={<OrdersPage />} />
         <Route path="koc-booking" element={<KocBookingPage />} />
         <Route path="finance" element={<FinancePage />} />

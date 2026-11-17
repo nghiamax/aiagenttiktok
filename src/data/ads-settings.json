@@ -1,0 +1,82 @@
+{
+  "breakEvenRoi": {},
+  "groups": [
+    {
+      "id": "authorize",
+      "name": "Cần ủy quyền",
+      "tone": "amber",
+      "icon": "key",
+      "kind": "platform",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": []
+    },
+    {
+      "id": "cut",
+      "name": "Cắt lỗ",
+      "tone": "red",
+      "icon": "scissors",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        {
+          "clauses": [
+            { "metric": "cost", "op": "gte", "value": { "type": "number", "n": 100000 } },
+            { "metric": "orders", "op": "eq", "value": { "type": "number", "n": 0 } }
+          ]
+        },
+        {
+          "clauses": [
+            { "metric": "cost", "op": "gte", "value": { "type": "number", "n": 100000 } },
+            { "metric": "roi", "op": "lt", "value": { "type": "breakEven", "k": 1 } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scale",
+      "name": "Nhân rộng",
+      "tone": "green",
+      "icon": "trending",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        {
+          "clauses": [
+            { "metric": "orders", "op": "gte", "value": { "type": "number", "n": 3 } },
+            { "metric": "roi", "op": "gte", "value": { "type": "target", "k": 1 } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "watch",
+      "name": "Theo dõi",
+      "tone": "blue",
+      "icon": "hourglass",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        {
+          "clauses": [
+            { "metric": "cost", "op": "gt", "value": { "type": "number", "n": 0 } },
+            { "metric": "cost", "op": "lt", "value": { "type": "number", "n": 100000 } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stable",
+      "name": "Ổn định",
+      "tone": "gray",
+      "icon": "shield",
+      "kind": "fallback",
+      "builtin": true,
+      "showInInbox": false,
+      "conditionSets": []
+    }
+  ]
+}

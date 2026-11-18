@@ -8,15 +8,26 @@ import {
   groupDescription,
   groupMeta,
   type ConditionSet,
+  LEVEL_UNIT,
   type GroupDef,
   type GroupIcon,
+  type GroupLevel,
   type GroupTone,
 } from '../../groups';
+import { METRICS_BY_LEVEL, VALUE_TYPES_BY_LEVEL } from '../meta';
 import ConditionSetsEditor from './ConditionSetsEditor';
+
+const SUBJECT: Record<GroupLevel, string> = {
+  video: 'Video thuộc nhóm',
+  product: 'Sản phẩm thuộc nhóm',
+  campaign: 'Chiến dịch thuộc nhóm',
+};
 
 interface GroupCardProps {
   group: GroupDef;
-  /** Số video khớp nhóm theo bản nháp hiện tại */
+  /** Cấp của nhóm: quyết định chỉ số dùng được và đơn vị đếm */
+  level: GroupLevel;
+  /** Số đối tượng khớp nhóm theo bản nháp hiện tại */
   count: number;
   /** Số quy tắc Agent đang dùng nhóm này */
   usedByRules: number;
@@ -38,6 +49,7 @@ const ICONS = Object.keys(GROUP_ICONS) as GroupIcon[];
 /** Thẻ định nghĩa một nhóm video: tên, màu, các "cách" nhận diện (HOẶC) gồm điều kiện (VÀ) */
 export default function GroupCard({
   group,
+  level,
   count,
   usedByRules,
   errors,
@@ -104,11 +116,12 @@ export default function GroupCard({
             </span>
           )}
           <span className="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-xs font-semibold tabular-nums text-muted">
-            {formatNumber(count)} video
+            {formatNumber(count)} {LEVEL_UNIT[level]}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
+          {/* Hiện thành một ô ở hộp "Agent đang theo dõi" (tab theo cấp) */}
           <label className="mr-2 flex cursor-pointer items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
@@ -184,11 +197,17 @@ export default function GroupCard({
         {!editable ? (
           <p className="flex items-center gap-2 rounded-xl bg-canvas/70 px-3 py-2.5 text-sm text-muted">
             <Lock className="size-4 shrink-0" />
-            {groupDescription(group)}
+            {groupDescription(group, level)}
             {group.kind === 'platform' && ' (quy tắc của sàn, không sửa được)'}
           </p>
         ) : (
-          <ConditionSetsEditor sets={sets} onChange={setSets} subject="Video thuộc nhóm" />
+          <ConditionSetsEditor
+            sets={sets}
+            onChange={setSets}
+            subject={SUBJECT[level]}
+            metrics={METRICS_BY_LEVEL[level]}
+            valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+          />
         )}
       </div>
 

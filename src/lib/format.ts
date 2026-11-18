@@ -13,6 +13,7 @@ export function formatNumber(value: number | null | undefined, maxFractionDigits
 
 /** 1.810.000 → "1,81 tr"; 95.000 → "95k" */
 export function shortVnd(value: number): string {
+  if (value === 0) return '0đ';
   if (value >= 1_000_000) return `${formatNumber(value / 1_000_000, 2)} tr`;
   return `${formatNumber(Math.round(value / 1000))}k`;
 }

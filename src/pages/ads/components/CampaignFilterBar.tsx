@@ -1,4 +1,4 @@
-import { CalendarClock, Coins, Wand2 } from 'lucide-react';
+import { Coins, Layers, X } from 'lucide-react';
 import SegmentedControl from '../../../components/ui/SegmentedControl';
 import type { CampaignFilter } from '../types';
 import { TOOLBAR } from './tableStyles';
@@ -6,41 +6,58 @@ import { TOOLBAR } from './tableStyles';
 interface CampaignFilterBarProps {
   value: CampaignFilter;
   onChange: (value: CampaignFilter) => void;
+  /** Số chiến dịch theo từng trạng thái, hiện trên nút lọc */
+  counts: Record<CampaignFilter, number>;
   onOpenBreakEven: () => void;
+  /** Tên nhóm đang lọc (mở từ hộp "Agent đang theo dõi") → hiện chip có nút bỏ lọc */
+  groupName?: string;
+  onClearGroup?: () => void;
 }
 
-const FILTERS: { value: CampaignFilter; label: string }[] = [
-  { value: 'all', label: 'Tất cả' },
-  { value: 'running', label: 'Đang chạy' },
-  { value: 'paused', label: 'Đã tắt' },
-  { value: 'suggested', label: 'Có đề xuất' },
-];
+const LABELS: Record<CampaignFilter, string> = { all: 'Tất cả', running: 'Đang chạy', paused: 'Đã tắt' };
 
-const ACTIONS = [
-  { label: 'Quy tắc', icon: Wand2, color: 'text-accent-violet' },
-  { label: 'ROI hoà vốn', icon: Coins, color: 'text-amber-500' },
-  { label: 'Lịch ngân sách', icon: CalendarClock, color: 'text-accent-green' },
-];
+export default function CampaignFilterBar({
+  value,
+  onChange,
+  counts,
+  onOpenBreakEven,
+  groupName,
+  onClearGroup,
+}: CampaignFilterBarProps) {
+  const options = (Object.keys(LABELS) as CampaignFilter[]).map((f) => ({
+    value: f,
+    label: `${LABELS[f]} (${counts[f]})`,
+  }));
 
-export default function CampaignFilterBar({ value, onChange, onOpenBreakEven }: CampaignFilterBarProps) {
   return (
     <div className={TOOLBAR}>
-      <SegmentedControl options={FILTERS} value={value} onChange={onChange} ariaLabel="Lọc chiến dịch" />
-
-      {/* Tiện ích */}
-      <div className="flex flex-wrap items-center gap-1">
-        {ACTIONS.map(({ label, icon: Icon, color }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={label === 'ROI hoà vốn' ? onOpenBreakEven : undefined}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink/80 transition-colors hover:bg-canvas hover:text-ink"
-          >
-            <Icon className={`size-4 ${color}`} />
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl options={options} value={value} onChange={onChange} ariaLabel="Lọc chiến dịch" />
+        {groupName && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft py-1 pl-3 pr-1 text-sm font-medium text-primary">
+            <Layers className="size-4" />
+            Nhóm: {groupName}
+            <button
+              type="button"
+              onClick={onClearGroup}
+              aria-label="Bỏ lọc theo nhóm"
+              title="Bỏ lọc theo nhóm"
+              className="flex size-6 items-center justify-center rounded-full transition-colors hover:bg-primary hover:text-white"
+            >
+              <X className="size-3.5" />
+            </button>
+          </span>
+        )}
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenBreakEven}
+        className="flex w-fit items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink/80 transition-colors hover:bg-canvas hover:text-ink"
+      >
+        <Coins className="size-4 text-amber-500" />
+        ROI hoà vốn
+      </button>
     </div>
   );
 }

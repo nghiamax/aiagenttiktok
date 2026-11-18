@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Package } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Pagination from '../../../components/ui/Pagination';
 import SegmentedControl from '../../../components/ui/SegmentedControl';
 import { formatNumber, formatVnd } from '../../../lib/format';
 import { usePagination } from '../../../lib/usePagination';
-import { productMargin } from '../classify';
+import { classifyProduct } from '../classify';
+import { groupDescription } from '../groups';
 import { cpa, nextSort, sortByValue } from '../metrics';
-import { breakEvenOf, type AdsSettings } from '../settings';
-import type { AdsProduct, Campaign, ProductFilter, SortState } from '../types';
-import MarginBadge from './MarginBadge';
+import { breakEvenOf, findGroup, type AdsSettings } from '../settings';
+import type { AdsProduct, Campaign, SortState } from '../types';
+import ActionBadge from './ActionBadge';
 import EmptyTableState from './EmptyTableState';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
@@ -23,14 +25,10 @@ interface ProductTableProps {
   onOpenCampaign: (campaignId: string) => void;
   settings: AdsSettings;
   onOpenSettings: () => void;
+  /** ID nhóm sản phẩm đang lọc hoặc 'all' (lưu trên URL) */
+  action: string;
+  onActionChange: (action: string) => void;
 }
-
-const FILTERS: { value: ProductFilter; label: string }[] = [
-  { value: 'all', label: 'Tất cả' },
-  { value: 'loss', label: 'Lỗ' },
-  { value: 'near', label: 'Sát hoà vốn' },
-  { value: 'profit', label: 'Lời' },
-];
 
 const PAGE_SIZE = 20;
 
@@ -41,16 +39,26 @@ export default function ProductTable({
   onOpenCampaign,
   settings,
   onOpenSettings,
+  action: filter,
+  onActionChange: setFilter,
 }: ProductTableProps) {
-  const [filter, setFilter] = useState<ProductFilter>('all');
   const [sort, setSort] = useState<SortState<ProductSortKey>>({ key: 'cost', dir: 'desc' });
 
   const rows = products.map((p) => ({
     p,
     cpa: cpa(p.cost, p.orders),
-    margin: productMargin(p, settings),
+    cls: classifyProduct(p, campaignById.get(p.campaignId), settings),
   }));
-  const filtered = filter === 'all' ? rows : rows.filter((r) => r.margin === filter);
+  const filtered = filter === 'all' ? rows : rows.filter((r) => r.cls?.action === filter);
+  const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
+
+  // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
+  const counts = new Map<string, number>();
+  for (const r of rows) if (r.cls) counts.set(r.cls.action, (counts.get(r.cls.action) ?? 0) + 1);
+  const filterOptions = [
+    { value: 'all', label: `Tất cả (${rows.length})` },
+    ...settings.productGroups.map((g) => ({ value: g.id, label: `${g.name} (${counts.get(g.id) ?? 0})` })),
+  ];
   const sorted = sortByValue(filtered, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
 
@@ -59,17 +67,26 @@ export default function ProductTable({
   return (
     <>
       <div className={TOOLBAR}>
-        <SegmentedControl options={FILTERS} value={filter} onChange={setFilter} ariaLabel="Lọc sản phẩm" />
+        <SegmentedControl options={filterOptions} value={filter} onChange={setFilter} ariaLabel="Lọc sản phẩm theo nhóm" />
         <span className="text-sm text-muted">
-          {filtered.length} sản phẩm · Lời/lỗ so với{' '}
-          <button type="button" onClick={onOpenSettings} className="font-medium text-primary transition-colors hover:text-primary-hover">
-            ROI hoà vốn
-          </button>
+          {activeGroup ? (
+            groupDescription(activeGroup, 'product')
+          ) : (
+            <>
+              {filtered.length} sản phẩm ·{' '}
+              <Link
+                to="/ads/agent?view=groups&level=product"
+                className="font-medium text-primary transition-colors hover:text-primary-hover"
+              >
+                Sửa nhóm sản phẩm
+              </Link>
+            </>
+          )}
         </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px] text-sm">
+        <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Sản phẩm</th>
@@ -80,11 +97,12 @@ export default function ProductTable({
               <SortableHeader label="Đơn hàng" sortKey="orders" {...header} />
               <SortableHeader label="CPA" sortKey="cpa" {...header} />
               <SortableHeader label="ROI" sortKey="roi" {...header} />
-              <th className={`${TH} text-left`}>Lời / lỗ</th>
+              <th className={`${TH} text-right`}>ROI hoà vốn</th>
+              <th className={`${TH} text-left`}>Nhóm</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {pageItems.map(({ p, cpa: cpaValue, margin }) => {
+            {pageItems.map(({ p, cpa: cpaValue, cls }) => {
               const campaign = campaignById.get(p.campaignId);
               return (
                 <tr key={`${p.campaignId}-${p.id}`} className="transition-colors hover:bg-canvas">
@@ -128,8 +146,25 @@ export default function ProductTable({
                   <td className={TD_NUM}>{formatNumber(p.orders)}</td>
                   <td className={TD_NUM}>{formatVnd(cpaValue)}</td>
                   <td className={`${TD_NUM} font-semibold`}>{formatNumber(p.roi, 2)}</td>
+                  <td className={TD_NUM}>
+                    {(() => {
+                      const be = breakEvenOf(settings, p.id);
+                      return be == null ? (
+                        <button
+                          type="button"
+                          onClick={onOpenSettings}
+                          title="Chưa nhập ROI hoà vốn — nhóm Lỗ / Lời sẽ không khớp"
+                          className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                        >
+                          Nhập
+                        </button>
+                      ) : (
+                        <span className="text-muted">{formatNumber(be, 2)}</span>
+                      );
+                    })()}
+                  </td>
                   <td className={TD}>
-                    <MarginBadge margin={margin} breakEven={breakEvenOf(settings, p.id)} />
+                    <ActionBadge action={cls?.action ?? null} reason={cls?.reason} level="product" />
                   </td>
                 </tr>
               );

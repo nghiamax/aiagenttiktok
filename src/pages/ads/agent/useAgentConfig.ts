@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import agentJson from '../../../data/agent.json';
 import type { VideoAction } from '../types';
-import type { AgentGuardrails, AgentRule, AgentState } from './types';
+import type { AgentGuardrails, AgentRule, AgentState, RuleLevel } from './types';
 
 /** Dữ liệu Agent (đề xuất, nhật ký, trạng thái) — backend/Claude ghi vào file này */
 export const AGENT_DATA = agentJson as AgentState;
@@ -87,9 +87,8 @@ export function activeRuleCount(rules: AgentRule[]): number {
   return rules.filter((r) => r.mode !== 'off').length;
 }
 
-/** Quy tắc gắn với một nhóm video (ưu tiên quy tắc đang bật) */
-export function ruleForTrigger(rules: AgentRule[], trigger: VideoAction): AgentRule | null {
-  // Chỉ quy tắc cấp video gắn với nhóm video
-  const list = rules.filter((r) => (r.level ?? 'video') === 'video' && r.trigger === trigger);
+/** Quy tắc gắn với một nhóm (cùng cấp), ưu tiên quy tắc đang bật */
+export function ruleForTrigger(rules: AgentRule[], trigger: VideoAction, level: RuleLevel = 'video'): AgentRule | null {
+  const list = rules.filter((r) => (r.level ?? 'video') === level && r.trigger === trigger);
   return list.find((r) => r.mode !== 'off') ?? list[0] ?? null;
 }

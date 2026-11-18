@@ -5,22 +5,13 @@ import Modal from '../../../../components/ui/Modal';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import ActionBadge from '../../components/ActionBadge';
 import { formatNumber } from '../../../../lib/format';
-import { conditionSetsText, groupDescription } from '../../groups';
-import { findGroup, type AdsSettings } from '../../settings';
+import { groupDescription, LEVEL_UNIT } from '../../groups';
+import { findGroup, groupsOf, type AdsSettings } from '../../settings';
 import { campaignOfProduct, campaignOptions, campaignTargetRoi, productOptionsFor } from '../lookup';
-import {
-  actionText,
-  actionTypeMeta,
-  budgetLimitWarning,
-  LEVEL_LABEL,
-  METRICS_BY_LEVEL,
-  MODE_OPTIONS,
-  ruleLevel,
-  VALUE_TYPES_BY_LEVEL,
-} from '../meta';
+import { actionText, actionTypeMeta, budgetLimitWarning, LEVEL_LABEL, MODE_OPTIONS, ruleLevel } from '../meta';
 import { matchRuleTargets } from '../ruleMatch';
 import type { AgentGuardrails, AgentRule, RuleMode } from '../types';
-import ConditionSetsEditor from './ConditionSetsEditor';
+import GroupPicker from './GroupPicker';
 import NumberField from './NumberField';
 import PctChangeField from './PctChangeField';
 
@@ -43,13 +34,14 @@ const MODE_STYLE: Record<RuleMode, string> = {
 export default function RuleCard({ rule, settings, guardrails, onChange, onRemove }: RuleCardProps) {
   const [confirmAuto, setConfirmAuto] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [editingConditions, setEditingConditions] = useState(false);
   const typeMeta = actionTypeMeta(rule.actionType, rule.params);
   const level = ruleLevel(rule);
   const matches = matchRuleTargets(rule, settings);
   const exampleTarget = campaignTargetRoi(rule.campaignIds?.[0] ?? null);
-  const unitName = level === 'video' ? 'video' : level === 'product' ? 'sản phẩm' : 'chiến dịch';
-  const group = findGroup(settings, rule.trigger);
+  const unitName = LEVEL_UNIT[level];
+  const group = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
+  // Chưa chọn nhóm (bản cũ) hoặc nhóm đã xoá → mở sẵn ô chọn nhóm
+  const [pickingGroup, setPickingGroup] = useState(!group);
   const campaignId = rule.campaignIds?.[0] ?? null;
   const productId = rule.productIds?.[0] ?? null;
 
@@ -85,41 +77,36 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-[80px_minmax(0,1fr)]">
         <dt className="font-semibold text-muted">Khi</dt>
         <dd className="space-y-2">
-          {level === 'video' ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <ActionBadge action={rule.trigger} />
-              {group ? (
-                <span>{groupDescription(group)}</span>
-              ) : (
-                <span className="flex items-center gap-1.5 font-medium text-danger">
-                  <AlertTriangle className="size-4" />
-                  Nhóm đã bị xoá — quy tắc sẽ không chạy. Chọn lại nhóm hoặc xoá quy tắc.
-                </span>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span>{conditionSetsText(rule.conditionSets ?? [])}</span>
-                <button
-                  type="button"
-                  onClick={() => setEditingConditions((v) => !v)}
-                  className="flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-hover"
-                >
-                  {editingConditions ? 'Xong' : 'Sửa điều kiện'}
-                  <ChevronDown className={`size-4 transition-transform ${editingConditions ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-              {editingConditions && (
-                <ConditionSetsEditor
-                  sets={rule.conditionSets ?? []}
-                  onChange={(conditionSets) => onChange({ conditionSets })}
-                  subject={level === 'campaign' ? 'Chiến dịch khớp' : 'Sản phẩm khớp'}
-                  metrics={METRICS_BY_LEVEL[level]}
-                  valueTypes={VALUE_TYPES_BY_LEVEL[level]}
-                />
-              )}
-            </>
+          <div className="flex flex-wrap items-center gap-2">
+            {group ? (
+              <>
+                <ActionBadge action={rule.trigger} level={level} />
+                <span>{groupDescription(group, level)}</span>
+              </>
+            ) : (
+              <span className="flex items-center gap-1.5 font-medium text-danger">
+                <AlertTriangle className="size-4" />
+                {rule.trigger ? 'Nhóm đã bị xoá' : 'Chưa chọn nhóm'} — quy tắc sẽ không chạy. Chọn nhóm {unitName} bên dưới
+                hoặc xoá quy tắc.
+              </span>
+            )}
+            {group && (
+              <button
+                type="button"
+                onClick={() => setPickingGroup((v) => !v)}
+                className="flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-hover"
+              >
+                {pickingGroup ? 'Xong' : 'Đổi nhóm'}
+                <ChevronDown className={`size-4 transition-transform ${pickingGroup ? 'rotate-180' : ''}`} />
+              </button>
+            )}
+          </div>
+          {pickingGroup && (
+            <GroupPicker
+              groups={groupsOf(settings, level)}
+              value={rule.trigger}
+onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
+            />
           )}
           <p className="text-xs text-muted" title={matches.names.join('\n')}>
             Hiện có <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} khớp theo số liệu hiện tại

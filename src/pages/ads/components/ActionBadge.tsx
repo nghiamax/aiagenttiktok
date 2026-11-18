@@ -1,20 +1,22 @@
 import { HelpCircle } from 'lucide-react';
-import { groupMeta } from '../groups';
+import { groupMeta, type GroupLevel } from '../groups';
 import { findGroup, useAdsSettings } from '../settings';
 import type { VideoAction } from '../types';
 
 interface ActionBadgeProps {
-  /** ID nhóm video */
+  /** ID nhóm */
   action: VideoAction | null;
   reason?: string;
+  /** Cấp của nhóm (mặc định video) */
+  level?: GroupLevel;
 }
 
-/** Badge nhóm video (tên, màu, icon lấy từ định nghĩa nhóm Sếp đặt) */
-export default function ActionBadge({ action, reason }: ActionBadgeProps) {
+/** Badge nhóm video / sản phẩm / chiến dịch (tên, màu, icon lấy từ định nghĩa nhóm Sếp đặt) */
+export default function ActionBadge({ action, reason, level = 'video' }: ActionBadgeProps) {
   const { settings } = useAdsSettings();
   if (!action) return <span className="text-muted">--</span>;
 
-  const group = findGroup(settings, action);
+  const group = findGroup(settings, action, level);
   if (!group) {
     return (
       <span

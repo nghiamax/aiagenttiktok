@@ -16,6 +16,12 @@ import type { AdsVideo } from './types';
 
 /* ───────────── Kiểu dữ liệu ───────────── */
 
+/** Cấp của nhóm / quy tắc */
+export type GroupLevel = 'video' | 'product' | 'campaign';
+
+/** Đơn vị đếm theo cấp */
+export const LEVEL_UNIT: Record<GroupLevel, string> = { video: 'video', product: 'sản phẩm', campaign: 'chiến dịch' };
+
 export type GroupTone = 'red' | 'green' | 'amber' | 'blue' | 'violet' | 'gray';
 export type GroupIcon =
   | 'scissors'
@@ -155,12 +161,18 @@ export function clauseText(c: Clause): string {
   return `${METRIC_LABEL[c.metric]} ${OP_LABEL[c.op]} ${refText(c.value, c.metric)}`;
 }
 
+const FALLBACK_TEXT: Record<GroupLevel, string> = {
+  video: 'Video có chi phí hoặc đơn nhưng không thuộc nhóm nào ở trên',
+  product: 'Sản phẩm có chi phí hoặc đơn nhưng không thuộc nhóm nào ở trên (kể cả chưa nhập ROI hoà vốn)',
+  campaign: 'Chiến dịch có chi phí hoặc đơn nhưng không thuộc nhóm nào ở trên',
+};
+
 /** Mô tả cả nhóm bằng lời */
-export function groupDescription(group: GroupDef): string {
+export function groupDescription(group: GroupDef, level: GroupLevel = 'video'): string {
   if (group.kind === 'platform') {
     return 'Theo trạng thái TikTok: video cần ủy quyền nhưng đã có chi phí, đơn hoặc doanh thu';
   }
-  if (group.kind === 'fallback') return 'Video có chi phí hoặc đơn nhưng không thuộc nhóm nào ở trên';
+  if (group.kind === 'fallback') return FALLBACK_TEXT[level];
   return conditionSetsText(group.conditionSets);
 }
 
@@ -254,6 +266,16 @@ export function reasonFor(set: ConditionSet, ctx: EvalContext): string {
 /** Sắp lại: nhóm fallback luôn ở cuối */
 export function normalizeGroups(groups: GroupDef[]): GroupDef[] {
   return [...groups.filter((g) => g.kind !== 'fallback'), ...groups.filter((g) => g.kind === 'fallback')];
+}
+
+/** Nhóm có điều kiện so với ROI hoà vốn (thiếu hoà vốn thì nhóm luôn trống) */
+export function groupUsesBreakEven(group: GroupDef): boolean {
+  return group.conditionSets.some((s) => s.clauses.some((c) => c.value.type === 'breakEven'));
+}
+
+/** Nhóm gợi ý khi tạo quy tắc: nhóm tự định nghĩa đầu tiên, không có thì nhóm đầu */
+export function defaultGroupId(groups: GroupDef[]): string {
+  return (groups.find((g) => g.kind === 'custom') ?? groups[0])?.id ?? '';
 }
 
 /** Điều kiện mặc định cho nhóm / cách mới */

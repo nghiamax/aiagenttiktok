@@ -78,5 +78,106 @@
       "showInInbox": false,
       "conditionSets": []
     }
+  ],
+  "productGroups": [
+    {
+      "id": "p-loss",
+      "name": "Lỗ",
+      "tone": "red",
+      "icon": "scissors",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        { "clauses": [{ "metric": "roi", "op": "lt", "value": { "type": "breakEven", "k": 1 } }] }
+      ]
+    },
+    {
+      "id": "p-near",
+      "name": "Sát hoà vốn",
+      "tone": "amber",
+      "icon": "hourglass",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        { "clauses": [{ "metric": "roi", "op": "lt", "value": { "type": "breakEven", "k": 1.2 } }] }
+      ]
+    },
+    {
+      "id": "p-profit",
+      "name": "Lời",
+      "tone": "green",
+      "icon": "trending",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        { "clauses": [{ "metric": "roi", "op": "gte", "value": { "type": "breakEven", "k": 1.2 } }] }
+      ]
+    },
+    {
+      "id": "p-other",
+      "name": "Chưa xác định",
+      "tone": "gray",
+      "icon": "shield",
+      "kind": "fallback",
+      "builtin": true,
+      "showInInbox": false,
+      "conditionSets": []
+    }
+  ],
+  "campaignGroups": [
+    {
+      "id": "c-scale",
+      "name": "Tiêu hết NS, ROI tốt",
+      "tone": "green",
+      "icon": "trending",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        {
+          "clauses": [
+            { "metric": "budgetUse", "op": "gte", "value": { "type": "number", "n": 90 } },
+            { "metric": "roi", "op": "gte", "value": { "type": "target", "k": 1 } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c-low-roi",
+      "name": "ROI dưới mục tiêu",
+      "tone": "red",
+      "icon": "flame",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        { "clauses": [{ "metric": "roi", "op": "lt", "value": { "type": "target", "k": 0.8 } }] }
+      ]
+    },
+    {
+      "id": "c-slow",
+      "name": "Tiêu chậm",
+      "tone": "amber",
+      "icon": "hourglass",
+      "kind": "custom",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": [
+        { "clauses": [{ "metric": "budgetUse", "op": "lt", "value": { "type": "number", "n": 50 } }] }
+      ]
+    },
+    {
+      "id": "c-stable",
+      "name": "Ổn định",
+      "tone": "gray",
+      "icon": "shield",
+      "kind": "fallback",
+      "builtin": true,
+      "showInInbox": false,
+      "conditionSets": []
+    }
   ]
 }

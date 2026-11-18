@@ -1,8 +1,8 @@
-import type { ConditionSet } from '../groups';
+import type { ConditionSet, GroupLevel } from '../groups';
 import type { VideoAction } from '../types';
 
-/** Cấp áp dụng của quy tắc */
-export type RuleLevel = 'video' | 'product' | 'campaign';
+/** Cấp áp dụng của quy tắc (trùng cấp của nhóm) */
+export type RuleLevel = GroupLevel;
 
 /** Chế độ của quy tắc: Tắt / Cần Sếp duyệt / Agent tự chạy */
 export type RuleMode = 'off' | 'approve' | 'auto';
@@ -38,9 +38,9 @@ export interface AgentRule {
   name: string;
   /** Cấp áp dụng (thiếu = video, cho bản lưu cũ) */
   level?: RuleLevel;
-  /** Cấp video: ID nhóm video kích hoạt quy tắc. Cấp sản phẩm/chiến dịch: để rỗng */
+  /** ID nhóm (cùng cấp với quy tắc) kích hoạt quy tắc. Rỗng = chưa chọn nhóm → quy tắc không chạy */
   trigger: VideoAction;
-  /** Cấp sản phẩm/chiến dịch: điều kiện viết ngay trong quy tắc (HOẶC giữa các cách, VÀ trong một cách) */
+  /** @deprecated Bản cũ: điều kiện viết ngay trong quy tắc. Không còn dùng — mọi cấp chạy theo nhóm */
   conditionSets?: ConditionSet[];
   actionType: AgentActionType;
   params: AgentRuleParams;

@@ -1,19 +1,40 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import defaultsJson from '../../data/ads-settings.json';
-import { normalizeGroups, type GroupDef } from './groups';
+import { normalizeGroups, type GroupDef, type GroupLevel } from './groups';
 
-/** Thiết lập phân loại video: ROI hoà vốn từng sản phẩm + định nghĩa các nhóm */
+/** Thiết lập phân loại: ROI hoà vốn từng sản phẩm + định nghĩa nhóm của 3 cấp */
 export interface AdsSettings {
   /** ROI hoà vốn theo ID sản phẩm (item_group_id) */
   breakEvenRoi: Record<string, number>;
   /** Nhóm video, xét theo thứ tự từ trên xuống (nhóm fallback luôn cuối) */
   groups: GroupDef[];
+  /** Nhóm sản phẩm (trong từng chiến dịch) */
+  productGroups: GroupDef[];
+  /** Nhóm chiến dịch */
+  campaignGroups: GroupDef[];
 }
 
 /** Mặc định đọc từ src/data/ads-settings.json (Claude có thể ghi số vào file này) */
 export const DEFAULT_SETTINGS: AdsSettings = defaultsJson as AdsSettings;
 
 const STORAGE_KEY = 'ads-settings-v1';
+
+/** Key trong AdsSettings chứa nhóm của từng cấp */
+export const GROUP_KEY = {
+  video: 'groups',
+  product: 'productGroups',
+  campaign: 'campaignGroups',
+} as const satisfies Record<GroupLevel, keyof AdsSettings>;
+
+export function groupsOf(settings: AdsSettings, level: GroupLevel): GroupDef[] {
+  return settings[GROUP_KEY[level]];
+}
+
+function loadGroups(saved: Partial<AdsSettings>, level: GroupLevel): GroupDef[] {
+  const list = saved[GROUP_KEY[level]];
+  // Bản lưu cũ (chưa có nhóm cấp này) → dùng nhóm mặc định
+  return normalizeGroups(Array.isArray(list) && list.length > 0 ? list : groupsOf(DEFAULT_SETTINGS, level));
+}
 
 function load(): AdsSettings {
   try {
@@ -22,8 +43,9 @@ function load(): AdsSettings {
     const saved = JSON.parse(raw) as Partial<AdsSettings>;
     return {
       breakEvenRoi: { ...DEFAULT_SETTINGS.breakEvenRoi, ...saved.breakEvenRoi },
-      // Bản lưu cũ (chưa có groups) → dùng nhóm mặc định
-      groups: normalizeGroups(Array.isArray(saved.groups) && saved.groups.length > 0 ? saved.groups : DEFAULT_SETTINGS.groups),
+      groups: loadGroups(saved, 'video'),
+      productGroups: loadGroups(saved, 'product'),
+      campaignGroups: loadGroups(saved, 'campaign'),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -44,9 +66,9 @@ interface AdsSettingsValue {
   save: (next: AdsSettings) => void;
   /** Xoá ROI hoà vốn đã nhập (giữ định nghĩa nhóm) */
   reset: () => void;
-  saveGroups: (groups: GroupDef[]) => void;
-  /** Về định nghĩa nhóm mặc định (giữ ROI hoà vốn) */
-  resetGroups: () => void;
+  saveGroups: (level: GroupLevel, groups: GroupDef[]) => void;
+  /** Về định nghĩa nhóm mặc định của một cấp (giữ ROI hoà vốn) */
+  resetGroups: (level: GroupLevel) => void;
 }
 
 const AdsSettingsContext = createContext<AdsSettingsValue | null>(null);
@@ -64,8 +86,8 @@ export function AdsSettingsProvider({ children }: { children: ReactNode }) {
     settings,
     save: apply,
     reset: () => apply({ ...settings, breakEvenRoi: DEFAULT_SETTINGS.breakEvenRoi }),
-    saveGroups: (groups) => apply({ ...settings, groups: normalizeGroups(groups) }),
-    resetGroups: () => apply({ ...settings, groups: DEFAULT_SETTINGS.groups }),
+    saveGroups: (level, groups) => apply({ ...settings, [GROUP_KEY[level]]: normalizeGroups(groups) }),
+    resetGroups: (level) => apply({ ...settings, [GROUP_KEY[level]]: groupsOf(DEFAULT_SETTINGS, level) }),
   };
 
   return <AdsSettingsContext.Provider value={value}>{children}</AdsSettingsContext.Provider>;
@@ -82,6 +104,11 @@ export function breakEvenOf(settings: AdsSettings, productId: string): number | 
   return typeof value === 'number' && value > 0 ? value : null;
 }
 
-export function findGroup(settings: AdsSettings, id: string): GroupDef | undefined {
-  return settings.groups.find((g) => g.id === id);
+export function findGroup(settings: AdsSettings, id: string, level: GroupLevel = 'video'): GroupDef | undefined {
+  return groupsOf(settings, level).find((g) => g.id === id);
+}
+
+/** Tìm nhóm ở mọi cấp (dùng khi chỉ biết ID, vd nhật ký) */
+export function findGroupAnyLevel(settings: AdsSettings, id: string): GroupDef | undefined {
+  return findGroup(settings, id, 'video') ?? findGroup(settings, id, 'product') ?? findGroup(settings, id, 'campaign');
 }

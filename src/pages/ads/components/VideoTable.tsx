@@ -48,6 +48,9 @@ const STATUS: Record<VideoStatus, { label: string; className: string } | null> =
 
 const PAGE_SIZE = 20;
 
+/** Giá trị bộ lọc cho dòng thẻ sản phẩm (không trùng ID nhóm) */
+const CARD_FILTER = 'product_card';
+
 interface VideoRow {
   v: AdsVideo;
   cpa: number | null;
@@ -67,14 +70,23 @@ export default function VideoTable({
   const activeGroup = action === 'all' ? undefined : findGroup(settings, action);
 
   const rows: VideoRow[] = videos.map((v) => ({ v, cpa: cpa(v.cost, v.orders), cls: classification.get(v) ?? null }));
-  const filtered = action === 'all' ? rows : rows.filter((r) => r.cls?.action === action);
+  const isCardRow = (r: VideoRow) => r.v.contentType === 'product_card';
+  const filtered =
+    action === 'all'
+      ? rows
+      : action === CARD_FILTER
+        ? rows.filter(isCardRow)
+        : rows.filter((r) => r.cls?.action === action);
 
   // Số video mỗi nhóm (theo bộ lọc chiến dịch/sản phẩm/tìm kiếm hiện tại) hiện ngay trên nút lọc
   const counts = new Map<string, number>();
   for (const r of rows) if (r.cls) counts.set(r.cls.action, (counts.get(r.cls.action) ?? 0) + 1);
+  const cardCount = rows.filter(isCardRow).length;
   const filterOptions: { value: VideoActionFilter; label: string }[] = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     ...settings.groups.map((g) => ({ value: g.id, label: `${g.name} (${counts.get(g.id) ?? 0})` })),
+    // Thẻ sản phẩm không phải video, không xếp nhóm → lọc riêng
+    ...(cardCount > 0 ? [{ value: CARD_FILTER, label: `Thẻ sản phẩm (${cardCount})` }] : []),
   ];
   const sorted = sortByValue(filtered, (r) => (sort.key === 'cpa' ? r.cpa : r.v[sort.key]), sort.dir);
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
@@ -85,23 +97,29 @@ export default function VideoTable({
     <>
       <div className={TOOLBAR}>
         <SegmentedControl options={filterOptions} value={action} onChange={onActionChange} ariaLabel="Lọc video theo việc cần làm" />
-        <span className="text-sm text-muted">{activeGroup ? groupDescription(activeGroup) : `${filtered.length} dòng`}</span>
+        <span className="text-sm text-muted">
+          {activeGroup
+            ? groupDescription(activeGroup)
+            : action === CARD_FILTER
+              ? 'Thẻ sản phẩm do TikTok tự tạo từ trang sản phẩm, không phải video'
+              : `${filtered.length} dòng`}
+        </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1240px] text-sm">
+        <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Video</th>
               <th className={`${TH} text-left`}>Sản phẩm</th>
-              <th className={`${TH} text-left`}>Đề xuất</th>
+              <th className={`${TH} text-left`}>Nhóm</th>
               <th className={`${TH} text-left`}>Trạng thái</th>
               <SortableHeader label="Chi phí" sortKey="cost" {...header} />
               <SortableHeader label="Doanh thu" sortKey="revenue" {...header} />
               <SortableHeader label="Đơn hàng" sortKey="orders" {...header} />
               <SortableHeader label="CPA" sortKey="cpa" {...header} />
               <SortableHeader label="ROI" sortKey="roi" {...header} />
-              <th className={`${TH} text-right`}>Thao tác</th>
+              <th className={`${TH} text-right`}>TikTok</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -112,7 +130,11 @@ export default function VideoTable({
               const isCard = v.contentType === 'product_card';
               const videoUrl = isCard ? null : tiktokVideoUrl(v.id, v.authorUsername);
               return (
-                <tr key={`${v.campaignId}-${v.productId}-${v.id}`} className="transition-colors hover:bg-canvas">
+                <tr
+                  key={`${v.campaignId}-${v.productId}-${v.id}`}
+                  // Thẻ sản phẩm không phải video → nền nhạt để tách khỏi danh sách video
+                  className={`transition-colors hover:bg-canvas ${isCard ? 'bg-canvas/50' : ''}`}
+                >
                   <td className={`${TD} max-w-[320px] ${cut ? 'shadow-[inset_3px_0_0_theme(colors.danger)]' : ''}`}>
                     <div className="flex items-center gap-3">
                       <MediaThumb src={v.thumbnailUrl} icon={isCard ? CreditCard : Film} shape="portrait" />
@@ -139,7 +161,9 @@ export default function VideoTable({
                             </p>
                           )}
                           <p className="truncate text-xs text-muted">
-                            {v.identityName ? `@${v.identityName} · ` : ''}ID {v.id}
+                            {/* identityName là tên hiển thị, @ chỉ dùng cho username thật */}
+                            {v.authorUsername ? `@${v.authorUsername} · ` : v.identityName ? `${v.identityName} · ` : ''}ID{' '}
+                            {v.id}
                           </p>
                         </div>
                       )}

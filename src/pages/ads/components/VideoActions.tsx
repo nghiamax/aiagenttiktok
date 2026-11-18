@@ -1,19 +1,14 @@
-import { ExternalLink, PowerOff, Zap, type LucideIcon } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 interface VideoActionsProps {
   /** Link mở video trên TikTok; null nếu chưa có username tác giả */
   videoUrl: string | null;
 }
 
-/** Thao tác chưa có nghiệp vụ → tạm khoá */
-const LOCKED: { label: string; icon: LucideIcon }[] = [
-  { label: 'Tăng cường', icon: Zap },
-  { label: 'Tắt video', icon: PowerOff },
-];
-
+/** Thao tác trên dòng video. Tăng cường / Tắt video sẽ thêm khi có backend thực thi */
 export default function VideoActions({ videoUrl }: VideoActionsProps) {
   return (
-    <div className="flex justify-end gap-1">
+    <div className="flex justify-end">
       {videoUrl ? (
         <a
           href={videoUrl}
@@ -26,28 +21,14 @@ export default function VideoActions({ videoUrl }: VideoActionsProps) {
           <ExternalLink className="size-4" />
         </a>
       ) : (
-        <button
-          type="button"
-          disabled
-          aria-label="Mở video trên TikTok"
-          title="Chưa có username tác giả nên chưa mở được"
-          className="flex size-8 cursor-not-allowed items-center justify-center rounded-lg text-muted opacity-50"
+        <span
+          aria-label="Không mở được video"
+          title="Không có username tác giả (video riêng tư / đã xoá) nên không mở được"
+          className="flex size-8 cursor-not-allowed items-center justify-center rounded-lg text-muted opacity-40"
         >
           <ExternalLink className="size-4" />
-        </button>
+        </span>
       )}
-      {LOCKED.map(({ label, icon: Icon }) => (
-        <button
-          key={label}
-          type="button"
-          disabled
-          aria-label={label}
-          title={`${label} · Chưa hỗ trợ`}
-          className="flex size-8 cursor-not-allowed items-center justify-center rounded-lg text-muted opacity-50"
-        >
-          <Icon className="size-4" />
-        </button>
-      ))}
     </div>
   );
 }

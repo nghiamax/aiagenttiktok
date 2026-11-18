@@ -4,23 +4,14 @@ import { AlertTriangle, FolderOpen, Package } from 'lucide-react';
 import Modal from '../../../../components/ui/Modal';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
-import { groupDescription, groupMeta, type ConditionSet } from '../../groups';
-import type { AdsSettings } from '../../settings';
+import { defaultGroupId, groupDescription, LEVEL_UNIT } from '../../groups';
+import { groupsOf, type AdsSettings } from '../../settings';
 import type { VideoAction } from '../../types';
 import { campaignOfProduct, campaignOptions, campaignTargetRoi, productOptionsFor } from '../lookup';
-import {
-  ACTIONS_BY_LEVEL,
-  actionTypeMeta,
-  budgetLimitWarning,
-  defaultParams,
-  LEVEL_OPTIONS,
-  METRICS_BY_LEVEL,
-  MODE_OPTIONS,
-  VALUE_TYPES_BY_LEVEL,
-} from '../meta';
+import { ACTIONS_BY_LEVEL, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
 import { matchRuleTargets } from '../ruleMatch';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, RuleLevel, RuleMode } from '../types';
-import ConditionSetsEditor from './ConditionSetsEditor';
+import GroupPicker from './GroupPicker';
 import NumberField from './NumberField';
 import PctChangeField from './PctChangeField';
 
@@ -29,25 +20,15 @@ interface RuleFormModalProps {
   guardrails: AgentGuardrails;
   onSave: (rule: AgentRule) => void;
   onClose: () => void;
+  /** Mở sẵn theo cấp + nhóm (vd bấm "Tạo quy tắc" ở hộp "Agent đang theo dõi") */
+  initialLevel?: RuleLevel;
+  initialTrigger?: VideoAction;
 }
 
-/** Điều kiện gợi ý ban đầu cho từng cấp */
-const DEFAULT_SETS: Record<Exclude<RuleLevel, 'video'>, ConditionSet[]> = {
-  product: [{ clauses: [{ metric: 'roi', op: 'lt', value: { type: 'breakEven', k: 1 } }] }],
-  campaign: [
-    {
-      clauses: [
-        { metric: 'budgetUse', op: 'gte', value: { type: 'number', n: 90 } },
-        { metric: 'roi', op: 'gte', value: { type: 'target', k: 1 } },
-      ],
-    },
-  ],
-};
-
 const SUBJECT: Record<RuleLevel, string> = {
-  video: 'Video',
-  product: 'Sản phẩm khớp',
-  campaign: 'Chiến dịch khớp',
+  video: 'Video thuộc nhóm:',
+  product: 'Sản phẩm thuộc nhóm:',
+  campaign: 'Chiến dịch thuộc nhóm:',
 };
 
 const LABEL = 'mb-1.5 block text-sm font-medium';
@@ -55,16 +36,24 @@ const SELECT_BOX =
   'mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-white px-3 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-soft hover:border-muted/40';
 
 /** Popup thêm quy tắc: Cấp · Tên · Khi · Thì · Phạm vi · Thời gian chờ · Chế độ */
-export default function RuleFormModal({ settings, guardrails, onSave, onClose }: RuleFormModalProps) {
-  const groups = settings.groups;
-  const [level, setLevel] = useState<RuleLevel>('video');
+export default function RuleFormModal({
+  settings,
+  guardrails,
+  onSave,
+  onClose,
+  initialLevel = 'video',
+  initialTrigger,
+}: RuleFormModalProps) {
+  const [level, setLevel] = useState<RuleLevel>(initialLevel);
+  const groups = groupsOf(settings, level);
   const [name, setName] = useState('');
-  const [trigger, setTrigger] = useState<VideoAction>(
-    () => (groups.find((g) => g.kind === 'custom') ?? groups[0])?.id ?? '',
-  );
-  const [sets, setSets] = useState<ConditionSet[]>(DEFAULT_SETS.product);
-  const [actionType, setActionType] = useState<AgentActionType>('remove_creative');
-  const [params, setParams] = useState<AgentRuleParams>({});
+  const [trigger, setTrigger] = useState<VideoAction>(() => {
+    const list = groupsOf(settings, initialLevel);
+    // Nhóm được truyền vào phải thuộc đúng cấp, không thì lấy nhóm gợi ý
+    return initialTrigger && list.some((g) => g.id === initialTrigger) ? initialTrigger : defaultGroupId(list);
+  });
+  const [actionType, setActionType] = useState<AgentActionType>(ACTIONS_BY_LEVEL[initialLevel][0]);
+  const [params, setParams] = useState<AgentRuleParams>(() => defaultParams(ACTIONS_BY_LEVEL[initialLevel][0]));
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [productId, setProductId] = useState<string | null>(null);
   const [cooldownHours, setCooldownHours] = useState(guardrails.cooldownHours);
@@ -78,8 +67,7 @@ export default function RuleFormModal({ settings, guardrails, onSave, onClose }:
     id: 'preview',
     name,
     level,
-    trigger: level === 'video' ? trigger : '',
-    conditionSets: level === 'video' ? undefined : sets,
+    trigger,
     actionType,
     params,
     mode,
@@ -94,7 +82,7 @@ export default function RuleFormModal({ settings, guardrails, onSave, onClose }:
     const first = ACTIONS_BY_LEVEL[next][0];
     setActionType(first);
     setParams(defaultParams(first));
-    if (next !== 'video') setSets(DEFAULT_SETS[next]);
+    setTrigger(defaultGroupId(groupsOf(settings, next)));
     if (next === 'campaign') setProductId(null);
   }
 
@@ -116,7 +104,7 @@ export default function RuleFormModal({ settings, guardrails, onSave, onClose }:
 
   function handleSave() {
     setTouched(true);
-    if (name.trim() === '' || (level === 'video' && !trigger)) return;
+    if (name.trim() === '' || !trigger) return;
     onSave({ ...preview, id: `custom-${Date.now().toString(36)}`, name: name.trim() });
     onClose();
   }
@@ -178,47 +166,18 @@ export default function RuleFormModal({ settings, guardrails, onSave, onClose }:
 
         <fieldset>
           <legend className={LABEL}>Khi</legend>
-          {level === 'video' ? (
-            <>
-              <p className="mb-2 text-xs text-muted">Video thuộc nhóm:</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {groups.map((g) => {
-                  const meta = groupMeta(g);
-                  const active = g.id === trigger;
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setTrigger(g.id)}
-                      aria-pressed={active}
-                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition ${
-                        active ? 'border-primary bg-primary-soft' : 'border-line hover:bg-canvas'
-                      }`}
-                    >
-                      <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${meta.tone}`}>
-                        <meta.icon className="size-4" />
-                      </span>
-                      <span className={`font-medium ${active ? 'text-primary' : ''}`}>{meta.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                {triggerGroup ? groupDescription(triggerGroup) : ''}{' '}
-                <Link to="/ads/agent?view=groups" onClick={onClose} className="font-medium text-primary hover:text-primary-hover">
-                  Sửa định nghĩa nhóm →
-                </Link>
-              </p>
-            </>
-          ) : (
-            <ConditionSetsEditor
-              sets={sets}
-              onChange={setSets}
-              subject={SUBJECT[level]}
-              metrics={METRICS_BY_LEVEL[level]}
-              valueTypes={VALUE_TYPES_BY_LEVEL[level]}
-            />
-          )}
+          <p className="mb-2 text-xs text-muted">{SUBJECT[level]}</p>
+          <GroupPicker groups={groups} value={trigger} onChange={setTrigger} />
+          <p className="mt-2 text-xs text-muted">
+            {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
+            <Link
+              to={`/ads/agent?view=groups&level=${level}`}
+              onClick={onClose}
+              className="font-medium text-primary hover:text-primary-hover"
+            >
+              Sửa định nghĩa nhóm {LEVEL_UNIT[level]} →
+            </Link>
+          </p>
           <p className="mt-2 text-sm">
             Hiện có <b>{formatNumber(matches.names.length)}</b> {matches.unit} khớp
             {matches.names.length > 0 && (

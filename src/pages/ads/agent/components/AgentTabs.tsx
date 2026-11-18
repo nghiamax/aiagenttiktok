@@ -12,7 +12,7 @@ const TABS: { value: AgentView; label: string; icon: LucideIcon }[] = [
   { value: 'log', label: 'Nhật ký', icon: History },
   { value: 'impact', label: 'Hiệu quả', icon: Gauge },
   { value: 'rules', label: 'Quy tắc', icon: SlidersHorizontal },
-  { value: 'groups', label: 'Nhóm video', icon: Layers },
+  { value: 'groups', label: 'Nhóm', icon: Layers },
 ];
 
 /** Các tab của trang AI Agent (cùng kiểu với ListViewTabs) */

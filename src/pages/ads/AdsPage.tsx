@@ -6,19 +6,20 @@ import snapshotJson from '../../data/ads-snapshot.json';
 import { formatNumber } from '../../lib/format';
 import { impactTotal } from './agent/evaluate';
 import { activeRuleCount, AGENT_DATA, pendingProposals, ruleForTrigger, useAgentConfig } from './agent/useAgentConfig';
-import { classifyVideo, shortVnd, type VideoClassification } from './classify';
-import ActionInbox, { type ActionSummary } from './components/ActionInbox';
+import { classifyCampaign, classifyProduct, classifyVideo, shortVnd, type VideoClassification } from './classify';
+import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
 import AdsSubNav from './components/AdsSubNav';
 import BreakEvenModal from './components/BreakEvenModal';
 import CampaignTable from './components/CampaignTable';
-import GmvMaxListCard from './components/GmvMaxListCard';
+import GmvMaxListCard, { LIST_ANCHOR } from './components/GmvMaxListCard';
 import ProductTable from './components/ProductTable';
 import SnapshotInfo from './components/SnapshotInfo';
 import VideoTable from './components/VideoTable';
 import { productKey } from './metrics';
+import type { GroupLevel } from './groups';
 import { breakEvenOf, useAdsSettings } from './settings';
-import type { AdsProduct, AdsSnapshot, AdsVideo, VideoAction } from './types';
+import type { AdsListTab, AdsProduct, AdsSnapshot, AdsVideo, VideoAction } from './types';
 import { useAdsListParams } from './useAdsListParams';
 
 // Dữ liệu do Claude lấy qua MCP tiktok-ads và ghi vào file JSON (xem CLAUDE.md mục 6)
@@ -38,37 +39,43 @@ const campaignOptions: FilterOption[] = snapshot.campaigns.map((c) => ({
 
 const emptySummary = (): ActionSummary => ({ count: 0, cost: 0, revenue: 0 });
 
+/** Cộng một đối tượng đã phân loại vào ô của nhóm */
+function addTo(summary: Record<string, ActionSummary>, groupId: string, cost: number | null, revenue: number | null) {
+  const s = (summary[groupId] ??= emptySummary());
+  s.count += 1;
+  s.cost += cost ?? 0;
+  s.revenue += revenue ?? 0;
+}
+
+/** Tab danh sách tương ứng với cấp của nhóm */
+const TAB_OF_LEVEL: Record<GroupLevel, AdsListTab> = { video: 'videos', product: 'products', campaign: 'campaigns' };
+
 export default function AdsPage() {
   const { tab, campaignId, productId, query, action, update } = useAdsListParams();
   const { settings, save, reset } = useAdsSettings();
   const { config: agentConfig } = useAgentConfig();
   const pendingCount = pendingProposals().length;
-  // Ô "Đề xuất chờ duyệt" và "Quy tắc đang bật" lấy từ dữ liệu Agent
-  const statsSummary = {
-    ...snapshot.summary,
-    pendingSuggestions: pendingCount,
-    activeRules: activeRuleCount(agentConfig.rules),
-    totalRules: agentConfig.rules.length,
-  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
-  // Phân loại việc cần làm cho toàn bộ video (tính lại khi đổi thiết lập)
+  // Phân loại toàn bộ video / sản phẩm / chiến dịch vào nhóm (tính lại khi đổi thiết lập)
   const { classification, inbox } = useMemo(() => {
     const map = new Map<AdsVideo, VideoClassification>();
-    // Một mục cho mỗi nhóm Sếp định nghĩa
-    const summary: Record<string, ActionSummary> = Object.fromEntries(
-      settings.groups.map((g) => [g.id, emptySummary()]),
-    );
+    const summary: InboxSummary = { video: {}, product: {}, campaign: {} };
     for (const v of snapshot.videos) {
       const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
       if (!cls) continue;
       map.set(v, cls);
-      const s = (summary[cls.action] ??= emptySummary());
-      s.count += 1;
-      s.cost += v.cost ?? 0;
-      s.revenue += v.revenue ?? 0;
+      addTo(summary.video, cls.action, v.cost, v.revenue);
+    }
+    for (const p of snapshot.products) {
+      const cls = classifyProduct(p, campaignById.get(p.campaignId), settings);
+      if (cls) addTo(summary.product, cls.action, p.cost, p.revenue);
+    }
+    for (const c of snapshot.campaigns) {
+      const cls = classifyCampaign(c, settings);
+      if (cls) addTo(summary.campaign, cls.action, c.cost, c.revenue);
     }
     return { classification: map, inbox: summary };
   }, [settings]);
@@ -86,13 +93,19 @@ export default function AdsPage() {
       inCampaign(v.campaignId) && (!productId || v.productId === productId) && matches(v.title, v.id, v.identityName),
   );
 
-  // Drill-down: chiến dịch → sản phẩm → video
-  const openCampaign = (id: string) => update({ tab: 'products', campaign: id, product: null });
-  const openProduct = (p: AdsProduct) => update({ tab: 'videos', campaign: p.campaignId, product: p.id });
+  // Drill-down: chiến dịch → sản phẩm → video. `action` là ID nhóm của tab đang xem → đổi tab thì bỏ
+  const openCampaign = (id: string) => update({ tab: 'products', campaign: id, product: null, action: null });
+  const openProduct = (p: AdsProduct) =>
+    update({ tab: 'videos', campaign: p.campaignId, product: p.id, action: null });
   const filterProduct = (cId: string, pId: string) => update({ campaign: cId, product: pId });
-  // Hộp việc cần xử lý đếm trên toàn bộ video → bỏ bộ lọc để danh sách khớp số
-  const openAction = (a: VideoAction) =>
-    update({ tab: 'videos', action: a, campaign: null, product: null, q: null });
+  // Hộp theo dõi đếm trên toàn bộ dữ liệu → bỏ bộ lọc để danh sách khớp số
+  const openAction = (level: GroupLevel, id: VideoAction) => {
+    update({ tab: TAB_OF_LEVEL[level], action: id, campaign: null, product: null, q: null });
+    // Bảng nằm dưới hộp theo dõi → cuộn xuống để thấy ngay kết quả lọc (đợi bảng vẽ lại xong)
+    requestAnimationFrame(() =>
+      document.getElementById(LIST_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
 
   // Ô chọn sản phẩm: chỉ liệt kê sản phẩm của chiến dịch đang chọn
   const productOptions: FilterOption[] = snapshot.products
@@ -165,7 +178,7 @@ export default function AdsPage() {
       <AdsSubNav pendingCount={pendingCount} />
 
       <div className="space-y-6">
-        <AdsStatsGrid summary={statsSummary} />
+        <AdsStatsGrid summary={snapshot.summary} previous={snapshot.previousSummary} />
         <ActionInbox
           summary={inbox}
           missingBreakEven={missingBreakEven}
@@ -175,17 +188,30 @@ export default function AdsPage() {
             paused: AGENT_DATA.paused,
             lastRunAt: AGENT_DATA.lastRunAt,
             pendingCount,
+            activeRules: activeRuleCount(agentConfig.rules),
+            totalRules: agentConfig.rules.length,
             impact30: impactTotal(AGENT_DATA.actions, agentConfig.guardrails.evaluateAfterHours, '30d'),
-            ruleFor: (a) => ruleForTrigger(agentConfig.rules, a),
+            ruleFor: (level, id) => ruleForTrigger(agentConfig.rules, id, level),
           }}
         />
         <GmvMaxListCard
           tab={tab}
-          onTabChange={(t) => update({ tab: t })}
+          onTabChange={(t) => update({ tab: t, action: null })}
           filters={filters}
+          counts={{
+            campaigns: campaigns.length,
+            products: products.length,
+            videos: videos.filter((v) => v.contentType === 'video').length,
+          }}
         >
           {tab === 'campaigns' && (
-            <CampaignTable campaigns={campaigns} onOpenCampaign={openCampaign} onOpenBreakEven={openSettings} />
+            <CampaignTable
+              campaigns={campaigns}
+              onOpenCampaign={openCampaign}
+              onOpenBreakEven={openSettings}
+              groupId={action === 'all' ? null : action}
+              onClearGroup={() => update({ action: null })}
+            />
           )}
           {tab === 'products' && (
             <ProductTable
@@ -195,6 +221,8 @@ export default function AdsPage() {
               onOpenCampaign={openCampaign}
               settings={settings}
               onOpenSettings={openSettings}
+              action={action}
+              onActionChange={(a) => update({ action: a })}
             />
           )}
           {tab === 'videos' && (

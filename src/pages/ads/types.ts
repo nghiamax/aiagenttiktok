@@ -1,6 +1,6 @@
 export type CampaignStatus = 'running' | 'paused';
 
-export type CampaignFilter = 'all' | 'running' | 'paused' | 'suggested';
+export type CampaignFilter = 'all' | 'running' | 'paused';
 
 export interface Campaign {
   id: string;
@@ -39,18 +39,24 @@ export interface AdsSnapshot {
   range: { from: string; to: string } | null;
   advertiser: { id: string; name: string; currency: string } | null;
   summary: AdsSummary;
+  /** Tổng kỳ liền trước (cùng số ngày) để so sánh KPI; null nếu chưa lấy */
+  previousSummary?: PreviousSummary | null;
   campaigns: Campaign[];
   products: AdsProduct[];
   videos: AdsVideo[];
 }
 
+/** Tổng của kỳ liền trước (gmv_max_report_get, enable_total_metrics) */
+export interface PreviousSummary {
+  range: { from: string; to: string };
+  totalCost: number | null;
+  totalRevenue: number | null;
+  totalOrders: number | null;
+  roi: number | null;
+}
+
 /** Tab trong card danh sách GMV Max */
 export type AdsListTab = 'campaigns' | 'products' | 'videos';
-
-/** Lời/lỗ của sản phẩm so với ROI hoà vốn */
-export type ProductMargin = 'loss' | 'near' | 'profit';
-
-export type ProductFilter = ProductMargin | 'all';
 
 /** ID nhóm video (định nghĩa trong settings.groups, Sếp tự sửa/thêm). Mặc định: authorize, cut, scale, watch, stable */
 export type VideoAction = string;

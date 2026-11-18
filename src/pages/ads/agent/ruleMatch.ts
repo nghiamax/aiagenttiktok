@@ -1,51 +1,13 @@
 import snapshotJson from '../../../data/ads-snapshot.json';
-import { classifyVideo } from '../classify';
-import { matchSet, type EvalContext } from '../groups';
-import { breakEvenOf, type AdsSettings } from '../settings';
-import type { AdsProduct, AdsSnapshot, Campaign } from '../types';
+import { classifyCampaign, classifyProduct, classifyVideo } from '../classify';
+import { LEVEL_UNIT } from '../groups';
+import type { AdsSettings } from '../settings';
+import type { AdsSnapshot } from '../types';
 import { ruleLevel } from './meta';
 import type { AgentRule } from './types';
 
 const snapshot = snapshotJson as AdsSnapshot;
 const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
-
-/** Số ngày của bản số liệu (tính cả 2 đầu), dùng để ra chi phí trung bình mỗi ngày */
-export const SNAPSHOT_DAYS = snapshot.range
-  ? Math.round((Date.parse(snapshot.range.to) - Date.parse(snapshot.range.from)) / 86_400_000) + 1
-  : 7;
-
-/** Bối cảnh so điều kiện cho một chiến dịch (có mức tiêu ngân sách) */
-export function contextForCampaign(c: Campaign): EvalContext {
-  const cost = c.cost ?? 0;
-  const orders = c.orders ?? 0;
-  return {
-    cost,
-    revenue: c.revenue ?? 0,
-    orders,
-    roi: c.roi,
-    cpa: orders > 0 ? cost / orders : null,
-    // Chiến dịch gồm nhiều sản phẩm nên không so với một mức hoà vốn
-    breakEven: null,
-    target: c.targetRoi,
-    budgetUse: c.budget && c.cost != null ? (c.cost / SNAPSHOT_DAYS / c.budget) * 100 : null,
-  };
-}
-
-/** Bối cảnh so điều kiện cho một sản phẩm trong chiến dịch */
-export function contextForProduct(p: AdsProduct, settings: AdsSettings): EvalContext {
-  const cost = p.cost ?? 0;
-  const orders = p.orders ?? 0;
-  return {
-    cost,
-    revenue: p.revenue ?? 0,
-    orders,
-    roi: p.roi,
-    cpa: orders > 0 ? cost / orders : null,
-    breakEven: breakEvenOf(settings, p.id),
-    target: campaignById.get(p.campaignId)?.targetRoi ?? null,
-    budgetUse: null,
-  };
-}
 
 const inScope = (rule: AgentRule, campaignId: string, productId?: string) =>
   (!rule.campaignIds || rule.campaignIds.includes(campaignId)) &&
@@ -57,25 +19,30 @@ export interface RuleMatches {
   names: string[];
 }
 
-/** Đối tượng đang khớp quy tắc theo số liệu hiện tại (có tính phạm vi) */
+/** Đối tượng đang thuộc nhóm của quy tắc theo số liệu hiện tại (có tính phạm vi) */
 export function matchRuleTargets(rule: AgentRule, settings: AdsSettings): RuleMatches {
   const level = ruleLevel(rule);
-  const sets = rule.conditionSets ?? [];
+  const unit = LEVEL_UNIT[level];
+  if (!rule.trigger) return { unit, names: [] };
 
   if (level === 'campaign') {
     return {
-      unit: 'chiến dịch',
+      unit,
       names: snapshot.campaigns
-        .filter((c) => inScope(rule, c.id) && sets.some((s) => matchSet(s, contextForCampaign(c))))
+        .filter((c) => inScope(rule, c.id) && classifyCampaign(c, settings)?.action === rule.trigger)
         .map((c) => c.name),
     };
   }
 
   if (level === 'product') {
     return {
-      unit: 'sản phẩm',
+      unit,
       names: snapshot.products
-        .filter((p) => inScope(rule, p.campaignId, p.id) && sets.some((s) => matchSet(s, contextForProduct(p, settings))))
+        .filter(
+          (p) =>
+            inScope(rule, p.campaignId, p.id) &&
+            classifyProduct(p, campaignById.get(p.campaignId), settings)?.action === rule.trigger,
+        )
         .map((p) => p.name),
     };
   }
@@ -90,5 +57,5 @@ export function matchRuleTargets(rule: AgentRule, settings: AdsSettings): RuleMa
       names.push(v.title || `Video ${v.id}`);
     }
   }
-  return { unit: 'video', names };
+  return { unit, names };
 }

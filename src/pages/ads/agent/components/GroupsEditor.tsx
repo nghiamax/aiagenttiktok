@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Check, Plus, RotateCcw } from 'lucide-react';
+import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import snapshotJson from '../../../../data/ads-snapshot.json';
 import { formatNumber } from '../../../../lib/format';
-import { classifyVideo } from '../../classify';
-import { newClause, type GroupDef } from '../../groups';
-import { breakEvenOf, DEFAULT_SETTINGS, useAdsSettings } from '../../settings';
+import { classifyCampaign, classifyProduct, classifyVideo } from '../../classify';
+import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
+import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
 import type { AdsSnapshot } from '../../types';
+import { LEVEL_OPTIONS, ruleLevel } from '../meta';
 import type { AgentRule } from '../types';
 import GroupCard from './GroupCard';
 
 interface GroupsEditorProps {
+  level: GroupLevel;
+  onLevelChange: (level: GroupLevel) => void;
   rules: AgentRule[];
   onOpenBreakEven: () => void;
 }
@@ -17,6 +21,13 @@ interface GroupsEditorProps {
 const snapshot = snapshotJson as AdsSnapshot;
 const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
 const uniqueProducts = [...new Map(snapshot.products.map((p) => [p.id, p])).values()];
+
+const INTRO: Record<GroupLevel, string> = {
+  video: 'Video được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó.',
+  product: 'Mỗi sản phẩm trong từng chiến dịch được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó.',
+  campaign:
+    'Chiến dịch được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó. Mức tiêu ngân sách (%) = chi trung bình mỗi ngày ÷ ngân sách ngày × 100.',
+};
 
 function validate(g: GroupDef): string[] {
   const errors: string[] = [];
@@ -28,22 +39,38 @@ function validate(g: GroupDef): string[] {
   return errors;
 }
 
-/** Tab "Nhóm video": định nghĩa nhóm (sửa trên bản nháp, bấm Lưu mới áp dụng) + ROI hoà vốn */
-export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorProps) {
+/** Số đối tượng mỗi nhóm theo một bản thiết lập (dùng bản nháp để thấy ảnh hưởng trước khi lưu) */
+function countByGroup(level: GroupLevel, settings: AdsSettings): Map<string, number> {
+  const map = new Map<string, number>();
+  const add = (id: string | undefined) => id && map.set(id, (map.get(id) ?? 0) + 1);
+  if (level === 'video') {
+    for (const v of snapshot.videos) add(classifyVideo(v, campaignById.get(v.campaignId), settings)?.action);
+  } else if (level === 'product') {
+    for (const p of snapshot.products) add(classifyProduct(p, campaignById.get(p.campaignId), settings)?.action);
+  } else {
+    for (const c of snapshot.campaigns) add(classifyCampaign(c, settings)?.action);
+  }
+  return map;
+}
+
+/** Tab "Nhóm": định nghĩa nhóm video / sản phẩm / chiến dịch (sửa trên bản nháp, bấm Lưu mới áp dụng) + ROI hoà vốn */
+export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakEven }: GroupsEditorProps) {
   const { settings, saveGroups, resetGroups } = useAdsSettings();
-  const [draft, setDraft] = useState<GroupDef[]>(settings.groups);
+  const saved = groupsOf(settings, level);
+  const [draft, setDraft] = useState<GroupDef[]>(saved);
   /** Nhóm vừa bấm "Thêm nhóm" → cuộn tới + nổi bật */
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(settings.groups);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const unit = LEVEL_UNIT[level];
 
   // So bản nháp với bản đã lưu để thanh lưu nói rõ thay đổi gì
-  const savedById = new Map(settings.groups.map((g) => [g.id, g]));
+  const savedById = new Map(saved.map((g) => [g.id, g]));
   const addedCount = draft.filter((g) => !savedById.has(g.id)).length;
-  const removedCount = settings.groups.filter((g) => !draft.some((d) => d.id === g.id)).length;
+  const removedCount = saved.filter((g) => !draft.some((d) => d.id === g.id)).length;
   const editedCount = draft.filter((g) => {
-    const saved = savedById.get(g.id);
-    return saved && JSON.stringify(saved) !== JSON.stringify(g);
+    const s = savedById.get(g.id);
+    return s && JSON.stringify(s) !== JSON.stringify(g);
   }).length;
   const changeSummary = [
     addedCount > 0 && `${addedCount} nhóm mới`,
@@ -53,29 +80,26 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
     .filter(Boolean)
     .join(' · ');
   const isUnsaved = (g: GroupDef) => {
-    const saved = savedById.get(g.id);
-    return !saved || JSON.stringify(saved) !== JSON.stringify(g);
+    const s = savedById.get(g.id);
+    return !s || JSON.stringify(s) !== JSON.stringify(g);
   };
+
+  function changeLevel(next: GroupLevel) {
+    if (next === level) return;
+    if (dirty && !window.confirm(`Bỏ các thay đổi chưa lưu ở nhóm ${unit}?`)) return;
+    onLevelChange(next);
+  }
 
   function save() {
     const clean = draft.map((g) => ({ ...g, name: g.name.trim() }));
-    saveGroups(clean);
+    saveGroups(level, clean);
     setDraft(clean);
     setJustAdded(null);
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2500);
   }
 
-  // Số video từng nhóm theo bản nháp (thấy ngay ảnh hưởng trước khi lưu)
-  const counts = useMemo(() => {
-    const map = new Map<string, number>();
-    const draftSettings = { ...settings, groups: draft };
-    for (const v of snapshot.videos) {
-      const c = classifyVideo(v, campaignById.get(v.campaignId), draftSettings);
-      if (c) map.set(c.action, (map.get(c.action) ?? 0) + 1);
-    }
-    return map;
-  }, [draft, settings]);
+  const counts = useMemo(() => countByGroup(level, { ...settings, [GROUP_KEY[level]]: draft }), [level, draft, settings]);
 
   const errors = new Map(draft.map((g) => [g.id, validate(g)]));
   const hasErrors = [...errors.values()].some((e) => e.length > 0);
@@ -116,8 +140,8 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
   }
 
   function restoreDefaults() {
-    resetGroups();
-    setDraft(DEFAULT_SETTINGS.groups);
+    resetGroups(level);
+    setDraft(groupsOf(DEFAULT_SETTINGS, level));
     setJustAdded(null);
   }
 
@@ -125,44 +149,52 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
 
   return (
     <div className="space-y-5 p-5">
-      {/* ROI hoà vốn — dùng trong điều kiện "ROI hoà vốn ×" */}
-      <section className="rounded-2xl border border-line bg-canvas/60 p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold">ROI hoà vốn theo sản phẩm</h3>
-            <p className="text-sm text-muted">
-              Dùng cho điều kiện “ROI hoà vốn ×”.{' '}
-              {missingBe > 0 ? `${missingBe}/${uniqueProducts.length} sản phẩm chưa nhập — điều kiện đó sẽ không khớp.` : 'Đã nhập đủ.'}
-            </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <SegmentedControl options={LEVEL_OPTIONS} value={level} onChange={changeLevel} ariaLabel="Cấp nhóm" />
+        <span className="text-sm text-muted">
+          {formatNumber(draft.length)} nhóm {unit} · dùng cho quy tắc cấp {unit}
+        </span>
+      </div>
+
+      {/* ROI hoà vốn — dùng trong điều kiện "ROI hoà vốn ×" (chiến dịch không so với hoà vốn) */}
+      {level !== 'campaign' && (
+        <section className="rounded-2xl border border-line bg-canvas/60 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-semibold">ROI hoà vốn theo sản phẩm</h3>
+              <p className="text-sm text-muted">
+                Dùng cho điều kiện “ROI hoà vốn ×”.{' '}
+                {missingBe > 0 ? `${missingBe}/${uniqueProducts.length} sản phẩm chưa nhập — điều kiện đó sẽ không khớp.` : 'Đã nhập đủ.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenBreakEven}
+              className="w-fit rounded-xl bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition hover:shadow-md"
+            >
+              Nhập ROI hoà vốn
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onOpenBreakEven}
-            className="w-fit rounded-xl bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition hover:shadow-md"
-          >
-            Nhập ROI hoà vốn
-          </button>
-        </div>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {uniqueProducts.map((p) => {
-            const be = breakEvenOf(settings, p.id);
-            return (
-              <li
-                key={p.id}
-                className="max-w-[260px] truncate rounded-lg bg-white px-2.5 py-1 text-xs"
-                title={`${p.name}\n${campaignById.get(p.campaignId)?.name ?? ''}`}
-              >
-                {p.name} · <b className={be == null ? 'text-muted' : ''}>{be == null ? 'chưa nhập' : formatNumber(be, 2)}</b>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {uniqueProducts.map((p) => {
+              const be = breakEvenOf(settings, p.id);
+              return (
+                <li
+                  key={p.id}
+                  className="max-w-[260px] truncate rounded-lg bg-white px-2.5 py-1 text-xs"
+                  title={`${p.name}\n${campaignById.get(p.campaignId)?.name ?? ''}`}
+                >
+                  {p.name} · <b className={be == null ? 'text-muted' : ''}>{be == null ? 'chưa nhập' : formatNumber(be, 2)}</b>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <p className="max-w-2xl text-sm text-muted">
-          Video được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó (dùng ↑↓ để đổi thứ tự ưu tiên). Số
-          video tính trên số liệu hiện tại và cập nhật ngay khi sửa.
+          {INTRO[level]} Dùng ↑↓ để đổi thứ tự ưu tiên. Số {unit} tính trên số liệu hiện tại và cập nhật ngay khi sửa.
         </p>
         <div className="flex shrink-0 gap-2">
           <button
@@ -189,8 +221,9 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
           <GroupCard
             key={g.id}
             group={g}
+            level={level}
             count={counts.get(g.id) ?? 0}
-            usedByRules={rules.filter((r) => r.trigger === g.id).length}
+            usedByRules={rules.filter((r) => ruleLevel(r) === level && r.trigger === g.id).length}
             errors={errors.get(g.id) ?? []}
             canMoveUp={g.kind !== 'fallback' && i > 0}
             canMoveDown={g.kind !== 'fallback' && i < lastMovable}
@@ -209,7 +242,7 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
           className="sticky bottom-4 z-20 flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-accent-green shadow-lg"
         >
           <Check className="size-4" />
-          Đã lưu — Tổng quan, bảng Video và quy tắc đã dùng định nghĩa mới.
+          Đã lưu — Tổng quan và quy tắc đã dùng định nghĩa mới.
         </div>
       )}
 
@@ -224,7 +257,7 @@ export default function GroupsEditor({ rules, onOpenBreakEven }: GroupsEditorPro
             <button
               type="button"
               onClick={() => {
-                setDraft(settings.groups);
+                setDraft(saved);
                 setJustAdded(null);
               }}
               className="rounded-xl border border-line px-4 py-2 text-sm font-medium transition-colors hover:bg-canvas"

@@ -12,7 +12,10 @@ import { groupsOf, useAdsSettings } from '../settings';
 import type { VideoAction } from '../types';
 
 export interface ActionSummary {
+  /** Số đối tượng khác nhau (video gộp theo chiến dịch + video) */
   count: number;
+  /** Số dòng (1 video gắn nhiều sản phẩm = nhiều dòng trong bảng Video) */
+  rows: number;
   cost: number;
   revenue: number;
 }
@@ -39,7 +42,7 @@ interface ActionInboxProps {
   };
 }
 
-const EMPTY: ActionSummary = { count: 0, cost: 0, revenue: 0 };
+const EMPTY: ActionSummary = { count: 0, rows: 0, cost: 0, revenue: 0 };
 
 /** Video trước vì là nơi có nhiều việc nhất; sau đó từ lớn tới nhỏ */
 const LEVEL_TABS: GroupLevel[] = ['video', 'product', 'campaign'];
@@ -160,6 +163,9 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     <span className={`mt-0.5 block text-2xl font-bold tabular-nums ${empty ? 'text-muted/60' : ''}`}>
                       {formatNumber(s.count)} <span className="text-sm font-medium text-muted">{unit}</span>
                     </span>
+                    {s.rows > s.count && (
+                      <span className="block text-xs text-muted">{formatNumber(s.rows)} dòng theo sản phẩm</span>
+                    )}
                     {needsBreakEven ? (
                       <span className="block text-sm font-medium text-amber-700">Chưa tính được — thiếu ROI hoà vốn</span>
                     ) : (

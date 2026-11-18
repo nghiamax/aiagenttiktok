@@ -1,4 +1,4 @@
-import { Gauge, History, Inbox, Layers, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import { Gauge, History, Inbox, Layers, Lightbulb, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { AgentView } from '../types';
 
 interface AgentTabsProps {
@@ -8,6 +8,7 @@ interface AgentTabsProps {
 }
 
 const TABS: { value: AgentView; label: string; icon: LucideIcon }[] = [
+  { value: 'suggest', label: 'Gợi ý', icon: Lightbulb },
   { value: 'pending', label: 'Chờ duyệt', icon: Inbox },
   { value: 'log', label: 'Nhật ký', icon: History },
   { value: 'impact', label: 'Hiệu quả', icon: Gauge },

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
-import snapshotJson from '../../../../data/ads-snapshot.json';
 import { formatNumber } from '../../../../lib/format';
 import { classifyCampaign, classifyProduct, classifyVideo } from '../../classify';
 import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
+import { useAdsData } from '../../data';
 import type { AdsSnapshot } from '../../types';
 import { LEVEL_OPTIONS, ruleLevel } from '../meta';
 import type { AgentRule } from '../types';
@@ -18,9 +18,6 @@ interface GroupsEditorProps {
   onOpenBreakEven: () => void;
 }
 
-const snapshot = snapshotJson as AdsSnapshot;
-const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
-const uniqueProducts = [...new Map(snapshot.products.map((p) => [p.id, p])).values()];
 
 const INTRO: Record<GroupLevel, string> = {
   video: 'Video được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó.',
@@ -40,7 +37,8 @@ function validate(g: GroupDef): string[] {
 }
 
 /** Số đối tượng mỗi nhóm theo một bản thiết lập (dùng bản nháp để thấy ảnh hưởng trước khi lưu) */
-function countByGroup(level: GroupLevel, settings: AdsSettings): Map<string, number> {
+function countByGroup(snapshot: AdsSnapshot, days: number, level: GroupLevel, settings: AdsSettings): Map<string, number> {
+  const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
   const map = new Map<string, number>();
   const add = (id: string | undefined) => id && map.set(id, (map.get(id) ?? 0) + 1);
   if (level === 'video') {
@@ -48,7 +46,7 @@ function countByGroup(level: GroupLevel, settings: AdsSettings): Map<string, num
   } else if (level === 'product') {
     for (const p of snapshot.products) add(classifyProduct(p, campaignById.get(p.campaignId), settings)?.action);
   } else {
-    for (const c of snapshot.campaigns) add(classifyCampaign(c, settings)?.action);
+    for (const c of snapshot.campaigns) add(classifyCampaign(c, settings, days)?.action);
   }
   return map;
 }
@@ -56,6 +54,9 @@ function countByGroup(level: GroupLevel, settings: AdsSettings): Map<string, num
 /** Tab "Nhóm": định nghĩa nhóm video / sản phẩm / chiến dịch (sửa trên bản nháp, bấm Lưu mới áp dụng) + ROI hoà vốn */
 export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakEven }: GroupsEditorProps) {
   const { settings, saveGroups, resetGroups } = useAdsSettings();
+  const { snapshot, days } = useAdsData();
+  const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
+  const uniqueProducts = useMemo(() => [...new Map(snapshot.products.map((p) => [p.id, p])).values()], [snapshot]);
   const saved = groupsOf(settings, level);
   const [draft, setDraft] = useState<GroupDef[]>(saved);
   /** Nhóm vừa bấm "Thêm nhóm" → cuộn tới + nổi bật */
@@ -99,7 +100,10 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
     setTimeout(() => setSavedFlash(false), 2500);
   }
 
-  const counts = useMemo(() => countByGroup(level, { ...settings, [GROUP_KEY[level]]: draft }), [level, draft, settings]);
+  const counts = useMemo(
+    () => countByGroup(snapshot, days, level, { ...settings, [GROUP_KEY[level]]: draft }),
+    [snapshot, days, level, draft, settings],
+  );
 
   const errors = new Map(draft.map((g) => [g.id, validate(g)]));
   const hasErrors = [...errors.values()].some((e) => e.length > 0);

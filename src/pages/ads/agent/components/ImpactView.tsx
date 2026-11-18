@@ -13,6 +13,7 @@ import {
   type LessonTarget,
   type Period,
 } from '../evaluate';
+import { useAdsData } from '../../data';
 import { describeTarget } from '../lookup';
 import { ACTION_TYPE_META } from '../meta';
 import type { AgentActionLog, AgentProposal, AgentRule } from '../types';
@@ -40,6 +41,7 @@ const money = (n: number | null) => (n == null ? '--' : signedVnd(n));
 
 /** Tab "Hiệu quả": Agent làm đúng/sai bao nhiêu, lời/lỗ ước tính, gợi ý chỉnh quy tắc */
 export default function ImpactView({ actions, proposals, rules, evaluateAfterHours, groupName, onGoto }: ImpactViewProps) {
+  const { snapshot } = useAdsData();
   const [period, setPeriod] = useState<Period>('30d');
 
   const list = useMemo(
@@ -140,7 +142,7 @@ export default function ImpactView({ actions, proposals, rules, evaluateAfterHou
                 ) : (
                   <ul className="divide-y divide-line rounded-2xl border border-line">
                     {block.items.map(({ action, ev }) => {
-                      const info = describeTarget(action.target);
+                      const info = describeTarget(snapshot, action.target);
                       return (
                         <li key={action.id}>
                           <button

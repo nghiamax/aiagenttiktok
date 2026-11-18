@@ -1,4 +1,6 @@
-import { ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { formatNumber } from '../../../../lib/format';
+import { MIN_BOOST_BUDGET_VND } from '../meta';
 import type { AgentGuardrails } from '../types';
 import NumberField from './NumberField';
 
@@ -8,7 +10,7 @@ interface GuardrailsCardProps {
   onReset: () => void;
 }
 
-/** Giới hạn an toàn áp cho mọi quy tắc */
+/** Giới hạn an toàn áp cho mọi đề xuất của Agent */
 export default function GuardrailsCard({ guardrails: g, onChange, onReset }: GuardrailsCardProps) {
   return (
     <section className="rounded-2xl border border-line bg-canvas/60 p-5">
@@ -25,16 +27,27 @@ export default function GuardrailsCard({ guardrails: g, onChange, onReset }: Gua
           Khôi phục mặc định (cả quy tắc)
         </button>
       </div>
-      <p className="mt-1 text-sm text-muted">Áp cho mọi quy tắc, kể cả khi Tự chạy. Vượt giới hạn thì Agent dừng và chờ hôm sau.</p>
+      <p className="mt-1 text-sm text-muted">
+        Áp cho mọi đề xuất của Agent. Vượt giới hạn thì Agent không đề xuất thêm trong ngày, chờ hôm sau.
+      </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <NumberField
-          label="Trần chi tăng cường"
-          hint="Tổng tiền tăng cường mỗi ngày"
-          suffix="đ/ngày"
-          value={g.dailyBoostCap}
-          onCommit={(n) => onChange({ dailyBoostCap: n })}
-        />
+        <div>
+          <NumberField
+            label="Trần chi tăng cường"
+            hint="Tổng tiền tăng cường mỗi ngày"
+            suffix="đ/ngày"
+            value={g.dailyBoostCap}
+            onCommit={(n) => onChange({ dailyBoostCap: n })}
+          />
+          {g.dailyBoostCap < MIN_BOOST_BUDGET_VND && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              Thấp hơn mức tăng cường tối thiểu của TikTok cho 1 video (~{formatNumber(MIN_BOOST_BUDGET_VND)}đ) — Agent sẽ
+              không đề xuất tăng cường được.
+            </p>
+          )}
+        </div>
         <NumberField
           label="Số thao tác tối đa"
           hint="Mọi loại thao tác cộng lại"

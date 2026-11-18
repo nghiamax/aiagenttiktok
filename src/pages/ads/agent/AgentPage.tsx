@@ -1,38 +1,39 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Megaphone, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Card from '../../../components/ui/Card';
 import PageHeader from '../../../components/ui/PageHeader';
-import snapshotJson from '../../../data/ads-snapshot.json';
 import AdsSubNav from '../components/AdsSubNav';
-import SnapshotInfo from '../components/SnapshotInfo';
+import AdsRangeControl from '../components/AdsRangeControl';
+import { useAdsData } from '../data';
 import type { GroupLevel } from '../groups';
 import { findGroupAnyLevel, useAdsSettings } from '../settings';
-import type { AdsSnapshot } from '../types';
 import ActionLogList from './components/ActionLogList';
 import ImpactView from './components/ImpactView';
 import AgentStatusBar from './components/AgentStatusBar';
 import AgentTabs from './components/AgentTabs';
 import GuardrailsCard from './components/GuardrailsCard';
 import ProposalList from './components/ProposalList';
+import SuggestionList from './components/SuggestionList';
 import RuleCard from './components/RuleCard';
 import RuleFormModal from './components/RuleFormModal';
 import GroupsEditor from './components/GroupsEditor';
 import BreakEvenModal from '../components/BreakEvenModal';
 import type { AgentView } from './types';
-import { activeRuleCount, AGENT_DATA, pendingProposals, useAgentConfig } from './useAgentConfig';
+import { useAgentStore } from './agentStore';
+import { activeRuleCount, pendingProposals, useAgentConfig } from './useAgentConfig';
+import { useSuggestions } from './useSuggestions';
 
-const snapshot = snapshotJson as AdsSnapshot;
-const VIEWS: readonly AgentView[] = ['pending', 'log', 'impact', 'rules', 'groups'];
+const VIEWS: readonly AgentView[] = ['suggest', 'pending', 'log', 'impact', 'rules', 'groups'];
 const LEVELS: readonly GroupLevel[] = ['video', 'product', 'campaign'];
-const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
 
 /** ADS 24/7 → AI Agent: Chờ duyệt / Nhật ký / Quy tắc. Giai đoạn này chỉ hiển thị, chưa thực hiện thao tác */
 export default function AgentPage() {
   const [params, setParams] = useSearchParams();
+  const { snapshot } = useAdsData();
+  const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   const rawView = params.get('view');
-  const view = VIEWS.find((v) => v === rawView) ?? 'pending';
-  const setView = (v: AgentView) => setParams(v === 'pending' ? {} : { view: v });
+  const setView = (v: AgentView) => setParams({ view: v });
   // Tab Nhóm: cấp đang xem nằm trên URL (?view=groups&level=product)
   const groupLevel = LEVELS.find((l) => l === params.get('level')) ?? 'video';
   const setGroupLevel = (l: GroupLevel) => setParams(l === 'video' ? { view: 'groups' } : { view: 'groups', level: l });
@@ -68,8 +69,13 @@ export default function AgentPage() {
   const { settings, save: saveSettings, reset: resetBreakEven } = useAdsSettings();
   const [breakEvenOpen, setBreakEvenOpen] = useState(false);
   const closeBreakEven = useCallback(() => setBreakEvenOpen(false), []);
-  const pending = pendingProposals();
+  const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide } =
+    useAgentStore();
+  const pending = pendingProposals(agentState.proposals);
   const active = activeRuleCount(config.rules);
+  // Không có ?view: chưa bật quy tắc nào → mở Gợi ý (người mới), có rồi → Chờ duyệt
+  const view = VIEWS.find((v) => v === rawView) ?? (active === 0 ? 'suggest' : 'pending');
+  const { openCount: suggestCount } = useSuggestions();
 
   return (
     <>
@@ -77,15 +83,23 @@ export default function AgentPage() {
         icon={Megaphone}
         title="ADS 24/7"
         description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
-        actions={<SnapshotInfo snapshot={snapshot} />}
+        actions={<AdsRangeControl />}
       />
       <AdsSubNav pendingCount={pending.length} />
 
       <div className="space-y-6">
         <AgentStatusBar
-          paused={AGENT_DATA.paused}
-          lastRunAt={AGENT_DATA.lastRunAt}
-          actions={AGENT_DATA.actions}
+          paused={agentState.paused}
+          lastRunAt={agentState.lastRunAt}
+          lastRunError={agentState.lastRunError ?? null}
+          running={running}
+          connected={connected}
+          error={agentError}
+          schedule={schedule}
+          onRunNow={runNow}
+          onTogglePause={() => setPaused(!agentState.paused)}
+          actions={agentState.actions}
+          proposals={agentState.proposals}
           guardrails={config.guardrails}
           activeRules={active}
         />
@@ -96,8 +110,9 @@ export default function AgentPage() {
               value={view}
               onChange={setView}
               counts={{
+                suggest: suggestCount ? String(suggestCount) : '',
                 pending: String(pending.length),
-                log: String(AGENT_DATA.actions.length),
+                log: String(agentState.actions.length),
                 rules: `${active}/${config.rules.length}`,
                 groups: String(settings.groups.length + settings.productGroups.length + settings.campaignGroups.length),
                 impact: '',
@@ -106,11 +121,12 @@ export default function AgentPage() {
           </div>
 
           <div className="rounded-b-2xl">
-            {view === 'pending' && <ProposalList proposals={pending} rules={config.rules} />}
+            {view === 'suggest' && <SuggestionList onOpenBreakEven={() => setBreakEvenOpen(true)} />}
+            {view === 'pending' && <ProposalList proposals={agentState.proposals} rules={config.rules} onDecide={decide} />}
             {view === 'impact' && (
               <ImpactView
-                actions={AGENT_DATA.actions}
-                proposals={AGENT_DATA.proposals}
+                actions={agentState.actions}
+                proposals={agentState.proposals}
                 rules={config.rules}
                 evaluateAfterHours={config.guardrails.evaluateAfterHours}
                 groupName={(id) => findGroupAnyLevel(settings, id)?.name ?? id}
@@ -119,7 +135,7 @@ export default function AgentPage() {
             )}
             {view === 'log' && (
               <ActionLogList
-                actions={AGENT_DATA.actions}
+                actions={agentState.actions}
                 rules={config.rules}
                 evaluateAfterHours={config.guardrails.evaluateAfterHours}
               />

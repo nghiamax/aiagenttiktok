@@ -1,67 +1,56 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import defaultsJson from '../../data/ads-settings.json';
+import { api } from '../../lib/api';
+import {
+  GROUP_KEY,
+  groupsOf,
+  normalizeSettings,
+  type AdsSettings,
+} from '../../../shared/settings';
 import { normalizeGroups, type GroupDef, type GroupLevel } from './groups';
 
-/** Thiết lập phân loại: ROI hoà vốn từng sản phẩm + định nghĩa nhóm của 3 cấp */
-export interface AdsSettings {
-  /** ROI hoà vốn theo ID sản phẩm (item_group_id) */
-  breakEvenRoi: Record<string, number>;
-  /** Nhóm video, xét theo thứ tự từ trên xuống (nhóm fallback luôn cuối) */
-  groups: GroupDef[];
-  /** Nhóm sản phẩm (trong từng chiến dịch) */
-  productGroups: GroupDef[];
-  /** Nhóm chiến dịch */
-  campaignGroups: GroupDef[];
-}
+// Kiểu + hàm thuần dùng chung với server → shared/settings.ts
+export {
+  breakEvenOf,
+  findGroup,
+  findGroupAnyLevel,
+  GROUP_KEY,
+  groupsOf,
+  type AdsSettings,
+} from '../../../shared/settings';
 
-/** Mặc định đọc từ src/data/ads-settings.json (Claude có thể ghi số vào file này) */
-export const DEFAULT_SETTINGS: AdsSettings = defaultsJson as AdsSettings;
+/** Mặc định đọc từ src/data/ads-settings.json (dùng khi chưa kết nối server) */
+export const DEFAULT_SETTINGS: AdsSettings = normalizeSettings(defaultsJson as AdsSettings, defaultsJson as AdsSettings);
 
-const STORAGE_KEY = 'ads-settings-v1';
+/** Bản cũ lưu trong trình duyệt trước khi có server — đẩy lên server 1 lần rồi xoá */
+const LEGACY_KEY = 'ads-settings-v1';
 
-/** Key trong AdsSettings chứa nhóm của từng cấp */
-export const GROUP_KEY = {
-  video: 'groups',
-  product: 'productGroups',
-  campaign: 'campaignGroups',
-} as const satisfies Record<GroupLevel, keyof AdsSettings>;
-
-export function groupsOf(settings: AdsSettings, level: GroupLevel): GroupDef[] {
-  return settings[GROUP_KEY[level]];
-}
-
-function loadGroups(saved: Partial<AdsSettings>, level: GroupLevel): GroupDef[] {
-  const list = saved[GROUP_KEY[level]];
-  // Bản lưu cũ (chưa có nhóm cấp này) → dùng nhóm mặc định
-  return normalizeGroups(Array.isArray(list) && list.length > 0 ? list : groupsOf(DEFAULT_SETTINGS, level));
-}
-
-function load(): AdsSettings {
+function readLegacy(): Partial<AdsSettings> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const saved = JSON.parse(raw) as Partial<AdsSettings>;
-    return {
-      breakEvenRoi: { ...DEFAULT_SETTINGS.breakEvenRoi, ...saved.breakEvenRoi },
-      groups: loadGroups(saved, 'video'),
-      productGroups: loadGroups(saved, 'product'),
-      campaignGroups: loadGroups(saved, 'campaign'),
-    };
+    const raw = localStorage.getItem(LEGACY_KEY);
+    return raw ? (JSON.parse(raw) as Partial<AdsSettings>) : null;
   } catch {
-    return DEFAULT_SETTINGS;
+    return null;
   }
 }
 
-function persist(next: AdsSettings) {
+function clearLegacy() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.removeItem(LEGACY_KEY);
   } catch {
-    // trình duyệt chặn lưu trữ → chỉ giữ trong phiên hiện tại
+    /* bỏ qua */
   }
+}
+
+interface SettingsResponse {
+  settings: AdsSettings;
+  stored: boolean;
 }
 
 interface AdsSettingsValue {
   settings: AdsSettings;
+  /** Lỗi lưu / tải từ server (null = ổn) */
+  syncError: string | null;
   /** Lưu toàn bộ thiết lập */
   save: (next: AdsSettings) => void;
   /** Xoá ROI hoà vốn đã nhập (giữ định nghĩa nhóm) */
@@ -73,17 +62,49 @@ interface AdsSettingsValue {
 
 const AdsSettingsContext = createContext<AdsSettingsValue | null>(null);
 
-/** Bọc các trang ADS 24/7 để Tổng quan và AI Agent dùng chung một bản thiết lập */
+/** Bọc các trang ADS 24/7 để Tổng quan và AI Agent dùng chung một bản thiết lập (lưu trên server) */
 export function AdsSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<AdsSettings>(load);
+  // Chưa tải xong thì dùng bản cũ trong trình duyệt (nếu có) để không bị nháy về mặc định
+  const [settings, setSettings] = useState<AdsSettings>(() => normalizeSettings(readLegacy(), DEFAULT_SETTINGS));
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  function apply(next: AdsSettings) {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        let res = await api<SettingsResponse>('/settings');
+        const legacy = readLegacy();
+        if (!res.stored && legacy) {
+          res = await api<SettingsResponse>('/settings', { method: 'PUT', body: normalizeSettings(legacy, DEFAULT_SETTINGS) });
+        }
+        if (legacy) clearLegacy();
+        if (!cancelled) {
+          setSettings(res.settings);
+          setSyncError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setSyncError((e as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const apply = useCallback((next: AdsSettings) => {
     setSettings(next);
-    persist(next);
-  }
+    api<SettingsResponse>('/settings', { method: 'PUT', body: next }).then(
+      (res) => {
+        setSettings(res.settings);
+        setSyncError(null);
+      },
+      (e: Error) => setSyncError(`Chưa lưu được thiết lập: ${e.message}`),
+    );
+  }, []);
 
   const value: AdsSettingsValue = {
     settings,
+    syncError,
     save: apply,
     reset: () => apply({ ...settings, breakEvenRoi: DEFAULT_SETTINGS.breakEvenRoi }),
     saveGroups: (level, groups) => apply({ ...settings, [GROUP_KEY[level]]: normalizeGroups(groups) }),
@@ -97,18 +118,4 @@ export function useAdsSettings(): AdsSettingsValue {
   const ctx = useContext(AdsSettingsContext);
   if (!ctx) throw new Error('useAdsSettings phải nằm trong AdsSettingsProvider');
   return ctx;
-}
-
-export function breakEvenOf(settings: AdsSettings, productId: string): number | null {
-  const value = settings.breakEvenRoi[productId];
-  return typeof value === 'number' && value > 0 ? value : null;
-}
-
-export function findGroup(settings: AdsSettings, id: string, level: GroupLevel = 'video'): GroupDef | undefined {
-  return groupsOf(settings, level).find((g) => g.id === id);
-}
-
-/** Tìm nhóm ở mọi cấp (dùng khi chỉ biết ID, vd nhật ký) */
-export function findGroupAnyLevel(settings: AdsSettings, id: string): GroupDef | undefined {
-  return findGroup(settings, id, 'video') ?? findGroup(settings, id, 'product') ?? findGroup(settings, id, 'campaign');
 }

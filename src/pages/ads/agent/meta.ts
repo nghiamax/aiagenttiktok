@@ -17,6 +17,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
+import { AUTO_MODE_ENABLED } from '../../../../shared/agentPolicy';
 import { formatNumber } from '../../../lib/format';
 import { ENTITY_METRICS, type ClauseValue, type Metric } from '../groups';
 import type {
@@ -69,10 +70,11 @@ export const STATUS_META: Record<ActionStatus, Meta> = {
   undone: { label: 'Đã hoàn tác', icon: RotateCcw, className: 'text-muted' },
 };
 
+/** Tự chạy đang khoá (shared/agentPolicy.ts): mọi việc cần Sếp duyệt */
 export const MODE_OPTIONS: { value: RuleMode; label: string }[] = [
   { value: 'off', label: 'Tắt' },
   { value: 'approve', label: 'Cần duyệt' },
-  { value: 'auto', label: 'Tự chạy' },
+  ...(AUTO_MODE_ENABLED ? [{ value: 'auto' as const, label: 'Tự chạy' }] : []),
 ];
 
 export const MODE_LABEL: Record<RuleMode, string> = { off: 'Tắt', approve: 'Cần duyệt', auto: 'Tự chạy' };
@@ -181,3 +183,5 @@ export function budgetLimitWarning(
   }
   return null;
 }
+
+export { MIN_BOOST_BUDGET_VND } from '../../../../shared/agentPolicy';

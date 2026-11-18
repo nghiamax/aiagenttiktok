@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { FolderOpen, Megaphone, Package, Search } from 'lucide-react';
 import FilterSelect, { type FilterOption } from '../../components/ui/FilterSelect';
 import PageHeader from '../../components/ui/PageHeader';
-import snapshotJson from '../../data/ads-snapshot.json';
 import { formatNumber } from '../../lib/format';
 import { impactTotal } from './agent/evaluate';
-import { activeRuleCount, AGENT_DATA, pendingProposals, ruleForTrigger, useAgentConfig } from './agent/useAgentConfig';
+import { useAgentStore } from './agent/agentStore';
+import { activeRuleCount, pendingProposals, ruleForTrigger } from './agent/useAgentConfig';
 import { classifyCampaign, classifyProduct, classifyVideo, shortVnd, type VideoClassification } from './classify';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
@@ -14,35 +14,40 @@ import BreakEvenModal from './components/BreakEvenModal';
 import CampaignTable from './components/CampaignTable';
 import GmvMaxListCard, { LIST_ANCHOR } from './components/GmvMaxListCard';
 import ProductTable from './components/ProductTable';
-import SnapshotInfo from './components/SnapshotInfo';
+import SuggestionBanner from './components/SuggestionBanner';
+import AdsRangeControl from './components/AdsRangeControl';
 import VideoTable from './components/VideoTable';
+import { useAdsData } from './data';
 import { productKey } from './metrics';
 import type { GroupLevel } from './groups';
 import { breakEvenOf, useAdsSettings } from './settings';
-import type { AdsListTab, AdsProduct, AdsSnapshot, AdsVideo, VideoAction } from './types';
+import type { AdsListTab, AdsProduct, AdsVideo, VideoAction } from './types';
 import { useAdsListParams } from './useAdsListParams';
-
-// Dữ liệu do Claude lấy qua MCP tiktok-ads và ghi vào file JSON (xem CLAUDE.md mục 6)
-const snapshot = snapshotJson as AdsSnapshot;
-const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
-const productByKey = new Map(snapshot.products.map((p) => [productKey(p.campaignId, p.id), p]));
-const productIds = [...new Set(snapshot.products.map((p) => p.id))];
 
 const metricLine = (roi: number | null, cost: number | null) =>
   `ROI ${formatNumber(roi, 2)} · Chi ${cost == null ? '--' : shortVnd(cost)}`;
 
-const campaignOptions: FilterOption[] = snapshot.campaigns.map((c) => ({
-  value: c.id,
-  label: c.name,
-  description: metricLine(c.roi, c.cost),
-}));
+const emptySummary = (): ActionSummary => ({ count: 0, rows: 0, cost: 0, revenue: 0 });
 
-const emptySummary = (): ActionSummary => ({ count: 0, cost: 0, revenue: 0 });
-
-/** Cộng một đối tượng đã phân loại vào ô của nhóm */
-function addTo(summary: Record<string, ActionSummary>, groupId: string, cost: number | null, revenue: number | null) {
+/**
+ * Cộng một dòng đã phân loại vào ô của nhóm. key: đếm theo đối tượng khác nhau (video gắn nhiều sản phẩm
+ * có nhiều dòng → đếm 1, giống cách Agent / Gợi ý đếm); chi phí / doanh thu vẫn cộng mọi dòng.
+ */
+function addTo(
+  summary: Record<string, ActionSummary>,
+  groupId: string,
+  cost: number | null,
+  revenue: number | null,
+  key?: string,
+  seen?: Set<string>,
+) {
   const s = (summary[groupId] ??= emptySummary());
-  s.count += 1;
+  s.rows += 1;
+  const k = key && `${groupId}|${key}`;
+  if (!k || !seen?.has(k)) {
+    s.count += 1;
+    if (k) seen?.add(k);
+  }
   s.cost += cost ?? 0;
   s.revenue += revenue ?? 0;
 }
@@ -53,8 +58,23 @@ const TAB_OF_LEVEL: Record<GroupLevel, AdsListTab> = { video: 'videos', product:
 export default function AdsPage() {
   const { tab, campaignId, productId, query, action, update } = useAdsListParams();
   const { settings, save, reset } = useAdsSettings();
-  const { config: agentConfig } = useAgentConfig();
-  const pendingCount = pendingProposals().length;
+  // Số liệu theo khoảng ngày đang chọn (server lấy qua MCP TikTok; chưa có server → file lưu sẵn)
+  const { snapshot, days } = useAdsData();
+  const { campaignById, productByKey, productIds, campaignOptions } = useMemo(
+    () => ({
+      campaignById: new Map(snapshot.campaigns.map((c) => [c.id, c])),
+      productByKey: new Map(snapshot.products.map((p) => [productKey(p.campaignId, p.id), p])),
+      productIds: [...new Set(snapshot.products.map((p) => p.id))],
+      campaignOptions: snapshot.campaigns.map<FilterOption>((c) => ({
+        value: c.id,
+        label: c.name,
+        description: metricLine(c.roi, c.cost),
+      })),
+    }),
+    [snapshot],
+  );
+  const { state: agentState } = useAgentStore();
+  const pendingCount = pendingProposals(agentState.proposals).length;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -63,22 +83,23 @@ export default function AdsPage() {
   const { classification, inbox } = useMemo(() => {
     const map = new Map<AdsVideo, VideoClassification>();
     const summary: InboxSummary = { video: {}, product: {}, campaign: {} };
+    const seenVideos = new Set<string>();
     for (const v of snapshot.videos) {
       const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
       if (!cls) continue;
       map.set(v, cls);
-      addTo(summary.video, cls.action, v.cost, v.revenue);
+      addTo(summary.video, cls.action, v.cost, v.revenue, `${v.campaignId}/${v.id}`, seenVideos);
     }
     for (const p of snapshot.products) {
       const cls = classifyProduct(p, campaignById.get(p.campaignId), settings);
       if (cls) addTo(summary.product, cls.action, p.cost, p.revenue);
     }
     for (const c of snapshot.campaigns) {
-      const cls = classifyCampaign(c, settings);
+      const cls = classifyCampaign(c, settings, days);
       if (cls) addTo(summary.campaign, cls.action, c.cost, c.revenue);
     }
     return { classification: map, inbox: summary };
-  }, [settings]);
+  }, [settings, snapshot, campaignById, days]);
 
   const missingBreakEven = productIds.filter((id) => breakEvenOf(settings, id) == null).length;
 
@@ -173,25 +194,26 @@ export default function AdsPage() {
         icon={Megaphone}
         title="ADS 24/7"
         description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
-        actions={<SnapshotInfo snapshot={snapshot} />}
+        actions={<AdsRangeControl />}
       />
       <AdsSubNav pendingCount={pendingCount} />
 
       <div className="space-y-6">
         <AdsStatsGrid summary={snapshot.summary} previous={snapshot.previousSummary} />
+        <SuggestionBanner />
         <ActionInbox
           summary={inbox}
           missingBreakEven={missingBreakEven}
           onOpenAction={openAction}
           onOpenSettings={openSettings}
           agent={{
-            paused: AGENT_DATA.paused,
-            lastRunAt: AGENT_DATA.lastRunAt,
+            paused: agentState.paused,
+            lastRunAt: agentState.lastRunAt,
             pendingCount,
-            activeRules: activeRuleCount(agentConfig.rules),
-            totalRules: agentConfig.rules.length,
-            impact30: impactTotal(AGENT_DATA.actions, agentConfig.guardrails.evaluateAfterHours, '30d'),
-            ruleFor: (level, id) => ruleForTrigger(agentConfig.rules, id, level),
+            activeRules: activeRuleCount(agentState.rules),
+            totalRules: agentState.rules.length,
+            impact30: impactTotal(agentState.actions, agentState.guardrails.evaluateAfterHours, '30d'),
+            ruleFor: (level, id) => ruleForTrigger(agentState.rules, id, level),
           }}
         />
         <GmvMaxListCard

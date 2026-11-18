@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { useAdsData } from '../../data';
 import { describeTarget } from '../lookup';
 import { actionTypeMeta, paramsText } from '../meta';
 import type { AgentActionType, AgentRuleParams, AgentTarget } from '../types';
@@ -34,7 +35,8 @@ export function ActionCell({
 
 /** Video / sản phẩm / ID (có nút sao chép) */
 export function TargetCell({ target }: { target: AgentTarget }) {
-  const info = describeTarget(target);
+  const { snapshot } = useAdsData();
+  const info = describeTarget(snapshot, target);
   const [copied, setCopied] = useState(false);
 
   async function copy() {

@@ -1,9 +1,8 @@
-import snapshotJson from '../../../data/ads-snapshot.json';
 import { tiktokVideoUrl } from '../metrics';
 import type { AdsSnapshot } from '../types';
 import type { AgentTarget } from './types';
 
-const snapshot = snapshotJson as AdsSnapshot;
+/* Tra cứu trên snapshot đang xem (useAdsData().snapshot) */
 
 export interface TargetInfo {
   title: string;
@@ -14,13 +13,13 @@ export interface TargetInfo {
 }
 
 /** ROI mục tiêu của chiến dịch (hoặc chiến dịch đầu tiên nếu chưa chọn) — dùng cho ví dụ quy đổi */
-export function campaignTargetRoi(campaignId: string | null): number | null {
+export function campaignTargetRoi(snapshot: AdsSnapshot, campaignId: string | null): number | null {
   const c = campaignId ? snapshot.campaigns.find((x) => x.id === campaignId) : snapshot.campaigns[0];
   return c?.targetRoi ?? null;
 }
 
-/** Tra tên video / sản phẩm / chiến dịch của một đối tượng từ snapshot hiện tại */
-export function describeTarget(t: AgentTarget): TargetInfo {
+/** Tra tên video / sản phẩm / chiến dịch của một đối tượng */
+export function describeTarget(snapshot: AdsSnapshot, t: AgentTarget): TargetInfo {
   // Đối tượng cấp chiến dịch / sản phẩm (không có video)
   if (!t.videoId) {
     const product = t.productId ? snapshot.products.find((p) => p.id === t.productId) : undefined;
@@ -49,10 +48,12 @@ export function describeTarget(t: AgentTarget): TargetInfo {
   };
 }
 
-export const campaignOptions = snapshot.campaigns.map((c) => ({ value: c.id, label: c.name }));
+export function campaignOptionsOf(snapshot: AdsSnapshot) {
+  return snapshot.campaigns.map((c) => ({ value: c.id, label: c.name }));
+}
 
 /** Sản phẩm để chọn phạm vi quy tắc; lọc theo chiến dịch nếu có */
-export function productOptionsFor(campaignId: string | null) {
+export function productOptionsFor(snapshot: AdsSnapshot, campaignId: string | null) {
   return snapshot.products
     .filter((p) => !campaignId || p.campaignId === campaignId)
     .map((p) => ({
@@ -65,6 +66,6 @@ export function productOptionsFor(campaignId: string | null) {
 }
 
 /** Chiến dịch chứa sản phẩm (để tự đặt chiến dịch khi chọn sản phẩm) */
-export function campaignOfProduct(productId: string): string | null {
+export function campaignOfProduct(snapshot: AdsSnapshot, productId: string): string | null {
   return snapshot.products.find((p) => p.id === productId)?.campaignId ?? null;
 }

@@ -7,7 +7,8 @@ import { formatNumber } from '../../../../lib/format';
 import { defaultGroupId, groupDescription, LEVEL_UNIT } from '../../groups';
 import { groupsOf, type AdsSettings } from '../../settings';
 import type { VideoAction } from '../../types';
-import { campaignOfProduct, campaignOptions, campaignTargetRoi, productOptionsFor } from '../lookup';
+import { useAdsData } from '../../data';
+import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
 import { ACTIONS_BY_LEVEL, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
 import { matchRuleTargets } from '../ruleMatch';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, RuleLevel, RuleMode } from '../types';
@@ -44,6 +45,7 @@ export default function RuleFormModal({
   initialLevel = 'video',
   initialTrigger,
 }: RuleFormModalProps) {
+  const { snapshot } = useAdsData();
   const [level, setLevel] = useState<RuleLevel>(initialLevel);
   const groups = groupsOf(settings, level);
   const [name, setName] = useState('');
@@ -75,7 +77,7 @@ export default function RuleFormModal({
     campaignIds: campaignId ? [campaignId] : null,
     productIds: level !== 'campaign' && productId ? [productId] : null,
   };
-  const matches = matchRuleTargets(preview, settings);
+  const matches = matchRuleTargets(preview, settings, snapshot);
 
   function changeLevel(next: RuleLevel) {
     setLevel(next);
@@ -94,12 +96,12 @@ export default function RuleFormModal({
   function changeCampaign(id: string | null) {
     setCampaignId(id);
     // Sản phẩm không thuộc chiến dịch mới thì bỏ
-    if (productId && id && campaignOfProduct(productId) !== id) setProductId(null);
+    if (productId && id && campaignOfProduct(snapshot, productId) !== id) setProductId(null);
   }
 
   function changeProduct(id: string | null) {
     setProductId(id);
-    if (id) setCampaignId(campaignOfProduct(id));
+    if (id) setCampaignId(campaignOfProduct(snapshot, id));
   }
 
   function handleSave() {
@@ -110,7 +112,7 @@ export default function RuleFormModal({
   }
 
   // Ví dụ quy đổi ROI mục tiêu trên chiến dịch đang chọn (hoặc chiến dịch đầu tiên)
-  const exampleTarget = campaignTargetRoi(campaignId);
+  const exampleTarget = campaignTargetRoi(snapshot, campaignId);
   const roiPct = params.roiTargetChangePct ?? 0;
 
   return (
@@ -273,7 +275,7 @@ export default function RuleFormModal({
                   className="w-full truncate bg-transparent py-2 outline-none"
                 >
                   <option value="">Tất cả chiến dịch</option>
-                  {campaignOptions.map((c) => (
+                  {campaignOptionsOf(snapshot).map((c) => (
                     <option key={c.value} value={c.value}>
                       {c.label}
                     </option>
@@ -292,7 +294,7 @@ export default function RuleFormModal({
                     className="w-full truncate bg-transparent py-2 outline-none"
                   >
                     <option value="">Tất cả sản phẩm</option>
-                    {productOptionsFor(campaignId).map((p) => (
+                    {productOptionsFor(snapshot, campaignId).map((p) => (
                       <option key={`${p.campaignId}:${p.value}`} value={p.value}>
                         {p.description ? `${p.label} · ${p.description}` : p.label}
                       </option>

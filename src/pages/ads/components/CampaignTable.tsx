@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatNumber, formatVnd } from '../../../lib/format';
 import { classifyCampaign, contextForCampaign } from '../classify';
 import { nextSort, sortByValue } from '../metrics';
+import { useAdsData } from '../data';
 import { findGroup, useAdsSettings } from '../settings';
 import type { Campaign, CampaignFilter, SortState } from '../types';
 import ActionBadge from './ActionBadge';
@@ -48,11 +49,12 @@ export default function CampaignTable({
   const [filter, setFilter] = useState<CampaignFilter>('all');
   const [sort, setSort] = useState<SortState<CampaignSortKey>>({ key: 'cost', dir: 'desc' });
   const { settings } = useAdsSettings();
+  const { days } = useAdsData();
   const activeGroup = groupId ? findGroup(settings, groupId, 'campaign') : undefined;
 
   const rows = campaigns
     .filter((c) => matchesStatus(c, filter))
-    .map((c) => ({ c, cls: classifyCampaign(c, settings), budgetUse: contextForCampaign(c).budgetUse }))
+    .map((c) => ({ c, cls: classifyCampaign(c, settings, days), budgetUse: contextForCampaign(c, days).budgetUse }))
     .filter((r) => !activeGroup || r.cls?.action === activeGroup.id);
   const sorted = sortByValue(rows, (r) => (sort.key === 'budgetUse' ? r.budgetUse : r.c[sort.key]), sort.dir);
 

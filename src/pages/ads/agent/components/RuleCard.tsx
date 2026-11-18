@@ -7,8 +7,17 @@ import ActionBadge from '../../components/ActionBadge';
 import { formatNumber } from '../../../../lib/format';
 import { groupDescription, LEVEL_UNIT } from '../../groups';
 import { findGroup, groupsOf, type AdsSettings } from '../../settings';
-import { campaignOfProduct, campaignOptions, campaignTargetRoi, productOptionsFor } from '../lookup';
-import { actionText, actionTypeMeta, budgetLimitWarning, LEVEL_LABEL, MODE_OPTIONS, ruleLevel } from '../meta';
+import { useAdsData } from '../../data';
+import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
+import {
+  actionText,
+  actionTypeMeta,
+  budgetLimitWarning,
+  LEVEL_LABEL,
+  MIN_BOOST_BUDGET_VND,
+  MODE_OPTIONS,
+  ruleLevel,
+} from '../meta';
 import { matchRuleTargets } from '../ruleMatch';
 import type { AgentGuardrails, AgentRule, RuleMode } from '../types';
 import GroupPicker from './GroupPicker';
@@ -32,12 +41,13 @@ const MODE_STYLE: Record<RuleMode, string> = {
 
 /** Thẻ quy tắc: Khi … Thì … · Phạm vi · Chế độ Tắt / Cần duyệt / Tự chạy */
 export default function RuleCard({ rule, settings, guardrails, onChange, onRemove }: RuleCardProps) {
+  const { snapshot } = useAdsData();
   const [confirmAuto, setConfirmAuto] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const typeMeta = actionTypeMeta(rule.actionType, rule.params);
   const level = ruleLevel(rule);
-  const matches = matchRuleTargets(rule, settings);
-  const exampleTarget = campaignTargetRoi(rule.campaignIds?.[0] ?? null);
+  const matches = matchRuleTargets(rule, settings, snapshot);
+  const exampleTarget = campaignTargetRoi(snapshot, rule.campaignIds?.[0] ?? null);
   const unitName = LEVEL_UNIT[level];
   const group = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
   // Chưa chọn nhóm (bản cũ) hoặc nhóm đã xoá → mở sẵn ô chọn nhóm
@@ -120,13 +130,13 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             label="Chiến dịch"
             icon={FolderOpen}
             allLabel="Tất cả chiến dịch"
-            options={campaignOptions}
+            options={campaignOptionsOf(snapshot)}
             value={campaignId}
             onChange={(id) =>
               onChange({
                 campaignIds: id ? [id] : null,
                 // Sản phẩm không thuộc chiến dịch mới thì bỏ
-                productIds: productId && id && campaignOfProduct(productId) !== id ? null : (rule.productIds ?? null),
+                productIds: productId && id && campaignOfProduct(snapshot, productId) !== id ? null : (rule.productIds ?? null),
               })
             }
             searchPlaceholder="Gõ tên chiến dịch…"
@@ -136,12 +146,12 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
               label="Sản phẩm"
               icon={Package}
               allLabel="Tất cả sản phẩm"
-              options={productOptionsFor(campaignId)}
+              options={productOptionsFor(snapshot, campaignId)}
               value={productId}
               onChange={(id) =>
                 onChange(
                   id
-                    ? { productIds: [id], campaignIds: [campaignOfProduct(id) ?? ''].filter(Boolean) }
+                    ? { productIds: [id], campaignIds: [campaignOfProduct(snapshot, id) ?? ''].filter(Boolean) }
                     : { productIds: null },
                 )
               }
@@ -168,6 +178,13 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
               value={rule.params.boostDays ?? 1}
               onCommit={(n) => onChange({ params: { ...rule.params, boostDays: n } })}
             />
+            {(rule.params.boostBudget ?? 0) < MIN_BOOST_BUDGET_VND && (
+              <p className="flex items-start gap-1.5 text-xs text-amber-600 sm:col-span-3">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                TikTok yêu cầu ngân sách tăng cường tối thiểu tương đương 10 USD/ngày (khoảng{' '}
+                {formatNumber(MIN_BOOST_BUDGET_VND)}đ) — mức thấp hơn có thể bị từ chối khi thực thi.
+              </p>
+            )}
           </>
         )}
         {rule.actionType === 'update_budget' && (

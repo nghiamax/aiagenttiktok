@@ -1,2 +1,9 @@
 # Token đăng nhập TikTok (MCP) — không bao giờ commit
 .secrets/
+
+# Cache số liệu + username tác giả của server
+server-data/
+
+# Thư viện + bản build — tạo lại bằng npm install / npm run build
+node_modules/
+dist/

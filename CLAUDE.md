@@ -21,7 +21,8 @@ npm run dev       # web http://localhost:5173
 npm run server    # API http://127.0.0.1:8787 (Express + tsx watch)
 npm run dev:all   # chạy cả web + API
 npm run login     # đăng nhập TikTok for Business cho server (mở trình duyệt, lưu .secrets/tiktok-mcp.json)
-npm run build     # tsc kiểm tra type (web + server) + build production
+npm test          # kiểm thử tự động (Vitest, tests/) — không gọi TikTok, không đụng server-data thật
+npm run build     # tsc kiểm tra type (web + server + tests) + build production
 npm run preview
 ```
 
@@ -239,4 +240,5 @@ Trang ADS 24/7 đọc `src/data/ads-snapshot.json` (kiểu `AdsSnapshot` trong `
 - Giữ phong cách: sáng, tối giản, bo góc mềm, hover nhẹ.
 - Mọi text hiển thị bằng tiếng Việt.
 - Icon-only button phải có `aria-label`.
-- Chạy `npm run build` (bao gồm kiểm tra TypeScript) trước khi báo xong.
+- Chạy `npm test` và `npm run build` (bao gồm kiểm tra TypeScript) trước khi báo xong.
+- Kiểm thử ở `tests/` (`fixtures.ts` = dữ liệu mẫu nhỏ, chỉ cho test): `classify` (nhóm, hoà vốn), `agentMatch-suggest` (gộp video nhiều sản phẩm — **cộng số liệu các dòng**, gợi ý, lọc nhiễu), `server-mapping` (chuyển dữ liệu TikTok), `engine` (bộ máy Agent với số liệu giả: tạm dừng, không trùng, thời gian chờ, hết hạn, giới hạn, kẹp % ngân sách), `safety` (chỉ tool đọc, tool ghi bị chặn trước khi gửi, server không chứa tool ghi, Tự chạy bị ép về Cần duyệt). Sửa logic ở `shared/` hoặc `server/` thì thêm / sửa test tương ứng. **Trước khi mở giai đoạn C (thao tác thật) phải có test cho từng tool ghi.**

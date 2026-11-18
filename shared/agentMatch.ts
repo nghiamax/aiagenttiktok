@@ -84,15 +84,24 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
     });
   }
 
-  const seen = new Set<string>();
+  // Một video gắn nhiều sản phẩm có nhiều dòng → gộp 1 đối tượng, CỘNG số liệu các dòng khớp nhóm
+  const byKey = new Map<string, RuleTarget>();
   const out: RuleTarget[] = [];
+  const add = (a: number | null, b: number | null) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
   for (const v of snapshot.videos) {
-    const key = `${v.campaignId}/${v.id}`;
-    if (seen.has(key) || !inScope(rule, v.campaignId, v.productId)) continue;
+    if (!inScope(rule, v.campaignId, v.productId)) continue;
     const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
     if (cls?.action !== rule.trigger) continue;
-    seen.add(key);
-    out.push({
+    const key = `${v.campaignId}/${v.id}`;
+    const prev = byKey.get(key);
+    if (prev) {
+      prev.cost = add(prev.cost, v.cost);
+      prev.revenue = add(prev.revenue, v.revenue);
+      prev.orders = add(prev.orders, v.orders);
+      prev.roi = prev.cost ? (prev.revenue ?? 0) / prev.cost : null;
+      continue;
+    }
+    const t: RuleTarget = {
       target: { campaignId: v.campaignId, productId: v.productId, videoId: v.id },
       name: v.title || `Video ${v.id}`,
       reason: cls.reason,
@@ -103,7 +112,9 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
       breakEven: breakEvenOf(settings, v.productId),
       videoStatus: v.status,
       campaignRunning: running(v.campaignId),
-    });
+    };
+    byKey.set(key, t);
+    out.push(t);
   }
   return out;
 }

@@ -8,8 +8,10 @@
     "server": "tsx watch server/index.ts",
     "dev:all": "concurrently -n web,api -c blue,green \"vite\" \"tsx watch server/index.ts\"",
     "login": "tsx server/login.ts",
-    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && tsc --noEmit -p server && tsc --noEmit -p tests && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "express": "4.22.3",
@@ -30,6 +32,7 @@
     "tailwindcss": "3.4.17",
     "tsx": "4.23.15",
     "typescript": "5.6.3",
-    "vite": "5.4.21"
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
   }
 }

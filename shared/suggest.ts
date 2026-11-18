@@ -315,7 +315,7 @@ export function buildSuggestions(
     });
   }
 
-  return out.sort(
-    (a, b) => Number(a.done) - Number(b.done) || SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.amount - a.amount,
-  );
+  // Thiếu hoà vốn luôn đứng đầu: thiếu số này thì các gợi ý lời / lỗ khác chưa chính xác
+  const rank = (s: Suggestion) => (s.action.kind === 'breakEven' ? -1 : SEVERITY_ORDER[s.severity]);
+  return out.sort((a, b) => Number(a.done) - Number(b.done) || rank(a) - rank(b) || b.amount - a.amount);
 }

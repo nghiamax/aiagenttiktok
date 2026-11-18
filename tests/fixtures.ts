@@ -1,0 +1,95 @@
+/** Dữ liệu mẫu nhỏ cho kiểm thử (KHÔNG dùng trên web, chỉ cho test) */
+import type { AdsProduct, AdsSnapshot, AdsVideo, Campaign } from '../shared/adsSnapshot';
+import type { AgentGuardrails, AgentRule } from '../shared/agentTypes';
+import { normalizeSettings, type AdsSettings } from '../shared/settings';
+import defaultsJson from '../src/data/ads-settings.json';
+
+export const DEFAULT_SETTINGS: AdsSettings = normalizeSettings(defaultsJson as AdsSettings, defaultsJson as AdsSettings);
+
+export function settingsWith(breakEvenRoi: Record<string, number> = {}): AdsSettings {
+  return { ...DEFAULT_SETTINGS, breakEvenRoi };
+}
+
+export function campaign(p: Partial<Campaign> & { id: string }): Campaign {
+  return {
+    name: `Chiến dịch ${p.id}`,
+    status: 'running',
+    selectedVideos: null,
+    budget: 1_000_000,
+    cost: 0,
+    revenue: 0,
+    orders: 0,
+    roi: null,
+    targetRoi: 5,
+    hasSuggestion: false,
+    ...p,
+  };
+}
+
+export function product(p: Partial<AdsProduct> & { id: string; campaignId: string }): AdsProduct {
+  return { name: `Sản phẩm ${p.id}`, imageUrl: null, videoCount: null, cost: 0, revenue: 0, orders: 0, roi: null, ...p };
+}
+
+export function video(p: Partial<AdsVideo> & { id: string; campaignId: string; productId: string }): AdsVideo {
+  const cost = p.cost ?? 0;
+  const revenue = p.revenue ?? 0;
+  return {
+    contentType: 'video',
+    title: `Video ${p.id}`,
+    thumbnailUrl: null,
+    identityName: null,
+    authorUsername: null,
+    status: 'delivering',
+    cost,
+    revenue,
+    orders: 0,
+    roi: cost > 0 ? revenue / cost : null,
+    ...p,
+  };
+}
+
+export function snapshot(p: Partial<AdsSnapshot> = {}): AdsSnapshot {
+  return {
+    updatedAt: '2026-11-18T00:00:00Z',
+    range: { from: '2026-11-11', to: '2026-11-17' },
+    advertiser: null,
+    summary: {
+      totalCost: null,
+      totalRevenue: null,
+      totalOrders: null,
+      roi: null,
+      videosWithSpend7d: null,
+      boostedVideos: null,
+      pendingSuggestions: null,
+      activeRules: null,
+      totalRules: null,
+    },
+    campaigns: [],
+    products: [],
+    videos: [],
+    ...p,
+  };
+}
+
+export const GUARDRAILS: AgentGuardrails = {
+  dailyBoostCap: 1_000_000,
+  maxActionsPerDay: 20,
+  cooldownHours: 24,
+  evaluateAfterHours: 24,
+  maxBudgetIncreasePct: 30,
+  maxBudgetDecreasePct: 30,
+};
+
+export function rule(p: Partial<AgentRule> & { id: string; trigger: string }): AgentRule {
+  return {
+    name: p.id,
+    level: 'video',
+    actionType: 'remind',
+    params: {},
+    mode: 'approve',
+    cooldownHours: 24,
+    campaignIds: null,
+    productIds: null,
+    ...p,
+  };
+}

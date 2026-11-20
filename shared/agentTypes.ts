@@ -180,6 +180,11 @@ export interface AgentActionLog {
   note?: string;
   /** Đề xuất gốc */
   proposalId?: string;
+  /**
+   * Video / đối tượng thay đổi sau thao tác (thao tác mới trong Nhật ký, hoặc trạng thái video đổi) →
+   * "Sau thao tác" chỉ tính các ngày TRƯỚC `date` (ngày VN), không đo thêm.
+   */
+  measureStop?: { date: string; reason: string };
 }
 
 export interface AgentGuardrails {

@@ -7,7 +7,7 @@ import { canUndo, describeUndo, friendlyError } from '../execText';
 import { ACTOR_META, STATUS_META } from '../meta';
 import type { AgentActionLog } from '../types';
 import { ActionCell, ITEM_GRID, TargetCell } from './AgentBits';
-import { evaluateAction, firstAfterReadyAt, summarizeAction } from '../evaluate';
+import { dayMonth, evaluateAction, firstAfterDate, firstAfterReadyAt, summarizeAction } from '../evaluate';
 import AfterDaysStrip from './AfterDaysStrip';
 import ConfirmExecuteModal from './ConfirmExecuteModal';
 import MetricWindowBox from './MetricWindowBox';
@@ -38,9 +38,21 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
   const status = STATUS_META[item.status];
   const ev = evaluateAction(item, evaluateAfterHours);
   const summary = summarizeAction(item, ev);
-  // Câu chờ duy nhất: lúc nào có số 24h đầu
+  // Câu chờ duy nhất: Ngày 1 = ngày lịch kế sau ngày thao tác, hiện khi tròn 24h
   const readyAt = firstAfterReadyAt(item.executedAt);
-  const waitText = Date.now() < readyAt ? `Có số 24h đầu lúc ~${formatDateTime(new Date(readyAt).toISOString())}` : 'Đang lấy số 24h đầu từ TikTok…';
+  const day1 = dayMonth(firstAfterDate(item.executedAt));
+  const waitText =
+    item.status === 'failed'
+      ? 'Không đo — lệnh chưa chạy trên TikTok'
+      : item.measureStop
+        ? `Không đo — ${item.measureStop.reason}`
+      : item.actionType === 'remind'
+        ? 'Nhắc việc — không đo'
+        : item.status === 'running'
+          ? 'Đo sau khi TikTok xác nhận xong'
+          : Date.now() < readyAt
+            ? `Có số ngày ${day1} lúc ~${formatDateTime(new Date(readyAt).toISOString())}`
+            : `Đang lấy số ngày ${day1} từ TikTok…`;
   const undoable = canUndo(item, all);
 
   return (

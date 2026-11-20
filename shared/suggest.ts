@@ -4,7 +4,7 @@
  */
 import type { AdsSnapshot } from './adsSnapshot.js';
 import { MIN_BOOST_BUDGET_VND } from './agentPolicy.js';
-import { findRuleTargets, ruleLevel, snapshotDays, type RuleTarget } from './agentMatch.js';
+import { findRuleTargets, ineligibleReason, ruleLevel, snapshotDays, type RuleTarget } from './agentMatch.js';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, AgentTarget, RuleLevel } from './agentTypes.js';
 import { contextForCampaign } from './classify.js';
 import { formatNumber, shortVnd } from './format.js';
@@ -279,7 +279,10 @@ export function buildSuggestions(
   for (const s of specs) {
     const group = findGroup(settings, s.group, s.level);
     if (!group) continue; // Sếp đã xoá nhóm mặc định → bỏ qua
-    const targets = findRuleTargets(probe(s.level, s.group), settings, snapshot).filter(s.filter ?? (() => true));
+    // Bỏ đối tượng TikTok không cho làm (vd video đã bị gỡ, chiến dịch tắt) — giống bộ máy quét
+    const targets = findRuleTargets(probe(s.level, s.group), settings, snapshot)
+      .filter((t) => ineligibleReason(s.actionType, s.params, t) == null)
+      .filter(s.filter ?? (() => true));
     if (targets.length === 0) continue;
 
     const guardrailsPatch: Partial<AgentGuardrails> | undefined =

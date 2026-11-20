@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import agentJson from '../../../data/agent.json';
 import { api } from '../../../lib/api';
-import type { AgentConfig, AgentGuardrails, AgentRule, AgentState } from './types';
+import type { ActionStatus, AgentConfig, AgentGuardrails, AgentRule, AgentState } from './types';
 
 /** Mặc định khi chưa kết nối server (src/data/agent.json) */
 const DEFAULT_STATE = agentJson as AgentState;
@@ -9,6 +9,8 @@ const DEFAULT_STATE = agentJson as AgentState;
 const LEGACY_KEY = 'ads-agent-config-v1';
 /** Tự tải lại dữ liệu Agent (đề xuất, nhật ký mới) */
 const POLL_MS = 60_000;
+/** Có thao tác đang chờ TikTok xác nhận → tải lại dày hơn để trạng thái tự đổi */
+const FAST_POLL_MS = 5_000;
 
 interface ServerState extends AgentState {
   running: boolean;
@@ -27,8 +29,18 @@ export interface RunSummary {
   proposals: number;
   reminders: number;
   expired: number;
+  /** Đề xuất đang chờ bị huỷ vì số liệu mới không còn khớp */
+  outdated?: number;
   skipped?: 'paused';
   skippedTargets: Record<string, number>;
+}
+
+/** Kết quả Duyệt (chạy thật) / Bỏ qua / Hoàn tác */
+export interface ExecOutcome {
+  ok: boolean;
+  message: string;
+  /** Trạng thái dòng nhật ký sau khi gửi lệnh (running = chờ TikTok xác nhận) */
+  status?: ActionStatus;
 }
 
 interface AgentStoreValue {
@@ -46,7 +58,12 @@ interface AgentStoreValue {
   setPaused: (paused: boolean) => void;
   reset: () => void;
   runNow: () => Promise<RunSummary | null>;
-  decide: (proposalId: string, decision: 'approve' | 'reject') => Promise<void>;
+  /** approve = chạy thật trên TikTok (gửi confirm: true — chỉ gọi sau hộp xác nhận) */
+  decide: (proposalId: string, decision: 'approve' | 'reject') => Promise<ExecOutcome>;
+  /** Hoàn tác thao tác (chỉ gọi sau hộp xác nhận) */
+  undo: (actionId: string) => Promise<ExecOutcome>;
+  /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
+  verify: (actionId: string) => Promise<ExecOutcome>;
 }
 
 const AgentStoreContext = createContext<AgentStoreValue | null>(null);
@@ -112,6 +129,16 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [accept, fail]);
 
+  // Có dòng nhật ký đang chờ TikTok xác nhận → tải lại mỗi 5 giây tới khi xong
+  const hasRunning = state.actions.some((a) => a.status === 'running');
+  useEffect(() => {
+    if (!hasRunning) return;
+    const timer = setInterval(() => {
+      api<ServerState>('/agent/state').then(accept, () => undefined);
+    }, FAST_POLL_MS);
+    return () => clearInterval(timer);
+  }, [hasRunning, accept]);
+
   /** Lưu cấu hình: cập nhật giao diện ngay, rồi gửi server */
   const saveConfig = useCallback(
     (patch: Partial<AgentConfig>) => {
@@ -119,6 +146,24 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
       api<ServerState>('/agent/config', { method: 'PUT', body: patch }).then(accept, fail);
     },
     [accept, fail],
+  );
+
+  /** Gửi lệnh chạy thật; lỗi (kể cả không đạt điều kiện) → tải lại trạng thái để thấy ghi chú mới */
+  const execute = useCallback(
+    async (path: string): Promise<ExecOutcome> => {
+      try {
+        const res = await api<{ result: { message: string; status: ActionStatus }; state: ServerState }>(path, {
+          method: 'POST',
+          body: { confirm: true },
+        });
+        accept(res.state);
+        return { ok: res.result.status !== 'failed', message: res.result.message, status: res.result.status };
+      } catch (e) {
+        api<ServerState>('/agent/state').then(accept, () => undefined);
+        return { ok: false, message: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    [accept],
   );
 
   const value = useMemo<AgentStoreValue>(
@@ -149,14 +194,21 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
         }
       },
       decide: async (proposalId, decision) => {
-        try {
-          accept(await api<ServerState>(`/agent/proposals/${encodeURIComponent(proposalId)}/${decision}`, { method: 'POST' }));
-        } catch (e) {
-          fail(e);
+        const path = `/agent/proposals/${encodeURIComponent(proposalId)}/${decision}`;
+        if (decision === 'reject') {
+          try {
+            accept(await api<ServerState>(path, { method: 'POST' }));
+            return { ok: true, message: 'Đã bỏ qua' };
+          } catch (e) {
+            return { ok: false, message: e instanceof Error ? e.message : String(e) };
+          }
         }
+        return execute(path);
       },
+      undo: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/undo`),
+      verify: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/verify`),
     }),
-    [state, running, connected, error, schedule, saveConfig, accept, fail],
+    [state, running, connected, error, schedule, saveConfig, accept, fail, execute],
   );
 
   return <AgentStoreContext.Provider value={value}>{children}</AgentStoreContext.Provider>;

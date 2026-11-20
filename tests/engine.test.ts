@@ -101,6 +101,46 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect(s.expired).toBe(3);
   });
 
+  it('đề xuất đang chờ mà số liệu mới không còn khớp → Không còn khớp (kèm lý do); còn khớp → cập nhật số', async () => {
+    await runAgent();
+    // v1 có lãi trở lại, v2 chi thêm
+    mock.snapshot.videos[0] = video({ id: 'v1', campaignId: 'c1', productId: 'p1', cost: 200_000, revenue: 3_000_000, orders: 6 });
+    mock.snapshot.videos[1] = video({ id: 'v2', campaignId: 'c1', productId: 'p1', cost: 180_000 });
+    const s = await runAgent();
+    expect(s.outdated).toBe(1);
+    const byVideo = (id: string) => mock.runtime.proposals.find((p) => p.target.videoId === id)!;
+    expect(byVideo('v1').status).toBe('outdated');
+    expect(byVideo('v1').note).toMatch(/ROI 15,00 — không còn khớp quy tắc/);
+    expect(byVideo('v2')).toMatchObject({ status: 'pending', before: { cost: 180_000 } });
+    // không còn khớp không tính thời gian chờ → lỗ lại thì đề xuất lại ngay
+    mock.snapshot = shop();
+    expect((await runAgent()).proposals).toBe(1);
+  });
+
+  it('quy tắc bị tắt → đề xuất đang chờ của nó chuyển Không còn khớp', async () => {
+    await runAgent();
+    mock.config.rules[0].mode = 'off';
+    expect((await runAgent()).outdated).toBe(3);
+    expect(mock.runtime.proposals.every((p) => p.status === 'outdated' && p.note === 'Quy tắc đã tắt')).toBe(true);
+  });
+
+  it('lệnh lỗi (chưa chạy được trên TikTok) không tính thời gian chờ', async () => {
+    mock.runtime.actions.push({
+      id: 'a1',
+      executedAt: new Date().toISOString(),
+      actor: 'approved',
+      ruleId: 'cut',
+      actionType: 'remove_creative',
+      target: { campaignId: 'c1', productId: 'p1', videoId: 'v1' },
+      params: {},
+      before: { from: '', to: '', cost: 0, revenue: 0, orders: 0, roi: 0, breakEven: null },
+      after: null,
+      status: 'failed',
+      error: 'NOT_AVAILABLE',
+    });
+    expect((await runAgent()).proposals).toBe(3);
+  });
+
   it('tôn trọng số thao tác tối đa / ngày', async () => {
     mock.config.guardrails.maxActionsPerDay = 2;
     const s = await runAgent();

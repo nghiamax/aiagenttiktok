@@ -1,4 +1,4 @@
-// Thử nối MCP TikTok (tt-ads-mcp-layer) từ chương trình ngoài Claude, không cần app developer.
+// Thử nối MCP TikTok (tt-ads-mcp-flat) từ chương trình ngoài Claude, không cần app developer.
 // Đăng ký client (dynamic registration) → đăng nhập OAuth + PKCE trên trình duyệt → gọi 1 tool ĐỌC báo cáo.
 // Chạy: node scripts/mcp-probe.mjs   (token lưu ở .secrets/tiktok-mcp.json, đã nằm trong .gitignore)
 import crypto from 'node:crypto';
@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 
-const MCP_URL = 'https://business-api.tiktok.com/open_mcp/tt-ads-mcp-layer';
+const MCP_URL = 'https://business-api.tiktok.com/open_mcp/tt-ads-mcp-flat';
 const AUTH_BASE = `${MCP_URL}/oauth`;
 const PORT = 8787;
 const REDIRECT = `http://127.0.0.1:${PORT}/callback`;
@@ -164,7 +164,7 @@ try {
   console.log(`  Server: ${init.serverInfo?.name ?? '?'} · giao thức ${protocolVersion}`);
   await rpc('notifications/initialized', {}, true);
   const tools = await rpc('tools/list', {});
-  console.log(`  Số tool thấy được: ${tools.tools.length} · có tool_execute: ${tools.tools.some((t) => t.name === 'tool_execute')}`);
+  console.log(`  Số tool thấy được: ${tools.tools.length} · có gmv_max_report_get: ${tools.tools.some((t) => t.name === 'gmv_max_report_get')}`);
 } catch (e) {
   fail('kết nối MCP', e.message);
 }
@@ -173,20 +173,17 @@ step('Gọi báo cáo GMV Max (chỉ đọc) 10/11 – 16/11/2026');
 let report;
 try {
   const result = await rpc('tools/call', {
-    name: 'tool_execute',
+    name: 'gmv_max_report_get',
     arguments: {
-      tool_name: 'gmv_max_report_get',
-      params: {
-        advertiser_id: '7579465349544869906',
-        store_ids: ['7496093946365052968'],
-        start_date: '2026-11-10',
-        end_date: '2026-11-16',
-        dimensions: ['campaign_id'],
-        metrics: ['cost', 'gross_revenue', 'orders'],
-        filtering: { gmv_max_promotion_types: ['PRODUCT'] },
-        enable_total_metrics: true,
-        page_size: 100,
-      },
+      advertiser_id: '7579465349544869906',
+      store_ids: ['7496093946365052968'],
+      start_date: '2026-11-10',
+      end_date: '2026-11-16',
+      dimensions: ['campaign_id'],
+      metrics: ['cost', 'gross_revenue', 'orders'],
+      filtering: { gmv_max_promotion_types: ['PRODUCT'] },
+      enable_total_metrics: true,
+      page_size: 100,
     },
   });
   const text = result.content?.find((c) => c.type === 'text')?.text ?? '';

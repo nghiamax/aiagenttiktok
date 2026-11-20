@@ -34,6 +34,23 @@ export interface AgentRuleParams {
   budgetChangePct?: number;
   /** Đổi ROI mục tiêu của chiến dịch (%): dương = tăng, âm = giảm */
   roiTargetChangePct?: number;
+  /** Giá trị trên TikTok trước / sau thao tác (ghi lúc thực thi, dùng để hoàn tác) */
+  prev?: ExecutedValues;
+  next?: ExecutedValues;
+}
+
+/** Giá trị thật đã đọc / gửi lên TikTok */
+export interface ExecutedValues {
+  /** Ngân sách ngày (VND) */
+  budget?: number;
+  /** ROI mục tiêu */
+  roasBid?: number;
+  /** Danh sách sản phẩm của chiến dịch (CUSTOMIZED_PRODUCTS) */
+  itemGroupIds?: string[];
+  /** Sản phẩm gắn với video (gỡ / thêm video) */
+  spuIds?: string[];
+  /** Hết hạn tăng cường (ISO) */
+  boostEndsAt?: string;
 }
 
 export interface AgentRule {
@@ -78,7 +95,8 @@ export interface AgentTarget {
   videoId: string;
 }
 
-export type ProposalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+/** outdated = số liệu mới không còn khớp quy tắc (hoặc quy tắc đã tắt) → tự huỷ, không chạy */
+export type ProposalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'outdated';
 
 /** Đề xuất của Agent chờ Sếp duyệt */
 export interface AgentProposal {
@@ -100,6 +118,8 @@ export interface AgentProposal {
   decidedAt?: string;
   /** Ghi chú cho Sếp (vd quy tắc Tự chạy nhưng chưa bật thực thi) */
   note?: string;
+  /** Dòng nhật ký của lần thực thi sau khi duyệt */
+  actionId?: string;
 }
 
 export type ActionActor = 'agent' | 'approved' | 'manual';
@@ -122,6 +142,12 @@ export interface AgentActionLog {
   error?: string;
   /** ID hành động được hoàn tác bởi dòng này */
   undoOf?: string;
+  /** Gỡ / thêm video: thời điểm kiểm tra lại trạng thái trên TikTok (ISO) */
+  verifyAfter?: string;
+  /** Ghi chú trạng thái (vd "Chờ TikTok xác nhận") */
+  note?: string;
+  /** Đề xuất gốc */
+  proposalId?: string;
 }
 
 export interface AgentGuardrails {

@@ -2,10 +2,15 @@ import { config } from '../config.js';
 import { getAccessToken, TikTokLoginRequired } from './auth.js';
 
 /**
- * CHỈ các tool ĐỌC được phép gọi. Server không bao giờ gọi tool tạo/sửa/xoá
- * (gmv_max_creative_update, campaign_gmv_max_update, ...). Thêm tool vào đây phải là tool đọc.
+ * Các tool ĐỌC được phép gọi. Thêm tool vào đây phải là tool đọc.
+ * Tool ghi chỉ nằm trong server/tiktok/writeTools.ts và chỉ server/agent/executor.ts gọi (sau khi Sếp duyệt + xác nhận).
  */
-export const READ_TOOLS = ['gmv_max_report_get', 'gmv_max_campaign_get', 'gmv_max_store_list_get'] as const;
+export const READ_TOOLS = [
+  'gmv_max_report_get',
+  'gmv_max_campaign_get',
+  'gmv_max_store_list_get',
+  'campaign_gmv_max_info_get',
+] as const;
 export type ReadTool = (typeof READ_TOOLS)[number];
 
 /** Phản hồi chuẩn của TikTok Business API */
@@ -138,28 +143,51 @@ function isRateLimited(e: unknown) {
   return e instanceof TikTokApiError && (RATE_LIMIT_CODES.has(e.code ?? -1) || /rate limit/i.test(e.message));
 }
 
-async function callOnce<T>(tool: ReadTool, params: Record<string, unknown>): Promise<T> {
-  const text = await withSlot(() => session.callTool('tool_execute', { tool_name: tool, params }));
+/**
+ * Bản flat (`tt-ads-mcp-flat`): gọi thẳng tool theo tên.
+ * Bản layer: đi qua `tool_execute` — đường này bị TikTok chặn lệnh ghi GMV Max (IN_ROLL_OUT, 19/11/2026).
+ */
+export function isFlatMcp(url: string = config.tiktok.mcpUrl): boolean {
+  return url.includes('mcp-flat');
+}
+
+/** Tên tool + tham số gửi lên MCP cho 1 lời gọi */
+export function mcpCallArgs(tool: string, params: Record<string, unknown>, url?: string): { name: string; args: unknown } {
+  return isFlatMcp(url) ? { name: tool, args: params } : { name: 'tool_execute', args: { tool_name: tool, params } };
+}
+
+async function callOnce<T>(tool: string, params: Record<string, unknown>): Promise<T> {
+  const { name, args } = mcpCallArgs(tool, params);
+  const text = await withSlot(() => session.callTool(name, args));
   let json: TikTokResponse<T>;
   try {
     json = JSON.parse(text) as TikTokResponse<T>;
   } catch {
     throw new TikTokApiError(`TikTok trả dữ liệu không đọc được: ${text.slice(0, 200)}`);
   }
+  if (typeof json?.code !== 'number') throw new TikTokApiError(`TikTok trả dữ liệu lạ: ${text.slice(0, 200)}`);
   if (json.code !== 0) throw new TikTokApiError(`TikTok trả lỗi ${json.code}: ${json.message}`, json.code);
   return json.data;
 }
 
-/** Gọi 1 tool ĐỌC của TikTok qua tool_execute. Tool không nằm trong READ_TOOLS → lỗi ngay, không gửi đi. */
+/** Gọi 1 tool ĐỌC của TikTok. Tool không nằm trong READ_TOOLS → lỗi ngay, không gửi đi. */
 export async function callReadTool<T>(tool: ReadTool, params: Record<string, unknown>): Promise<T> {
   if (!(READ_TOOLS as readonly string[]).includes(tool)) {
     throw new Error(`Tool "${tool}" không nằm trong danh sách tool đọc được phép`);
   }
+  return callWithRetry<T>(tool, params, MAX_RETRIES);
+}
+
+/**
+ * Gọi tool, chỉ thử lại khi TikTok báo giới hạn tần suất (lệnh bị từ chối, chưa chạy).
+ * Dùng nội bộ: callReadTool (ở trên) và callWriteTool (writeTools.ts) — không gọi trực tiếp ở nơi khác.
+ */
+export async function callWithRetry<T>(tool: string, params: Record<string, unknown>, maxRetries: number): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await callOnce<T>(tool, params);
     } catch (e) {
-      if (!isRateLimited(e) || attempt >= MAX_RETRIES) throw e;
+      if (!isRateLimited(e) || attempt >= maxRetries) throw e;
       // Chờ tăng dần 1s, 2s, 4s, 8s, 16s (+ ngẫu nhiên để các lời gọi không dồn lại cùng lúc)
       await sleep(1000 * 2 ** attempt + Math.random() * 500);
     }

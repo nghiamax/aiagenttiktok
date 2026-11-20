@@ -35,8 +35,11 @@ const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('vi-VN', { hour
 
 function summaryText(s: RunSummary): string {
   if (s.skipped === 'paused') return 'Agent đang tạm dừng nên không chạy.';
-  const skipped = Object.values(s.skippedTargets).reduce((a, b) => a + b, 0);
-  return `Xong: ${s.proposals} đề xuất mới, ${s.reminders} nhắc việc${skipped ? `, bỏ qua ${skipped} (đang chờ / trong thời gian chờ / không đủ điều kiện)` : ''}.`;
+  const skipped = Object.entries(s.skippedTargets)
+    .map(([reason, n]) => `${reason.toLowerCase()}: ${n}`)
+    .join(', ');
+  const outdated = s.outdated ? `, ${s.outdated} đề xuất cũ tự huỷ (không còn khớp số liệu mới)` : '';
+  return `Xong: ${s.proposals} đề xuất mới, ${s.reminders} nhắc việc${outdated}${skipped ? `. Bỏ qua — ${skipped}` : ''}.`;
 }
 
 /** Dải trạng thái Agent: công tắc Bật/Tắt tự quét, Quét ngay, lần chạy gần nhất, mức dùng giới hạn hôm nay */
@@ -84,7 +87,7 @@ export default function AgentStatusBar({
         ? 'Đang bật nhưng chưa có quy tắc nào ở chế độ Cần duyệt — vào tab Quy tắc để bật.'
         : `${activeRules} quy tắc đang bật · tự quét mỗi ${schedule.intervalMinutes === 60 ? 'giờ' : `${schedule.intervalMinutes} phút`}${
             schedule.nextRunAt ? ` · lượt tới lúc ${timeOf(schedule.nextRunAt)}` : ''
-          } · chỉ tạo đề xuất, mọi việc chờ Sếp duyệt`;
+          } · Sếp duyệt + xác nhận thì chạy thật trên TikTok`;
 
   async function runNow() {
     setResult(null);

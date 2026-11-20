@@ -56,6 +56,34 @@ describe('buildSuggestions', () => {
     expect(buildSuggestions(snap, S, [r], GUARDRAILS).find((s) => s.id === 'video-cut')?.done).toBe(false);
   });
 
+  it('video đã bị gỡ (EXCLUDED) không còn trong gợi ý Gỡ video; hết video thì ẩn gợi ý', () => {
+    const s = snapshot({
+      ...snap,
+      videos: snap.videos.map((v) => (v.id === 'v2' ? { ...v, status: 'excluded' as const } : v)),
+    });
+    const g = buildSuggestions(s, S, [], GUARDRAILS).find((x) => x.id === 'video-cut');
+    expect(g?.count).toBe(1);
+    expect(g?.examples.map((e) => e.target.videoId)).toEqual(['v1']);
+
+    const all = snapshot({ ...snap, videos: snap.videos.map((v) => ({ ...v, status: 'excluded' as const })) });
+    expect(buildSuggestions(all, S, [], GUARDRAILS).some((x) => x.id === 'video-cut')).toBe(false);
+  });
+
+  it('chiến dịch đang tắt → không gợi ý gỡ video của nó', () => {
+    const s = snapshot({ ...snap, campaigns: [campaign({ id: 'c1', status: 'paused' }), campaign({ id: 'c2' })] });
+    const g = buildSuggestions(s, S, [], GUARDRAILS).find((x) => x.id === 'video-cut');
+    expect(g?.examples.map((e) => e.target.videoId)).toEqual(['v2']);
+  });
+
+  it('video cần ủy quyền / đã gỡ → không gợi ý tăng cường', () => {
+    const s = snapshot({
+      campaigns: [campaign({ id: 'c1', targetRoi: 5 })],
+      products: [product({ id: 'p1', campaignId: 'c1' })],
+      videos: [video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost: 300_000, revenue: 3_000_000, orders: 5, status: 'excluded' })],
+    });
+    expect(buildSuggestions(s, S, [], GUARDRAILS).some((x) => x.id === 'video-scale')).toBe(false);
+  });
+
   it('thiếu ROI hoà vốn cho sản phẩm có chi tiêu → gợi ý đầu tiên', () => {
     const s = snapshot({ ...snap, products: [product({ id: 'p1', campaignId: 'c1', cost: 500_000 })] });
     expect(buildSuggestions(s, S, [], GUARDRAILS)[0]?.id).toBe('break-even');

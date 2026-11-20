@@ -11,6 +11,21 @@ describe('Chỉ gọi tool ĐỌC của TikTok', () => {
     for (const t of READ_TOOLS) expect(t).not.toMatch(/update|create|delete|status|session|authoriz/i);
   });
 
+  it('MCP bản flat gọi thẳng tool theo tên; bản layer đi qua tool_execute', async () => {
+    const { mcpCallArgs, isFlatMcp } = await import('../server/tiktok/mcpClient');
+    const { config } = await import('../server/config');
+    expect(isFlatMcp(config.tiktok.mcpUrl)).toBe(true);
+    const params = { advertiser_id: '1' };
+    expect(mcpCallArgs('gmv_max_report_get', params, 'https://x/open_mcp/tt-ads-mcp-flat')).toEqual({
+      name: 'gmv_max_report_get',
+      args: params,
+    });
+    expect(mcpCallArgs('gmv_max_report_get', params, 'https://x/open_mcp/tt-ads-mcp-layer')).toEqual({
+      name: 'tool_execute',
+      args: { tool_name: 'gmv_max_report_get', params },
+    });
+  });
+
   it('gọi tool ghi → bị chặn trước khi gửi đi (không có request mạng nào)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const { callReadTool } = await import('../server/tiktok/mcpClient');
@@ -22,17 +37,47 @@ describe('Chỉ gọi tool ĐỌC của TikTok', () => {
     fetchSpy.mockRestore();
   });
 
-  it('server không import tool ghi ở đâu cả', () => {
+  it('tool ghi chỉ nằm trong writeTools.ts / executor.ts; chỉ executor gọi callWriteTool', () => {
     const root = path.resolve(__dirname, '..', 'server');
     const files = fs.readdirSync(root, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'));
+    const norm = (f: string) => f.replace(/\\/g, '/');
+    const WRITE_HOME = ['tiktok/writeTools.ts', 'agent/executor.ts'];
     for (const f of files) {
-      // Bỏ chú thích (có ghi chú nhắc tên tool ghi để cấm) → chỉ xét code chạy thật
+      // Bỏ chú thích (có ghi chú nhắc tên tool ghi) → chỉ xét code chạy thật
       const src = fs
         .readFileSync(path.join(root, f), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/.*$/gm, '');
-      expect(src, f).not.toMatch(/gmv_max_creative_update|campaign_gmv_max_update|campaign_gmv_max_session_create/);
+      if (!WRITE_HOME.includes(norm(f))) {
+        expect(src, f).not.toMatch(/gmv_max_creative_update|campaign_gmv_max_update|campaign_gmv_max_session_create/);
+        expect(src, f).not.toMatch(/callWriteTool/);
+      }
+      // callWithRetry (gọi tool bất kỳ) chỉ dùng trong mcpClient + writeTools
+      if (!['tiktok/mcpClient.ts', 'tiktok/writeTools.ts'].includes(norm(f))) {
+        expect(src, f).not.toMatch(/callWithRetry/);
+      }
     }
+  });
+
+  it('WRITE_TOOLS đúng 3 tool; tool lạ bị chặn trước khi gửi', async () => {
+    const { WRITE_TOOLS, callWriteTool } = await import('../server/tiktok/writeTools');
+    expect([...WRITE_TOOLS].sort()).toEqual(
+      ['campaign_gmv_max_session_create', 'campaign_gmv_max_update', 'gmv_max_creative_update'].sort(),
+    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    // @ts-expect-error — cố tình truyền tool ngoài danh sách
+    await expect(callWriteTool('campaign_gmv_max_delete', {})).rejects.toThrow('không nằm trong danh sách tool ghi');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('Duyệt phải có confirm: true (route chặn trước khi chạy)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'server', 'routes', 'agent.ts'), 'utf8');
+    const approve = src.slice(src.indexOf("'/proposals/:id/approve'"), src.indexOf("'/proposals/:id/reject'"));
+    expect(approve.indexOf('confirm !== true')).toBeGreaterThan(-1);
+    expect(approve.indexOf('confirm !== true')).toBeLessThan(approve.indexOf('executeProposal'));
+    const undo = src.slice(src.indexOf("'/actions/:id/undo'"));
+    expect(undo.indexOf('confirm !== true')).toBeLessThan(undo.indexOf('undoAction'));
   });
 });
 

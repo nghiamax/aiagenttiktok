@@ -1,63 +1,68 @@
 import { useEffect, useState } from 'react';
-import { Check, CheckCircle2, X } from 'lucide-react';
-import SegmentedControl from '../../../../components/ui/SegmentedControl';
+import { AlertCircle, Check, CheckCircle2, ChevronRight, X } from 'lucide-react';
 import EmptyTableState from '../../components/EmptyTableState';
-import type { AgentProposal, AgentRule, ProposalStatus } from '../types';
+import { useAdsData } from '../../data';
+import type { ExecOutcome } from '../agentStore';
+import { describeExec } from '../execText';
+import type { AgentProposal, AgentRule } from '../types';
+import ClosedProposalRow, { CLOSED_META, isClosed, type ClosedStatus } from './ClosedProposalRow';
+import ConfirmExecuteModal from './ConfirmExecuteModal';
 import ProposalItem from './ProposalItem';
 
 interface ProposalListProps {
   /** Toàn bộ đề xuất (mọi trạng thái) */
   proposals: AgentProposal[];
   rules: AgentRule[];
-  onDecide: (id: string, decision: 'approve' | 'reject') => Promise<void>;
+  /** approve = chạy thật trên TikTok */
+  onDecide: (id: string, decision: 'approve' | 'reject') => Promise<ExecOutcome>;
+  /** Mở tab Nhật ký (xem kết quả đã chạy) */
+  onOpenLog: () => void;
 }
 
-const STATUS_LABEL: Record<ProposalStatus, string> = {
-  pending: 'Chờ duyệt',
-  approved: 'Đã duyệt',
-  rejected: 'Đã bỏ qua',
-  expired: 'Hết hạn',
-};
+/** Kết quả sau khi duyệt / bỏ qua */
+interface Notice {
+  decision: 'approve' | 'reject';
+  ok: number;
+  /** Đã gửi, chờ TikTok xác nhận (gỡ / thêm video) */
+  verifying: number;
+  failed: { name: string; message: string }[];
+}
 
-const EMPTY: Record<ProposalStatus, { title: string; description: string }> = {
-  pending: {
-    title: 'Không có đề xuất nào đang chờ',
-    description: 'Khi quy tắc ở chế độ Cần duyệt, các việc Agent muốn làm sẽ hiện ở đây để Sếp duyệt trước khi thực hiện.',
-  },
-  approved: { title: 'Chưa duyệt đề xuất nào', description: 'Đề xuất Sếp đã duyệt sẽ hiện ở đây.' },
-  rejected: { title: 'Chưa bỏ qua đề xuất nào', description: 'Đề xuất Sếp bỏ qua sẽ hiện ở đây.' },
-  expired: { title: 'Chưa có đề xuất hết hạn', description: 'Đề xuất quá 24 giờ chưa duyệt sẽ chuyển sang đây.' },
-};
+const NOTICE_MS = 8000;
+const MAX_CLOSED = 50;
 
-const STATUSES: ProposalStatus[] = ['pending', 'approved', 'rejected', 'expired'];
-const NOTICE_MS = 6000;
+/** Đang chờ Sếp quyết: chờ duyệt + đã duyệt từ trước khi bật chạy thật (chưa có thao tác) */
+const isOpen = (p: AgentProposal) => p.status === 'pending' || (p.status === 'approved' && !p.actionId);
 
-/** Tab Chờ duyệt: đề xuất của Agent, lọc theo Chờ duyệt / Đã duyệt / Đã bỏ qua / Hết hạn */
-export default function ProposalList({ proposals, rules, onDecide }: ProposalListProps) {
-  const [status, setStatus] = useState<ProposalStatus>('pending');
+/**
+ * Tab Chờ duyệt: chỉ việc cần Sếp quyết. Duyệt → hộp xác nhận → chạy thật trên TikTok → kết quả ở Nhật ký.
+ * Đề xuất bỏ qua / hết hạn / không còn khớp gộp trong khối "Đề xuất đã đóng".
+ */
+export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: ProposalListProps) {
+  const { snapshot } = useAdsData();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  /** Xác nhận sau khi duyệt / bỏ qua */
-  const [notice, setNotice] = useState<{ decision: 'approve' | 'reject'; count: number } | null>(null);
+  /** Đề xuất đang chờ Sếp xác nhận chạy thật */
+  const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [showClosed, setShowClosed] = useState(false);
 
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? null;
-  const count = (s: ProposalStatus) => proposals.filter((p) => p.status === s).length;
-  const shown = proposals.filter((p) => p.status === status);
-  const isPending = status === 'pending';
-  const allSelected = shown.length > 0 && selected.size === shown.length;
+  const byId = new Map(proposals.map((p) => [p.id, p]));
+  const lineOf = (p: AgentProposal) => describeExec(snapshot, p.actionType, p.params, p.target);
+  const open = proposals.filter(isOpen);
+  const selectable = open.filter((p) => p.status === 'pending');
+  const closed = proposals.filter(isClosed).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const closedCount = (s: ClosedStatus) => closed.filter((p) => p.status === s).length;
+  const allSelected = selectable.length > 0 && selected.size === selectable.length;
+  const confirming = (confirmIds ?? []).map((id) => byId.get(id)).filter((p): p is AgentProposal => !!p);
 
-  // Tự ẩn dòng xác nhận
+  // Tự ẩn dòng kết quả (giữ lại nếu có việc không chạy được)
   useEffect(() => {
-    if (!notice) return;
+    if (!notice || notice.failed.length > 0) return;
     const t = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(t);
   }, [notice]);
-
-  function changeStatus(s: ProposalStatus) {
-    setStatus(s);
-    setSelected(new Set());
-    setNotice(null);
-  }
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -66,99 +71,179 @@ export default function ProposalList({ proposals, rules, onDecide }: ProposalLis
     setSelected(next);
   }
 
+  /** Chạy lần lượt từng đề xuất (server cũng xếp hàng, mỗi lần 1 lệnh) */
   async function decide(ids: string[], decision: 'approve' | 'reject') {
     setBusy(true);
-    for (const id of ids) await onDecide(id, decision);
+    const next: Notice = { decision, ok: 0, verifying: 0, failed: [] };
+    for (const id of ids) {
+      const r = await onDecide(id, decision);
+      const p = byId.get(id);
+      if (!r.ok) next.failed.push({ name: p ? lineOf(p) : id, message: r.message });
+      else if (r.status === 'running') next.verifying++;
+      else next.ok++;
+    }
     setSelected(new Set());
     setBusy(false);
-    setNotice({ decision, count: ids.length });
+    setNotice(next);
   }
 
   return (
     <>
-      <p className="border-b border-line bg-amber-50 px-5 py-3 text-sm text-amber-700">
-        Giai đoạn thử: <span className="font-semibold">Duyệt</span> chỉ ghi nhận Sếp đồng ý, Agent{' '}
-        <span className="font-semibold">chưa</span> thao tác trên TikTok. Thực thi thật sẽ bật sau khi Sếp xác nhận.
-      </p>
-
-      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <SegmentedControl
-          ariaLabel="Lọc đề xuất theo trạng thái"
-          value={status}
-          onChange={changeStatus}
-          options={STATUSES.map((s) => ({ value: s, label: `${STATUS_LABEL[s]} (${count(s)})` }))}
-        />
-
-        {isPending && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                disabled={shown.length === 0}
-                onChange={() => setSelected(allSelected ? new Set() : new Set(shown.map((p) => p.id)))}
-                className="size-4 accent-primary"
-              />
-              Chọn tất cả {selected.size > 0 && <span className="text-muted">({selected.size})</span>}
-            </label>
-            <button
-              type="button"
-              disabled={busy || selected.size === 0}
-              onClick={() => decide([...selected], 'approve')}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Check className="size-4" />
-              Duyệt đã chọn
-            </button>
-            <button
-              type="button"
-              disabled={busy || selected.size === 0}
-              onClick={() => decide([...selected], 'reject')}
-              className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-muted transition hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <X className="size-4" />
-              Bỏ qua
-            </button>
-          </div>
-        )}
-      </div>
-
-      {notice && (
-        <p
-          className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-green-50 px-5 py-3 text-sm text-accent-green"
-          aria-live="polite"
-        >
-          <CheckCircle2 className="size-4 shrink-0" />
-          <span className="font-semibold">
-            {notice.decision === 'approve' ? 'Đã duyệt' : 'Đã bỏ qua'} {notice.count} đề xuất
-          </span>
-          {notice.decision === 'approve' && <span>— chưa thực thi trên TikTok (giai đoạn thử).</span>}
+      {selectable.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => setSelected(allSelected ? new Set() : new Set(selectable.map((p) => p.id)))}
+              className="size-4 accent-primary"
+            />
+            Chọn tất cả {selected.size > 0 && <span className="text-muted">({selected.size})</span>}
+          </label>
           <button
             type="button"
-            onClick={() => changeStatus(notice.decision === 'approve' ? 'approved' : 'rejected')}
-            className="font-semibold underline underline-offset-2 hover:text-ink"
+            disabled={busy || selected.size === 0}
+            onClick={() => setConfirmIds([...selected])}
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Xem ở mục {notice.decision === 'approve' ? 'Đã duyệt' : 'Đã bỏ qua'}
+            <Check className="size-4" />
+            Duyệt đã chọn
           </button>
-        </p>
+          <button
+            type="button"
+            disabled={busy || selected.size === 0}
+            onClick={() => decide([...selected], 'reject')}
+            className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-muted transition hover:bg-canvas hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <X className="size-4" />
+            Bỏ qua
+          </button>
+        </div>
       )}
 
-      {shown.length > 0 ? (
+      {notice && (
+        <NoticeBar
+          notice={notice}
+          onClose={() => setNotice(null)}
+          onOpenLog={onOpenLog}
+          onOpenClosed={() => setShowClosed(true)}
+        />
+      )}
+
+      {open.length > 0 ? (
         <ul className="divide-y divide-line">
-          {shown.map((p) => (
+          {open.map((p) => (
             <ProposalItem
               key={p.id}
               item={p}
               ruleName={ruleName(p.ruleId)}
               selected={selected.has(p.id)}
+              busy={busy}
               onToggle={() => toggle(p.id)}
-              onDecide={(d) => decide([p.id], d)}
+              onApprove={() => setConfirmIds([p.id])}
+              onReject={() => decide([p.id], 'reject')}
             />
           ))}
         </ul>
       ) : (
-        <EmptyTableState title={EMPTY[status].title} description={EMPTY[status].description} />
+        <EmptyTableState
+          title="Không có đề xuất nào đang chờ"
+          description="Khi quy tắc ở chế độ Cần duyệt, các việc Agent muốn làm sẽ hiện ở đây. Sếp duyệt + xác nhận thì Agent chạy thật trên TikTok, kết quả xem ở Nhật ký."
+        />
+      )}
+
+      {closed.length > 0 && (
+        <div className="border-t border-line">
+          <button
+            type="button"
+            onClick={() => setShowClosed((v) => !v)}
+            aria-expanded={showClosed}
+            className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-5 py-3 text-left text-sm transition-colors hover:bg-canvas/60"
+          >
+            <ChevronRight className={`size-4 text-muted transition-transform ${showClosed ? 'rotate-90' : ''}`} />
+            <span className="font-semibold">Đề xuất đã đóng ({closed.length})</span>
+            <span className="text-xs text-muted">
+              {(Object.keys(CLOSED_META) as ClosedStatus[])
+                .filter((s) => closedCount(s) > 0)
+                .map((s) => `${CLOSED_META[s].label.toLowerCase()} ${closedCount(s)}`)
+                .join(' · ')}
+            </span>
+          </button>
+          {showClosed && (
+            <ul className="divide-y divide-line border-t border-line bg-canvas/30">
+              {closed.slice(0, MAX_CLOSED).map((p) => (
+                <ClosedProposalRow key={p.id} item={p} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {confirming.length > 0 && (
+        <ConfirmExecuteModal
+          title={confirming.length > 1 ? `Chạy thật ${confirming.length} việc trên TikTok?` : 'Chạy thật trên TikTok?'}
+          lines={confirming.map(lineOf)}
+          boostTotal={confirming
+            .filter((p) => p.actionType === 'boost_creative')
+            .reduce((s, p) => s + (p.params.boostBudget ?? 0) * (p.params.boostDays ?? 1), 0)}
+          confirmLabel="Xác nhận"
+          onConfirm={() => decide(confirming.map((p) => p.id), 'approve')}
+          onClose={() => setConfirmIds(null)}
+        />
       )}
     </>
+  );
+}
+
+interface NoticeBarProps {
+  notice: Notice;
+  onClose: () => void;
+  onOpenLog: () => void;
+  onOpenClosed: () => void;
+}
+
+function NoticeBar({ notice, onClose, onOpenLog, onOpenClosed }: NoticeBarProps) {
+  const done = notice.ok + notice.verifying;
+  const failedOnly = done === 0 && notice.failed.length > 0;
+  const approve = notice.decision === 'approve';
+  return (
+    <div
+      className={`space-y-1.5 border-b border-line px-5 py-3 text-sm ${failedOnly ? 'bg-rose-50' : 'bg-green-50'}`}
+      aria-live="polite"
+    >
+      {done > 0 && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-accent-green">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span className="font-semibold">
+            {approve ? `Đã chạy trên TikTok ${done} việc` : `Đã bỏ qua ${done} đề xuất`}
+            {approve && notice.verifying > 0 && ` · ${notice.verifying} việc gỡ / thêm video đang chờ TikTok cập nhật`}
+          </span>
+          <button
+            type="button"
+            onClick={approve ? onOpenLog : onOpenClosed}
+            className="font-semibold underline underline-offset-2 hover:text-ink"
+          >
+            {approve ? 'Xem ở Nhật ký' : 'Xem ở Đề xuất đã đóng'}
+          </button>
+        </p>
+      )}
+      {notice.failed.map((f, i) => (
+        <p key={i} className="flex items-start gap-2 text-danger">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span>
+            <span className="font-semibold">Không chạy được:</span> {f.name} — {f.message}
+          </span>
+        </p>
+      ))}
+      {notice.failed.length > 0 && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-muted underline underline-offset-2 hover:text-ink"
+        >
+          Đóng
+        </button>
+      )}
+    </div>
   );
 }

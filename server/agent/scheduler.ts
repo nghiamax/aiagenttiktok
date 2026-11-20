@@ -1,5 +1,22 @@
 import { updateRuntime } from '../store.js';
 import { runAgent, type RunSummary } from './engine.js';
+import { verifyPendingActions } from './executor.js';
+
+/** Kiểm tra kết quả gỡ / thêm video mỗi 10 giây (chỉ gọi TikTok khi có dòng đang chờ tới hạn) */
+const VERIFY_EVERY_MS = 10_000;
+let verifying = false;
+async function verifyTick() {
+  if (verifying) return;
+  verifying = true;
+  try {
+    const n = await verifyPendingActions();
+    if (n) console.log(`[agent] đã kiểm tra kết quả ${n} thao tác trên TikTok`);
+  } catch (e) {
+    console.error('[agent] kiểm tra kết quả lỗi:', e instanceof Error ? e.message : e);
+  } finally {
+    verifying = false;
+  }
+}
 
 const INTERVAL_MIN = Number(process.env.AGENT_INTERVAL_MINUTES ?? 60);
 /** Lượt đầu sau khi khởi động server */
@@ -25,7 +42,7 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
         .map(([k, n]) => `${k}: ${n}`)
         .join(', ');
       console.log(
-        `[agent] ${trigger} ${s.skipped ? '— đang tạm dừng' : `→ ${s.proposals} đề xuất, ${s.reminders} nhắc việc, ${s.expired} hết hạn${skipped ? ` · bỏ qua (${skipped})` : ''}`}`,
+        `[agent] ${trigger} ${s.skipped ? '— đang tạm dừng' : `→ ${s.proposals} đề xuất, ${s.reminders} nhắc việc, ${s.expired} hết hạn, ${s.outdated} không còn khớp${skipped ? ` · bỏ qua (${skipped})` : ''}`}`,
       );
       return s;
     })
@@ -45,6 +62,8 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
 }
 
 export function startScheduler() {
+  setInterval(verifyTick, VERIFY_EVERY_MS);
+  setTimeout(verifyTick, FIRST_RUN_DELAY_MS);
   if (!(INTERVAL_MIN > 0)) {
     console.log('[agent] Lịch chạy tắt (AGENT_INTERVAL_MINUTES = 0)');
     return;
@@ -59,5 +78,5 @@ export function startScheduler() {
     tick();
     setInterval(tick, intervalMs);
   }, FIRST_RUN_DELAY_MS);
-  console.log(`[agent] Chạy mỗi ${INTERVAL_MIN} phút (chỉ đề xuất, không thao tác trên TikTok)`);
+  console.log(`[agent] Chạy mỗi ${INTERVAL_MIN} phút (tạo đề xuất; Sếp duyệt + xác nhận mới thao tác trên TikTok)`);
 }

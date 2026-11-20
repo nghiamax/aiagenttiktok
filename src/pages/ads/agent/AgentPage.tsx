@@ -69,7 +69,7 @@ export default function AgentPage() {
   const { settings, save: saveSettings, reset: resetBreakEven } = useAdsSettings();
   const [breakEvenOpen, setBreakEvenOpen] = useState(false);
   const closeBreakEven = useCallback(() => setBreakEvenOpen(false), []);
-  const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide } =
+  const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide, undo, verify } =
     useAgentStore();
   const pending = pendingProposals(agentState.proposals);
   const active = activeRuleCount(config.rules);
@@ -122,7 +122,7 @@ export default function AgentPage() {
 
           <div className="rounded-b-2xl">
             {view === 'suggest' && <SuggestionList onOpenBreakEven={() => setBreakEvenOpen(true)} />}
-            {view === 'pending' && <ProposalList proposals={agentState.proposals} rules={config.rules} onDecide={decide} />}
+            {view === 'pending' && <ProposalList proposals={agentState.proposals} rules={config.rules} onDecide={decide} onOpenLog={() => setView('log')} />}
             {view === 'impact' && (
               <ImpactView
                 actions={agentState.actions}
@@ -136,8 +136,11 @@ export default function AgentPage() {
             {view === 'log' && (
               <ActionLogList
                 actions={agentState.actions}
+                proposals={agentState.proposals}
                 rules={config.rules}
                 evaluateAfterHours={config.guardrails.evaluateAfterHours}
+                onUndo={undo}
+                onVerify={verify}
               />
             )}
             {view === 'rules' && (
@@ -148,7 +151,7 @@ export default function AgentPage() {
                     <button type="button" onClick={() => setView('groups')} className="font-medium text-primary hover:text-primary-hover">
                       Nhóm
                     </button>
-                    . Thay đổi được lưu trên trình duyệt này.
+                    . Thay đổi được lưu trên server.
                   </p>
                   <button
                     type="button"

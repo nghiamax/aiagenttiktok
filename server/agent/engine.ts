@@ -1,29 +1,28 @@
 import crypto from 'node:crypto';
-import { findRuleTargets, type RuleTarget } from '../../shared/agentMatch.js';
+import { findRuleTargets, ineligibleReason, type RuleTarget } from '../../shared/agentMatch.js';
+import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
 import type {
   AgentActionLog,
   AgentActionType,
+  AgentConfig,
   AgentProposal,
-  AgentRule,
   AgentRuntime,
   AgentTarget,
   MetricWindow,
 } from '../../shared/agentTypes.js';
+import { shortVnd } from '../../shared/format.js';
+import type { AdsSettings } from '../../shared/settings.js';
 import { getSnapshot, todayVN } from '../ads/cache.js';
 import { getAgentConfig, getSettings, updateRuntime } from '../store.js';
 
 /**
- * Một lượt chạy của Agent — GIAI ĐOẠN B: CHỈ ĐỌC.
- * Tạo đề xuất (chờ Sếp duyệt) và ghi nhắc việc. KHÔNG gọi tool ghi nào của TikTok,
- * kể cả với quy tắc đặt "Tự chạy" (giai đoạn C/D mới thực thi, cần Sếp xác nhận).
+ * Một lượt chạy của Agent: CHỈ ĐỌC số liệu, tạo đề xuất (chờ Sếp duyệt) và ghi nhắc việc.
+ * Không gọi tool ghi — thực thi nằm ở executor.ts, chỉ chạy khi Sếp bấm Duyệt + Xác nhận.
  */
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const PROPOSAL_TTL_HOURS = 24;
-
-/** Video ở các trạng thái này TikTok không cho tăng cường */
-const NO_BOOST_STATUSES = new Set(['authorization_needed', 'excluded', 'rejected', 'unavailable']);
 
 export interface RunSummary {
   ranAt: string;
@@ -32,6 +31,8 @@ export interface RunSummary {
   proposals: number;
   reminders: number;
   expired: number;
+  /** Đề xuất đang chờ bị huỷ vì số liệu mới không còn khớp */
+  outdated: number;
   /** Số đối tượng bị bỏ qua theo lý do */
   skippedTargets: Record<string, number>;
 }
@@ -42,29 +43,6 @@ const keyOf = (type: AgentActionType, t: AgentTarget) => `${type}|${t.campaignId
 
 /** Thời điểm bắt đầu ngày hôm nay theo giờ VN (ms) */
 const startOfTodayVN = () => Date.parse(`${todayVN()}T00:00:00+07:00`);
-
-/** Lý do không được đề xuất (theo điều kiện của TikTok / giới hạn an toàn); null = được */
-function ineligible(rule: AgentRule, t: RuleTarget): string | null {
-  switch (rule.actionType) {
-    case 'remove_creative':
-      if (!t.campaignRunning) return 'Chiến dịch đang tắt';
-      if (t.videoStatus === 'excluded') return 'Video đã bị gỡ';
-      return null;
-    case 'add_creative':
-      return t.videoStatus === 'excluded' ? null : 'Video chưa bị gỡ';
-    case 'boost_creative':
-      if (!t.campaignRunning) return 'Chiến dịch đang tắt';
-      if (t.videoStatus && NO_BOOST_STATUSES.has(t.videoStatus)) return 'Video không đủ điều kiện tăng cường';
-      if (!rule.params.boostBudget) return 'Quy tắc chưa đặt ngân sách tăng cường';
-      return null;
-    case 'update_budget':
-      return rule.params.budgetChangePct ? null : 'Quy tắc chưa đặt % ngân sách';
-    case 'update_roi_target':
-      return rule.params.roiTargetChangePct ? null : 'Quy tắc chưa đặt % ROI mục tiêu';
-    default:
-      return null;
-  }
-}
 
 function windowOf(t: RuleTarget, range: { from: string; to: string }): MetricWindow {
   return {
@@ -78,11 +56,58 @@ function windowOf(t: RuleTarget, range: { from: string; to: string }): MetricWin
   };
 }
 
+const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+/** Số liệu hiện tại của đối tượng trong snapshot (để ghi lý do khi không còn khớp) */
+function currentText(t: AgentTarget, snapshot: AdsSnapshot): string {
+  let cost = 0;
+  let revenue = 0;
+  let found = false;
+  const add = (c: number | null, r: number | null) => {
+    found = true;
+    cost += c ?? 0;
+    revenue += r ?? 0;
+  };
+  if (t.videoId) {
+    for (const v of snapshot.videos) if (v.campaignId === t.campaignId && v.id === t.videoId) add(v.cost, v.revenue);
+  } else if (t.productId) {
+    for (const p of snapshot.products) if (p.campaignId === t.campaignId && p.id === t.productId) add(p.cost, p.revenue);
+  } else {
+    for (const c of snapshot.campaigns) if (c.id === t.campaignId) add(c.cost, c.revenue);
+  }
+  if (!found) return 'không còn trong số liệu';
+  const roi = cost > 0 ? (revenue / cost).toFixed(2).replace('.', ',') : '--';
+  return `chi ${shortVnd(cost)} · ROI ${roi}`;
+}
+
+/**
+ * Đề xuất còn khớp quy tắc theo số liệu `snapshot` không.
+ * Dùng ở mỗi lượt quét (xét lại đề xuất đang chờ) và ngay trước khi thực thi.
+ */
+export function recheckProposal(
+  p: AgentProposal,
+  cfg: AgentConfig,
+  settings: AdsSettings,
+  snapshot: AdsSnapshot,
+): { ok: true; match: RuleTarget } | { ok: false; reason: string } {
+  const rule = cfg.rules.find((r) => r.id === p.ruleId);
+  if (!rule) return { ok: false, reason: 'Quy tắc đã bị xoá' };
+  if (rule.mode === 'off') return { ok: false, reason: 'Quy tắc đã tắt' };
+  if (!rule.trigger) return { ok: false, reason: 'Quy tắc chưa chọn nhóm' };
+  const k = keyOf(p.actionType, p.target);
+  const match = findRuleTargets(rule, settings, snapshot).find((t) => keyOf(rule.actionType, t.target) === k);
+  const range = snapshot.range ? `Số liệu ${ddmm(snapshot.range.from)}–${ddmm(snapshot.range.to)}` : 'Số liệu mới';
+  if (!match) return { ok: false, reason: `${range}:${currentText(p.target, snapshot)} — không còn khớp quy tắc «${rule.name}»` };
+  const why = ineligibleReason(rule.actionType, rule.params, match);
+  if (why) return { ok: false, reason: why };
+  return { ok: true, match };
+}
+
 /** fresh = lấy số liệu mới từ TikTok (bỏ qua cache) — dùng cho "Quét ngay" */
 export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> {
   const cfg = getAgentConfig();
   const ranAt = new Date().toISOString();
-  const summary: RunSummary = { ranAt, proposals: 0, reminders: 0, expired: 0, skippedTargets: {} };
+  const summary: RunSummary = { ranAt, proposals: 0, reminders: 0, expired: 0, outdated: 0, skippedTargets: {} };
   const skip = (reason: string) => (summary.skippedTargets[reason] = (summary.skippedTargets[reason] ?? 0) + 1);
 
   if (cfg.paused) return { ...summary, skipped: 'paused' };
@@ -105,15 +130,33 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       }
     }
 
+    // Xét lại đề xuất đang chờ theo số liệu mới: không còn khớp → tự huỷ; còn khớp → cập nhật số
+    for (const p of rt.proposals) {
+      if (p.status !== 'pending') continue;
+      const r = recheckProposal(p, cfg, settings, snapshot);
+      if (r.ok) {
+        p.before = windowOf(r.match, range);
+        p.reason = r.match.reason;
+      } else {
+        p.status = 'outdated';
+        p.decidedAt = ranAt;
+        p.note = r.reason;
+        summary.outdated++;
+      }
+    }
+
     const todayStart = startOfTodayVN();
     const isToday = (iso: string) => Date.parse(iso) >= todayStart;
-    // Số thao tác hôm nay: đề xuất tạo hôm nay (trừ bị bỏ qua / hết hạn) + thao tác thật đã chạy (trừ nhắc việc)
-    let todayCount =
-      rt.proposals.filter((p) => isToday(p.createdAt) && (p.status === 'pending' || p.status === 'approved')).length +
-      rt.actions.filter((a) => isToday(a.executedAt) && a.actionType !== 'remind' && a.status !== 'failed').length;
-    let todayBoost = rt.proposals
-      .filter((p) => isToday(p.createdAt) && p.actionType === 'boost_creative' && p.status !== 'rejected' && p.status !== 'expired')
-      .reduce((s, p) => s + (p.params.boostBudget ?? 0), 0);
+    // Số thao tác hôm nay: đề xuất còn hiệu lực tạo hôm nay (đã duyệt mà có thực thi thì tính ở nhật ký)
+    // + thao tác thật đã chạy (trừ nhắc việc, lỗi, hoàn tác)
+    const liveProposal = (p: AgentProposal) =>
+      isToday(p.createdAt) && (p.status === 'pending' || (p.status === 'approved' && !p.actionId));
+    const realAction = (a: AgentActionLog) =>
+      isToday(a.executedAt) && a.actionType !== 'remind' && a.status !== 'failed' && !a.undoOf;
+    let todayCount = rt.proposals.filter(liveProposal).length + rt.actions.filter(realAction).length;
+    let todayBoost =
+      rt.proposals.filter((p) => liveProposal(p) && p.actionType === 'boost_creative').reduce((s, p) => s + (p.params.boostBudget ?? 0), 0) +
+      rt.actions.filter((a) => realAction(a) && a.actionType === 'boost_creative').reduce((s, a) => s + (a.params.boostBudget ?? 0), 0);
 
     // Lần gần nhất đụng tới (loại hành động, đối tượng): đề xuất hoặc nhật ký
     const lastTouched = new Map<string, number>();
@@ -122,9 +165,11 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
     for (const p of rt.proposals) {
       const k = keyOf(p.actionType, p.target);
       if (p.status === 'pending') pendingKeys.add(k);
-      if (p.status !== 'expired') touch(k, p.createdAt);
+      // Hết hạn / không còn khớp: không tính thời gian chờ
+      if (p.status !== 'expired' && p.status !== 'outdated') touch(k, p.createdAt);
     }
-    for (const a of rt.actions) touch(keyOf(a.actionType, a.target), a.executedAt);
+    // Lệnh lỗi (chưa chạy được trên TikTok): không tính thời gian chờ
+    for (const a of rt.actions) if (a.status !== 'failed') touch(keyOf(a.actionType, a.target), a.executedAt);
 
     for (const rule of cfg.rules) {
       if (rule.mode === 'off' || !rule.trigger) continue;
@@ -160,7 +205,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           continue;
         }
 
-        const why = ineligible(rule, t);
+        const why = ineligibleReason(rule.actionType, rule.params, t);
         if (why) {
           skip(why);
           continue;

@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import type { AdsSettings } from '../../shared/settings.js';
 import type { AgentConfig, AgentGuardrails, AgentRule } from '../../shared/agentTypes.js';
+import { executeProposal, PrecheckError, undoAction, verifyAction, type ExecResult } from '../agent/executor.js';
 import { AGENT_INTERVAL_MINUTES, getNextRunAt, isAgentRunning, runAgentOnce } from '../agent/scheduler.js';
 import {
   agentConfigStored,
@@ -92,12 +93,32 @@ agentRouter.post('/run', async (_req, res) => {
   }
 });
 
+/** Kết quả thực thi → phản hồi; PrecheckError = 409 (không gửi lệnh nào) */
+async function respondExec(res: Response, run: () => Promise<ExecResult>) {
+  try {
+    const result = await run();
+    res.json({ result: { message: result.message, status: result.action.status, actionId: result.action.id }, state: stateResponse() });
+  } catch (e) {
+    if (e instanceof PrecheckError) {
+      return res.status(409).json({ code: 'PRECHECK_FAILED', error: e.message, state: stateResponse() });
+    }
+    res.status(502).json({ code: 'EXECUTE_FAILED', error: e instanceof Error ? e.message : String(e), state: stateResponse() });
+  }
+}
+
 /**
- * Duyệt / bỏ qua đề xuất. GIAI ĐOẠN B: duyệt chỉ ghi nhận, KHÔNG thao tác trên TikTok.
+ * Duyệt = THỰC THI THẬT trên TikTok (giai đoạn C). Bắt buộc body { confirm: true } — web chỉ gửi sau hộp xác nhận.
  */
-agentRouter.post('/proposals/:id/:decision', (req, res) => {
-  const { id, decision } = req.params;
-  if (decision !== 'approve' && decision !== 'reject') return bad(res, 'Hành động không hợp lệ');
+agentRouter.post('/proposals/:id/approve', async (req, res) => {
+  if ((req.body as { confirm?: unknown } | undefined)?.confirm !== true) {
+    return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi chạy thật trên TikTok' });
+  }
+  await respondExec(res, () => executeProposal(req.params.id));
+});
+
+/** Bỏ qua đề xuất */
+agentRouter.post('/proposals/:id/reject', (req, res) => {
+  const { id } = req.params;
   let found = false;
   let wasPending = false;
   updateRuntime((rt) => {
@@ -106,11 +127,23 @@ agentRouter.post('/proposals/:id/:decision', (req, res) => {
     found = true;
     if (p.status !== 'pending') return;
     wasPending = true;
-    p.status = decision === 'approve' ? 'approved' : 'rejected';
+    p.status = 'rejected';
     p.decidedAt = new Date().toISOString();
-    if (decision === 'approve') p.note = 'Đã duyệt — chưa thực thi trên TikTok (chưa bật giai đoạn thực thi)';
   });
   if (!found) return res.status(404).json({ code: 'NOT_FOUND', error: 'Không tìm thấy đề xuất' });
   if (!wasPending) return res.status(409).json({ code: 'NOT_PENDING', error: 'Đề xuất không còn chờ duyệt' });
   res.json(stateResponse());
+});
+
+/** Hoàn tác thao tác (cũng cần { confirm: true }) */
+agentRouter.post('/actions/:id/undo', async (req, res) => {
+  if ((req.body as { confirm?: unknown } | undefined)?.confirm !== true) {
+    return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi hoàn tác trên TikTok' });
+  }
+  await respondExec(res, () => undoAction(req.params.id));
+});
+
+/** Kiểm tra ngay kết quả gỡ / thêm video — CHỈ ĐỌC trạng thái trên TikTok, không gửi lệnh ghi */
+agentRouter.post('/actions/:id/verify', async (req, res) => {
+  await respondExec(res, () => verifyAction(req.params.id));
 });

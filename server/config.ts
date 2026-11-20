@@ -20,7 +20,7 @@ export const config = {
   /** Trang web được phép gọi API */
   allowedOrigins: list(process.env.ALLOWED_ORIGINS, ['http://localhost:5173', 'http://127.0.0.1:5173']),
   tiktok: {
-    mcpUrl: process.env.TIKTOK_MCP_URL ?? 'https://business-api.tiktok.com/open_mcp/tt-ads-mcp-layer',
+    mcpUrl: process.env.TIKTOK_MCP_URL ?? 'https://business-api.tiktok.com/open_mcp/tt-ads-mcp-flat',
     advertiserId: process.env.TIKTOK_ADVERTISER_ID ?? '7579465349544869906',
     storeId: process.env.TIKTOK_STORE_ID ?? '7496093946365052968',
     advertiserName: process.env.TIKTOK_ADVERTISER_NAME ?? 'Phụ Kiện NECOTECH',

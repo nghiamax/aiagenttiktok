@@ -1,5 +1,5 @@
 import type { AdsSnapshot, VideoStatus } from './adsSnapshot.js';
-import type { AgentRule, AgentTarget, RuleLevel } from './agentTypes.js';
+import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel } from './agentTypes.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
 import { breakEvenOf, type AdsSettings } from './settings.js';
 
@@ -10,6 +10,35 @@ export const ruleLevel = (rule: Pick<AgentRule, 'level'>): RuleLevel => rule.lev
 export function snapshotDays(snapshot: AdsSnapshot): number {
   if (!snapshot.range) return 7;
   return Math.round((Date.parse(snapshot.range.to) - Date.parse(snapshot.range.from)) / 86_400_000) + 1;
+}
+
+/** Video ở các trạng thái này TikTok không cho tăng cường */
+const NO_BOOST_STATUSES = new Set<VideoStatus>(['authorization_needed', 'excluded', 'rejected', 'unavailable']);
+
+/**
+ * Lý do không làm được hành động với đối tượng (theo điều kiện của TikTok); null = làm được.
+ * Dùng chung: bộ máy quét (engine), xét lại đề xuất và Gợi ý.
+ */
+export function ineligibleReason(actionType: AgentActionType, params: AgentRuleParams, t: RuleTarget): string | null {
+  switch (actionType) {
+    case 'remove_creative':
+      if (!t.campaignRunning) return 'Chiến dịch đang tắt';
+      if (t.videoStatus === 'excluded') return 'Video đã bị gỡ';
+      return null;
+    case 'add_creative':
+      return t.videoStatus === 'excluded' ? null : 'Video chưa bị gỡ';
+    case 'boost_creative':
+      if (!t.campaignRunning) return 'Chiến dịch đang tắt';
+      if (t.videoStatus && NO_BOOST_STATUSES.has(t.videoStatus)) return 'Video không đủ điều kiện tăng cường';
+      if (!params.boostBudget) return 'Quy tắc chưa đặt ngân sách tăng cường';
+      return null;
+    case 'update_budget':
+      return params.budgetChangePct ? null : 'Quy tắc chưa đặt % ngân sách';
+    case 'update_roi_target':
+      return params.roiTargetChangePct ? null : 'Quy tắc chưa đặt % ROI mục tiêu';
+    default:
+      return null;
+  }
 }
 
 /** Một đối tượng đang khớp quy tắc */

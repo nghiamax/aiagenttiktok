@@ -4,13 +4,19 @@ import FilterSelect from '../../../../components/ui/FilterSelect';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import EmptyTableState from '../../components/EmptyTableState';
 import { ACTION_TYPE_META, ACTOR_META } from '../meta';
-import type { ActionActor, AgentActionLog, AgentActionType, AgentRule } from '../types';
+import type { ExecOutcome } from '../agentStore';
+import type { ActionActor, AgentActionLog, AgentActionType, AgentProposal, AgentRule } from '../types';
 import ActionLogItem from './ActionLogItem';
 
 interface ActionLogListProps {
   actions: AgentActionLog[];
+  /** Để hiện "Đề xuất lúc …" cho dòng Sếp duyệt */
+  proposals: AgentProposal[];
   rules: AgentRule[];
   evaluateAfterHours: number;
+  /** Hoàn tác (chạy thật trên TikTok, đã qua hộp xác nhận) */
+  onUndo: (actionId: string) => Promise<ExecOutcome>;
+  onVerify: (actionId: string) => Promise<ExecOutcome>;
 }
 
 type Period = 'today' | '7d' | 'all';
@@ -31,7 +37,8 @@ function inPeriod(iso: string, period: Period): boolean {
 }
 
 /** Tab Nhật ký: mọi hành động đã thực hiện, mới nhất trên cùng */
-export default function ActionLogList({ actions, rules, evaluateAfterHours }: ActionLogListProps) {
+export default function ActionLogList({ actions, proposals, rules, evaluateAfterHours, onUndo, onVerify }: ActionLogListProps) {
+  const proposedAt = new Map(proposals.map((p) => [p.id, p.createdAt]));
   const [period, setPeriod] = useState<Period>('7d');
   const [type, setType] = useState<string | null>(null);
   const [ruleId, setRuleId] = useState<string | null>(null);
@@ -89,7 +96,16 @@ export default function ActionLogList({ actions, rules, evaluateAfterHours }: Ac
       {list.length > 0 ? (
         <ul className="divide-y divide-line">
           {list.map((a) => (
-            <ActionLogItem key={a.id} item={a} ruleName={ruleName(a.ruleId)} evaluateAfterHours={evaluateAfterHours} />
+            <ActionLogItem
+              key={a.id}
+              item={a}
+              all={actions}
+              ruleName={ruleName(a.ruleId)}
+              evaluateAfterHours={evaluateAfterHours}
+              proposedAt={a.proposalId ? proposedAt.get(a.proposalId) : undefined}
+              onUndo={onUndo}
+              onVerify={onVerify}
+            />
           ))}
         </ul>
       ) : (

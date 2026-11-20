@@ -152,16 +152,34 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
     });
   }
 
-  // Một video gắn nhiều sản phẩm có nhiều dòng → gộp 1 đối tượng, CỘNG số liệu các dòng khớp nhóm
+  return collectVideoTargets(snapshot, settings, (v) => {
+    if (!inScope(rule, v.campaignId, v.productId)) return null;
+    const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
+    return cls?.action === rule.trigger ? cls.reason : null;
+  });
+}
+
+/**
+ * Gom các dòng video khớp `match` (trả lý do, null = không khớp) thành đối tượng theo (chiến dịch, video):
+ * một video gắn nhiều sản phẩm có nhiều dòng → 1 đối tượng, CỘNG số liệu các dòng khớp; dòng không khớp = "đơn bù".
+ * Dùng chung: quy tắc Agent (khớp nhóm) và Gợi ý (khớp điều kiện riêng của gợi ý).
+ */
+export function collectVideoTargets(
+  snapshot: AdsSnapshot,
+  settings: AdsSettings,
+  match: (v: AdsVideo) => string | null,
+): RuleTarget[] {
+  const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
+  const running = (id: string) => campaignById.get(id)?.status === 'running';
   const byKey = new Map<string, RuleTarget>();
-  /** Các dòng khớp nhóm của từng (chiến dịch, video) — phần còn lại là "đơn bù" */
+  /** Các dòng khớp của từng (chiến dịch, video) — phần còn lại là "đơn bù" */
   const matchedRows = new Map<string, Set<AdsVideo>>();
   const out: RuleTarget[] = [];
   const add = (a: number | null, b: number | null) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
   for (const v of snapshot.videos) {
-    if (!inScope(rule, v.campaignId, v.productId)) continue;
-    const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
-    if (cls?.action !== rule.trigger) continue;
+    if (v.contentType === 'product_card') continue;
+    const reason = match(v);
+    if (reason == null) continue;
     const key = `${v.campaignId}/${v.id}`;
     (matchedRows.get(key) ?? matchedRows.set(key, new Set()).get(key)!).add(v);
     const prev = byKey.get(key);
@@ -175,7 +193,7 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
     const t: RuleTarget = {
       target: { campaignId: v.campaignId, productId: v.productId, videoId: v.id },
       name: v.title || `Video ${v.id}`,
-      reason: cls.reason,
+      reason,
       cost: v.cost,
       revenue: v.revenue,
       orders: v.orders,

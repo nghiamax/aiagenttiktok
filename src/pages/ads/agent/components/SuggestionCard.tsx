@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, ChevronDown, EyeOff, Lightbulb, Plus, TrendingUp, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { tiktokVideoUrl } from '../../metrics';
 import { useAdsData } from '../../data';
@@ -61,6 +62,14 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
             >
               Nhập ROI hoà vốn
             </button>
+          ) : s.action.kind === 'info' ? null : s.action.groupMissing ? (
+            <Link
+              to={`/ads/agent?view=groups&level=${s.action.level}`}
+              title="Shop đã xoá nhóm dùng cho quy tắc này — tạo lại nhóm ở tab Nhóm để bật quy tắc"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-muted transition hover:bg-canvas hover:text-ink"
+            >
+              Chưa có nhóm phù hợp
+            </Link>
           ) : (
             <button
               type="button"
@@ -95,6 +104,15 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
                   <a href={url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate font-medium hover:text-primary" title={e.name}>
                     {e.name}
                   </a>
+                ) : e.target.productId ? (
+                  // Sản phẩm → mở bảng Video lọc theo sản phẩm
+                  <Link
+                    to={`/ads?tab=videos&campaign=${e.target.campaignId}&product=${e.target.productId}`}
+                    className="min-w-0 truncate font-medium hover:text-primary"
+                    title={`${e.name} — xem video của sản phẩm`}
+                  >
+                    {e.name}
+                  </Link>
                 ) : (
                   <span className="min-w-0 truncate font-medium" title={e.name}>
                     {e.name}
@@ -112,7 +130,7 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
       )}
 
       <div className="mt-3 flex flex-col gap-1 text-sm">
-        {s.action.kind === 'rule' && !s.done && <p className="text-muted">👉 {s.action.effect}</p>}
+        {(s.action.kind === 'rule' || s.action.kind === 'info') && !s.done && <p className="text-muted">👉 {s.action.effect}</p>}
         <button
           type="button"
           onClick={() => setShowWhy((v) => !v)}

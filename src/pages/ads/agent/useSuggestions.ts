@@ -52,7 +52,7 @@ export function useSuggestions() {
   const apply = useCallback(
     (s: Suggestion) => {
       const a = s.action;
-      if (a.kind !== 'rule') return;
+      if (a.kind !== 'rule' || a.groupMissing) return;
       const existing = findMatchingRule(state.rules, a);
       if (existing) {
         updateRule(existing.id, { mode: 'approve', params: { ...existing.params, ...a.params } });

@@ -10,6 +10,14 @@ export interface AdsSettings {
   productGroups: GroupDef[];
   /** Nhóm chiến dịch */
   campaignGroups: GroupDef[];
+  /** Chỉnh riêng bộ gợi ý cho shop này (shared/suggestRules.ts): tắt gợi ý / đổi hệ số. Thiếu = dùng mặc định chung */
+  suggestOverrides?: Record<string, SuggestOverride>;
+}
+
+export interface SuggestOverride {
+  off?: boolean;
+  /** Ghi đè hệ số mặc định của gợi ý (cùng tên khoá với SUGGESTION_PARAMS) */
+  params?: Record<string, number>;
 }
 
 /** Key trong AdsSettings chứa nhóm của từng cấp */
@@ -35,6 +43,7 @@ export function normalizeSettings(saved: Partial<AdsSettings> | null | undefined
     groups: groupsFor('video'),
     productGroups: groupsFor('product'),
     campaignGroups: groupsFor('campaign'),
+    suggestOverrides: { ...defaults.suggestOverrides, ...saved?.suggestOverrides },
   };
 }
 

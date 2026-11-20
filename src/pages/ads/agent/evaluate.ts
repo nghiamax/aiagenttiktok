@@ -2,14 +2,22 @@ import { formatNumber, shortVnd } from '../../../lib/format';
 import type { AgentActionLog, AgentProposal, AgentRule, MetricWindow, RuleMode } from './types';
 
 /**
- * Chấm kết quả thao tác của Agent — mọi số là ƯỚC TÍNH, tính từ nhật ký thật:
- * - Mốc "nếu không làm gì" = chi phí / doanh thu mỗi ngày TRƯỚC thao tác × số ngày SAU thao tác.
- * - Lợi nhuận từ quảng cáo = doanh thu ÷ ROI hoà vốn − chi phí (hoà vốn ghi lúc quyết định).
- * - Gỡ video:  tác động = chi phí tránh được − doanh thu mất ÷ hoà vốn.
- * - Tăng cường / thêm lại / đổi ngân sách: tác động = DT thêm ÷ hoà vốn − chi thêm.
+ * CHUẨN CHẤM CHUNG cho MỌI thao tác (Sếp chốt 20/11/2026) — số là ƯỚC TÍNH, tính từ nhật ký thật:
+ * - Lãi/lỗ QC mỗi ngày = doanh thu ÷ ROI hoà vốn − chi phí (hoà vốn ghi lúc quyết định).
+ * - So lãi/lỗ mỗi ngày SAU thao tác với TRƯỚC (= tình trạng ngay lúc bấm):
+ *   đang chạy (gỡ, tăng cường, tắt SP, ngân sách, ROI) → TB/ngày của khoảng "Lúc quyết định";
+ *   đang tắt (thêm lại video, bật SP) → 0 (không chi, không đơn).
+ * - Sau ≥ trước → Đúng, thấp hơn → Sai. Tác động = chênh lãi/lỗ mỗi ngày × số ngày sau.
+ * - Chênh quá nhỏ (chi chênh < MIN_COST_DIFF và đơn chênh < 1) → Chưa đủ số liệu, chưa chấm.
  */
 
-export type Verdict = 'good' | 'bad' | 'pending' | 'unscorable' | 'excluded';
+export type Verdict = 'good' | 'bad' | 'pending' | 'insufficient' | 'unscorable' | 'excluded';
+
+/** Chi chênh tối thiểu (cả khoảng sau) để chấm */
+export const MIN_COST_DIFF = 50_000;
+
+/** Thao tác bật lại thứ đang tắt → mốc "trước" = 0 */
+const STARTS_FROM_ZERO = new Set(['add_creative', 'enable_product']);
 
 export interface ActionEvaluation {
   verdict: Verdict;
@@ -45,40 +53,55 @@ function windowDays(w: MetricWindow): number {
 
 export function evaluateAction(a: AgentActionLog, evaluateAfterHours: number, now = Date.now()): ActionEvaluation {
   if (a.actionType === 'remind' || a.status !== 'success') return { verdict: 'excluded', ...EMPTY };
+  // Video thay đổi trước khi có ngày nào để đo → không chấm
+  if (a.measureStop && !a.after) return { verdict: 'excluded', ...EMPTY };
   if (!a.after || now - new Date(a.executedAt).getTime() < evaluateAfterHours * HOUR) {
     return { verdict: 'pending', ...EMPTY };
   }
 
-  const before = a.before;
-  const after = a.after;
-  const ratio = windowDays(after) / windowDays(before);
-  const baseCost = (before.cost ?? 0) * ratio;
-  const baseRevenue = (before.revenue ?? 0) * ratio;
-  const be = before.breakEven;
+  const { base, after, total, aDays } = compareWindows(a);
+  const be = a.before.breakEven;
+  // Chênh lệch trên cả khoảng sau (mốc "trước" quy theo số ngày sau)
+  const dCost = total.cost - base.cost * aDays;
+  const dRevenue = total.revenue - base.revenue * aDays;
+  const dOrders = total.orders - base.orders * aDays;
+  const cut = a.actionType === 'remove_creative' || a.actionType === 'disable_product';
+  const parts = cut
+    ? { avoidedCost: Math.max(0, -dCost), lostRevenue: Math.max(0, -dRevenue) }
+    : { extraCost: dCost, extraRevenue: dRevenue };
 
-  // Thao tác "cắt" (gỡ video, tắt sản phẩm): đo bằng lỗ tránh được; còn lại đo bằng tác động thêm
-  if (a.actionType === 'remove_creative' || a.actionType === 'disable_product') {
-    const avoidedCost = Math.max(0, baseCost - (after.cost ?? 0));
-    const lostRevenue = Math.max(0, baseRevenue - (after.revenue ?? 0));
-    const profitEffect = be ? avoidedCost - lostRevenue / be : null;
-    return {
-      ...EMPTY,
-      verdict: profitEffect == null ? 'unscorable' : profitEffect >= 0 ? 'good' : 'bad',
-      profitEffect,
-      avoidedCost,
-      lostRevenue,
-    };
-  }
+  if (!be) return { ...EMPTY, ...parts, verdict: 'unscorable' };
+  if (Math.abs(dCost) < MIN_COST_DIFF && Math.abs(dOrders) < 1) return { ...EMPTY, ...parts, verdict: 'insufficient' };
+  const profitEffect = (dailyProfit(after, be) - dailyProfit(base, be)) * aDays;
+  return { ...EMPTY, ...parts, verdict: profitEffect >= 0 ? 'good' : 'bad', profitEffect };
+}
 
-  const extraCost = (after.cost ?? 0) - baseCost;
-  const extraRevenue = (after.revenue ?? 0) - baseRevenue;
-  const profitEffect = be ? extraRevenue / be - extraCost : null;
+interface PerDay {
+  cost: number;
+  revenue: number;
+  orders: number;
+}
+
+/** Lãi/lỗ QC mỗi ngày = DT ÷ hoà vốn − chi */
+const dailyProfit = (x: PerDay, be: number) => x.revenue / be - x.cost;
+
+/**
+ * TRƯỚC (mỗi ngày, theo tình trạng lúc bấm) và SAU (mỗi ngày + số ngày) của thao tác.
+ * Thêm lại video / bật SP: trước = 0 vì đối tượng đang tắt.
+ */
+export function compareWindows(a: AgentActionLog): { base: PerDay; after: PerDay; total: PerDay; aDays: number } {
+  const bDays = windowDays(a.before);
+  const base: PerDay = STARTS_FROM_ZERO.has(a.actionType)
+    ? { cost: 0, revenue: 0, orders: 0 }
+    : { cost: (a.before.cost ?? 0) / bDays, revenue: (a.before.revenue ?? 0) / bDays, orders: (a.before.orders ?? 0) / bDays };
+  const w = a.after;
+  const aDays = w ? windowDays(w) : 1;
+  const total: PerDay = { cost: w?.cost ?? 0, revenue: w?.revenue ?? 0, orders: w?.orders ?? 0 };
   return {
-    ...EMPTY,
-    verdict: profitEffect == null ? 'unscorable' : profitEffect >= 0 ? 'good' : 'bad',
-    profitEffect,
-    extraCost,
-    extraRevenue,
+    base,
+    total,
+    aDays,
+    after: { cost: total.cost / aDays, revenue: total.revenue / aDays, orders: total.orders / aDays },
   };
 }
 
@@ -118,7 +141,8 @@ export function summarize(list: { action: AgentActionLog; ev: ActionEvaluation }
     total: counted.length,
     good,
     bad,
-    pending: count('pending'),
+    // Chưa đủ số liệu = vẫn đang chờ thêm ngày
+    pending: count('pending') + count('insufficient'),
     unscorable: count('unscorable'),
     accuracy: good + bad > 0 ? good / (good + bad) : null,
     profitEffect: sum(scored, (e) => e.profitEffect),
@@ -251,21 +275,30 @@ export interface ActionSummaryLine {
 }
 
 const vndShort = (n: number) => shortVnd(Math.max(0, Math.round(n)));
-const roiText = (r: number | null) => (r == null ? '--' : formatNumber(r, 2));
-const perDay = (n: number) => formatNumber(n, 1);
 /**
- * Mốc có số "24h đầu" sau thao tác (khớp server/agent/afterMetrics.ts):
- * khối bắt đầu ở giờ tròn kế tiếp, dài 24h, TikTok trễ số ~1h.
+ * Mốc hiện Ngày 1 sau thao tác = thao tác + 24h (khớp server/agent/afterMetrics.ts).
+ * Ngày 1 = ngày lịch kế sau ngày thao tác (giờ VN).
  */
 export function firstAfterReadyAt(executedAt: string): number {
-  return Math.ceil(Date.parse(executedAt) / HOUR) * HOUR + DAY + HOUR;
+  return Date.parse(executedAt) + DAY;
 }
+
+/** Ngày lịch VN (yyyy-MM-dd) của mốc thời gian */
+export const vnDateOf = (ms: number) => new Date(ms + 7 * HOUR).toISOString().slice(0, 10);
+
+/** Ngày 1 sau thao tác (yyyy-MM-dd, giờ VN) */
+export function firstAfterDate(executedAt: string): string {
+  return vnDateOf(Date.parse(`${vnDateOf(Date.parse(executedAt))}T00:00:00+07:00`) + DAY);
+}
+
+/** "20/11" */
+export const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 
 /**
  * 1 câu kết luận: so trung bình / ngày SAU thao tác (after.days) với TRƯỚC (before) + lợi / lỗ ước tính từ evaluateAction.
  * null = không cần câu (nhắc việc, lệnh lỗi).
  */
-export function summarizeAction(a: AgentActionLog, ev: ActionEvaluation): ActionSummaryLine | null {
+export function summarizeAction(a: AgentActionLog, ev: ActionEvaluation, now = Date.now()): ActionSummaryLine | null {
   if (a.actionType === 'remind' || a.status === 'failed' || a.status === 'running') return null;
   const days = a.after?.days ?? [];
   // Chưa có khối nào → câu chờ đã nằm trong ô "Sau thao tác", không lặp ở đây
@@ -273,32 +306,36 @@ export function summarizeAction(a: AgentActionLog, ev: ActionEvaluation): Action
   if (a.status === 'undone') return { tone: 'muted', text: 'Đã hoàn tác — không chấm điểm' };
 
   const n = days.length;
-  const bDays = Math.max(1, Math.round(windowDays(a.before)));
-  const b = { cost: (a.before.cost ?? 0) / bDays, revenue: (a.before.revenue ?? 0) / bDays, orders: (a.before.orders ?? 0) / bDays };
-  const after = a.after!;
-  const x = { cost: (after.cost ?? 0) / n, orders: (after.orders ?? 0) / n };
-  const head = n === 1 ? '24h sau' : `${n} ngày sau`;
+  const { base, after, total } = compareWindows(a);
+  // Ngày cuối là hôm nay → số còn tăng; video đổi sau đó → chỉ chấm các ngày trước mốc dừng
+  const partial = days[n - 1].date >= vnDateOf(now);
+  const head = `${n} ngày sau${partial ? ' (tạm tính)' : ''}${a.measureStop ? ` (dừng đo từ ${dayMonth(a.measureStop.date)})` : ''}`;
+  const facts = `chi ${vndShort(total.cost)} · DT ${vndShort(total.revenue)} · ${formatNumber(total.orders)} đơn`;
+  const fromZero = STARTS_FROM_ZERO.has(a.actionType);
 
-  if (ev.verdict === 'unscorable') return { tone: 'muted', text: `${head}: ROI ${roiText(after.roi)} (trước ${roiText(a.before.roi)}) · chưa chấm được — thiếu ROI hoà vốn` };
-  if (ev.verdict !== 'good' && ev.verdict !== 'bad') {
-    return { tone: 'muted', text: `${head}: ROI ${roiText(after.roi)} (trước ${roiText(a.before.roi)}), ${perDay(x.orders)} đơn/ngày (trước ${perDay(b.orders)})` };
-  }
+  if (ev.verdict === 'unscorable') return { tone: 'muted', text: `${head}: ${facts} · chưa chấm được — thiếu ROI hoà vốn` };
+  if (ev.verdict === 'insufficient') return { tone: 'muted', text: `Chưa đủ số liệu để chấm — ${head}: ${facts}` };
+  if (ev.verdict !== 'good' && ev.verdict !== 'bad') return { tone: 'muted', text: `${head}: ${facts}` };
 
+  // Cùng 1 mẫu cho mọi thao tác: lãi/lỗ mỗi ngày sau vs trước
+  const be = a.before.breakEven!;
+  const beforeText = fromZero ? '0đ — đang tắt' : signed(dailyProfit(base, be));
+  const line = `${head}: lãi/lỗ ${signed(dailyProfit(after, be))}/ngày (trước ${beforeText}) · ${facts}`;
   const profit = ev.profitEffect ?? 0;
-  if (a.actionType === 'remove_creative' || a.actionType === 'disable_product') {
-    const what = a.actionType === 'remove_creative' ? 'Gỡ' : 'Tắt sản phẩm';
-    return ev.verdict === 'good'
-      ? {
-          tone: 'good',
-          text: `✓ ${what} đúng — ${head}: chi ${vndShort(x.cost)}/ngày (trước ${vndShort(b.cost)}), ${perDay(x.orders)} đơn/ngày (trước ${perDay(b.orders)}) → lợi ~${vndShort(profit / n)}/ngày`,
-        }
-      : {
-          tone: 'bad',
-          text: `✗ ${what} chưa đúng — ${head} mất ~${vndShort(-profit)} lời (trước DT ${vndShort(b.revenue)}/ngày, ${perDay(b.orders)} đơn/ngày) → cân nhắc ${a.actionType === 'remove_creative' ? 'Thêm lại' : 'Bật lại'}`,
-        };
-  }
-  const detail = `${head}: ROI ${roiText(after.roi)} (trước ${roiText(a.before.roi)}), ${perDay(x.orders)} đơn/ngày (trước ${perDay(b.orders)})`;
-  return ev.verdict === 'good'
-    ? { tone: 'good', text: `✓ Hiệu quả — ${detail} → lợi ~${vndShort(profit)}` }
-    : { tone: 'bad', text: `✗ Chưa hiệu quả — ${detail} → lỗ ~${vndShort(-profit)}` };
+  if (ev.verdict === 'good') return { tone: 'good', text: `✓ Đúng — ${line} → lợi ~${vndShort(profit)}` };
+  const hint = UNDO_HINT[a.actionType];
+  return { tone: 'bad', text: `✗ Sai — ${line} → lỗ ~${vndShort(-profit)}${hint ? ` · cân nhắc ${hint}` : ''}` };
 }
+
+/** "+43k" / "−64k" */
+const signed = (n: number) => `${n >= 0 ? '+' : '−'}${shortVnd(Math.abs(Math.round(n)))}`;
+
+/** Gợi ý khi chấm Sai */
+const UNDO_HINT: Partial<Record<AgentActionLog['actionType'], string>> = {
+  remove_creative: 'Thêm lại',
+  add_creative: 'Gỡ lại',
+  disable_product: 'Bật lại',
+  enable_product: 'Tắt lại',
+  update_budget: 'đổi lại ngân sách',
+  update_roi_target: 'đổi lại ROI mục tiêu',
+};

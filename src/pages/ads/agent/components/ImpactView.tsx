@@ -103,7 +103,7 @@ export default function ImpactView({ actions, proposals, rules, evaluateAfterHou
           tone="violet"
           hint="Từ gỡ video"
         />
-        <StatCard label="Doanh thu thêm" value={money(summary.extraRevenue)} icon={TrendingUp} tone="amber" hint="Từ tăng cường" />
+        <StatCard label="Doanh thu thêm" value={money(summary.extraRevenue)} icon={TrendingUp} tone="amber" hint="Từ tăng cường / thêm lại / ngân sách" />
         <StatCard
           label="Thao tác"
           value={formatNumber(summary.total)}

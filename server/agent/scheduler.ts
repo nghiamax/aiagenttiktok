@@ -1,6 +1,19 @@
 import { updateRuntime } from '../store.js';
 import { runAgent, type RunSummary } from './engine.js';
 import { verifyPendingActions } from './executor.js';
+import { fillAfterMetrics } from './afterMetrics.js';
+
+/** Điền số liệu "Sau thao tác" từng khối 24h: 1 phút sau khi bật server, rồi mỗi 15 phút (chỉ đọc TikTok; không có khối tới hạn thì không gọi) */
+const AFTER_FIRST_MS = 60_000;
+const AFTER_EVERY_MS = 15 * 60_000;
+async function afterTick() {
+  try {
+    const n = await fillAfterMetrics();
+    if (n) console.log(`[agent] đã cập nhật số liệu sau thao tác cho ${n} thao tác`);
+  } catch (e) {
+    console.error('[agent] cập nhật số liệu sau thao tác lỗi:', e instanceof Error ? e.message : e);
+  }
+}
 
 /** Kiểm tra kết quả gỡ / thêm video mỗi 10 giây (chỉ gọi TikTok khi có dòng đang chờ tới hạn) */
 const VERIFY_EVERY_MS = 10_000;
@@ -63,6 +76,8 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
 
 export function startScheduler() {
   setInterval(verifyTick, VERIFY_EVERY_MS);
+  setTimeout(afterTick, AFTER_FIRST_MS);
+  setInterval(afterTick, AFTER_EVERY_MS);
   setTimeout(verifyTick, FIRST_RUN_DELAY_MS);
   if (!(INTERVAL_MIN > 0)) {
     console.log('[agent] Lịch chạy tắt (AGENT_INTERVAL_MINUTES = 0)');

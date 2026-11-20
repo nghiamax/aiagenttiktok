@@ -18,7 +18,7 @@ import {
   MODE_OPTIONS,
   ruleLevel,
 } from '../meta';
-import { matchRuleTargets } from '../ruleMatch';
+import { matchRuleTargets, skippedText } from '../ruleMatch';
 import type { AgentGuardrails, AgentRule, RuleMode } from '../types';
 import GroupPicker from './GroupPicker';
 import NumberField from './NumberField';
@@ -120,6 +120,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
           )}
           <p className="text-xs text-muted" title={matches.names.join('\n')}>
             Hiện có <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} khớp theo số liệu hiện tại
+            {skippedText(matches) && <span className="block">{skippedText(matches)}</span>}
           </p>
         </dd>
         <dt className="font-semibold text-muted">Thì</dt>

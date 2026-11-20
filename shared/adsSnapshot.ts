@@ -87,6 +87,14 @@ export interface AdsVideo {
   /** Username tác giả (không có @), dùng để tạo link video. Tra bằng scripts/resolve-video-authors.mjs */
   authorUsername?: string | null;
   status: VideoStatus;
+  /**
+   * Dòng "Cần ủy quyền" giả của chiến dịch nhiều sản phẩm: video đang chạy ở sản phẩm khác (annotateCrossProduct).
+   * Có thể ở chiến dịch khác. mainCampaignId / mainProductId / mainStatus = nơi video chạy thật và trạng thái ở đó.
+   */
+  crossProduct?: boolean;
+  mainCampaignId?: string;
+  mainProductId?: string;
+  mainStatus?: VideoStatus;
   cost: number | null;
   revenue: number | null;
   orders: number | null;

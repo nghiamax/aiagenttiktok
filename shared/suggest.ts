@@ -10,6 +10,7 @@ import { contextForCampaign } from './classify.js';
 import { formatNumber, shortVnd } from './format.js';
 import { groupDescription } from './groups.js';
 import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
+import { offsetChip } from './offsetText.js';
 
 /** urgent: đang mất tiền / cần làm ngay · opportunity: cơ hội tăng doanh thu · tidy: nên làm */
 export type SuggestionSeverity = 'urgent' | 'opportunity' | 'tidy';
@@ -19,6 +20,8 @@ export interface SuggestionExample {
   name: string;
   /** Số liệu ngắn: "Chi 677k · DT 1,11 tr · ROI 1,63" */
   metrics: string;
+  /** Cảnh báo ngắn (vd gỡ video có đơn bù ở sản phẩm khác: "có đơn bù · tổng ROI 5,9") */
+  warning?: string;
 }
 
 export type SuggestionAction =
@@ -287,18 +290,24 @@ export function buildSuggestions(
 
     const guardrailsPatch: Partial<AgentGuardrails> | undefined =
       s.actionType === 'boost_creative' && guardrails.dailyBoostCap < boostBudget ? { dailyBoostCap: boostBudget } : undefined;
-    const sorted = [...targets].sort((a, b) => (b[s.amountBy] ?? 0) - (a[s.amountBy] ?? 0));
+    // Gỡ video: video có đơn bù ở sản phẩm khác lên đầu để Sếp thấy cảnh báo
+    const isCut = s.actionType === 'remove_creative';
+    const sorted = [...targets].sort(
+      (a, b) => (isCut ? Number(!!b.offset) - Number(!!a.offset) : 0) || (b[s.amountBy] ?? 0) - (a[s.amountBy] ?? 0),
+    );
+    const withOffset = isCut ? targets.filter((t) => t.offset).length : 0;
 
     out.push({
       id: s.id,
       severity: s.severity,
-      title: s.title(sorted),
+      title: withOffset > 0 ? `${s.title(sorted)} (${withOffset} video có đơn bù ở SP khác — xem kỹ trước khi gỡ)` : s.title(sorted),
       detail: s.detail(sorted),
       why: groupDescription(group, s.level),
       examples: sorted.slice(0, MAX_EXAMPLES).map((t) => ({
         target: t.target,
         name: t.name,
         metrics: (s.example ?? defaultExample)(t),
+        ...(isCut && t.offset && { warning: offsetChip(t.offset) }),
       })),
       count: targets.length,
       amount: sum(targets, s.amountBy),

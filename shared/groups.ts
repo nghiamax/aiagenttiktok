@@ -185,7 +185,8 @@ export function matchSet(set: ConditionSet, ctx: EvalContext): boolean {
 }
 
 export function matchesPlatform(video: AdsVideo, ctx: EvalContext): boolean {
-  return video.status === 'authorization_needed' && (ctx.cost > 0 || ctx.orders > 0 || ctx.revenue > 0);
+  // Dòng "Gắn SP khác" (video đang chạy ở sản phẩm khác) không phải cần ủy quyền thật
+  return video.status === 'authorization_needed' && !video.crossProduct && (ctx.cost > 0 || ctx.orders > 0 || ctx.revenue > 0);
 }
 
 /** Lý do từ cách khớp: "Chi 1,81 tr ≥ 100k · ROI 4,08 < hoà vốn 5" */

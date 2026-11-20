@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import agentJson from '../../../data/agent.json';
 import { api } from '../../../lib/api';
-import type { ActionStatus, AgentConfig, AgentGuardrails, AgentRule, AgentState } from './types';
+import type { ActionStatus, AgentActionType, AgentConfig, AgentGuardrails, AgentRule, AgentRuleParams, AgentState, AgentTarget } from './types';
 
 /** Mặc định khi chưa kết nối server (src/data/agent.json) */
 const DEFAULT_STATE = agentJson as AgentState;
@@ -64,6 +64,8 @@ interface AgentStoreValue {
   undo: (actionId: string) => Promise<ExecOutcome>;
   /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
   verify: (actionId: string) => Promise<ExecOutcome>;
+  /** Thao tác thủ công từ bảng Video (chạy thật — chỉ gọi sau hộp xác nhận) */
+  runManual: (actionType: AgentActionType, target: AgentTarget, params?: AgentRuleParams) => Promise<ExecOutcome>;
 }
 
 const AgentStoreContext = createContext<AgentStoreValue | null>(null);
@@ -129,32 +131,36 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [accept, fail]);
 
-  // Có dòng nhật ký đang chờ TikTok xác nhận → tải lại mỗi 5 giây tới khi xong
+  // Có dòng nhật ký đang chờ TikTok xác nhận, hoặc chưa kết nối được server → tải lại mỗi 5 giây
   const hasRunning = state.actions.some((a) => a.status === 'running');
   useEffect(() => {
-    if (!hasRunning) return;
+    if (!hasRunning && connected) return;
     const timer = setInterval(() => {
       api<ServerState>('/agent/state').then(accept, () => undefined);
     }, FAST_POLL_MS);
     return () => clearInterval(timer);
-  }, [hasRunning, accept]);
+  }, [hasRunning, connected, accept]);
 
-  /** Lưu cấu hình: cập nhật giao diện ngay, rồi gửi server */
+  /** Lưu cấu hình. Chưa tải được từ server thì KHÔNG lưu (tránh ghi đè quy tắc / giới hạn bằng mặc định) */
   const saveConfig = useCallback(
     (patch: Partial<AgentConfig>) => {
+      if (!connected) {
+        setError('Chưa kết nối được server nên chưa lưu — đợi server chạy rồi thử lại.');
+        return;
+      }
       setState((prev) => ({ ...prev, ...patch }));
       api<ServerState>('/agent/config', { method: 'PUT', body: patch }).then(accept, fail);
     },
-    [accept, fail],
+    [accept, fail, connected],
   );
 
   /** Gửi lệnh chạy thật; lỗi (kể cả không đạt điều kiện) → tải lại trạng thái để thấy ghi chú mới */
   const execute = useCallback(
-    async (path: string): Promise<ExecOutcome> => {
+    async (path: string, extra?: Record<string, unknown>): Promise<ExecOutcome> => {
       try {
         const res = await api<{ result: { message: string; status: ActionStatus }; state: ServerState }>(path, {
           method: 'POST',
-          body: { confirm: true },
+          body: { ...extra, confirm: true },
         });
         accept(res.state);
         return { ok: res.result.status !== 'failed', message: res.result.message, status: res.result.status };
@@ -207,6 +213,7 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
       },
       undo: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/undo`),
       verify: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/verify`),
+      runManual: (actionType, target, params) => execute('/agent/actions/manual', { actionType, target, params }),
     }),
     [state, running, connected, error, schedule, saveConfig, accept, fail, execute],
   );

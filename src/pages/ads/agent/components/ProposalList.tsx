@@ -4,6 +4,7 @@ import EmptyTableState from '../../components/EmptyTableState';
 import { useAdsData } from '../../data';
 import type { ExecOutcome } from '../agentStore';
 import { describeExec } from '../execText';
+import { bulkSelectable, offsetWarning, profitWarning, removeKeepsProfit } from '../../../../../shared/offsetText';
 import type { AgentProposal, AgentRule } from '../types';
 import ClosedProposalRow, { CLOSED_META, isClosed, type ClosedStatus } from './ClosedProposalRow';
 import ConfirmExecuteModal from './ConfirmExecuteModal';
@@ -49,13 +50,20 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
 
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? null;
   const byId = new Map(proposals.map((p) => [p.id, p]));
-  const lineOf = (p: AgentProposal) => describeExec(snapshot, p.actionType, p.params, p.target);
+  // Gỡ video có đơn bù ở sản phẩm khác → nhắc lại ngay trong hộp xác nhận
+  const lineOf = (p: AgentProposal) =>
+    describeExec(snapshot, p.actionType, p.params, p.target) +
+    (p.actionType === 'remove_creative' && p.offset ? `\n${offsetWarning(p.offset)}` : '');
   const open = proposals.filter(isOpen);
   const selectable = open.filter((p) => p.status === 'pending');
+  // "Chọn tất cả" bỏ qua gỡ video tổng vẫn có lời — muốn gỡ thì tích từng cái
+  const bulk = bulkSelectable(selectable);
+  const bulkSkipped = selectable.length - bulk.length;
   const closed = proposals.filter(isClosed).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const closedCount = (s: ClosedStatus) => closed.filter((p) => p.status === s).length;
-  const allSelected = selectable.length > 0 && selected.size === selectable.length;
+  const allSelected = bulk.length > 0 && bulk.every((p) => selected.has(p.id));
   const confirming = (confirmIds ?? []).map((id) => byId.get(id)).filter((p): p is AgentProposal => !!p);
+  const keepsProfit = confirming.filter(removeKeepsProfit).length;
 
   // Tự ẩn dòng kết quả (giữ lại nếu có việc không chạy được)
   useEffect(() => {
@@ -95,11 +103,17 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
             <input
               type="checkbox"
               checked={allSelected}
-              onChange={() => setSelected(allSelected ? new Set() : new Set(selectable.map((p) => p.id)))}
+              disabled={bulk.length === 0}
+              onChange={() => setSelected(allSelected ? new Set() : new Set(bulk.map((p) => p.id)))}
               className="size-4 accent-primary"
             />
             Chọn tất cả {selected.size > 0 && <span className="text-muted">({selected.size})</span>}
           </label>
+          {bulkSkipped > 0 && (
+            <span className="text-xs text-amber-700" title="Muốn gỡ thì tích từng đề xuất">
+              (bỏ qua {bulkSkipped} video tổng vẫn có lời)
+            </span>
+          )}
           <button
             type="button"
             disabled={busy || selected.size === 0}
@@ -183,6 +197,7 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
         <ConfirmExecuteModal
           title={confirming.length > 1 ? `Chạy thật ${confirming.length} việc trên TikTok?` : 'Chạy thật trên TikTok?'}
           lines={confirming.map(lineOf)}
+          topWarning={keepsProfit > 0 ? profitWarning(keepsProfit) : undefined}
           boostTotal={confirming
             .filter((p) => p.actionType === 'boost_creative')
             .reduce((s, p) => s + (p.params.boostBudget ?? 0) * (p.params.boostDays ?? 1), 0)}

@@ -7,7 +7,8 @@ import { canUndo, describeUndo, friendlyError } from '../execText';
 import { ACTOR_META, STATUS_META } from '../meta';
 import type { AgentActionLog } from '../types';
 import { ActionCell, ITEM_GRID, TargetCell } from './AgentBits';
-import { evaluateAction } from '../evaluate';
+import { evaluateAction, firstAfterReadyAt, summarizeAction } from '../evaluate';
+import AfterDaysStrip from './AfterDaysStrip';
 import ConfirmExecuteModal from './ConfirmExecuteModal';
 import MetricWindowBox from './MetricWindowBox';
 import VerdictBadge from './VerdictBadge';
@@ -35,9 +36,11 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
   const [checking, setChecking] = useState(false);
   const actor = ACTOR_META[item.actor];
   const status = STATUS_META[item.status];
-  const hoursSince = (Date.now() - new Date(item.executedAt).getTime()) / 3_600_000;
-  const tooSoon = hoursSince < evaluateAfterHours;
   const ev = evaluateAction(item, evaluateAfterHours);
+  const summary = summarizeAction(item, ev);
+  // Câu chờ duy nhất: lúc nào có số 24h đầu
+  const readyAt = firstAfterReadyAt(item.executedAt);
+  const waitText = Date.now() < readyAt ? `Có số 24h đầu lúc ~${formatDateTime(new Date(readyAt).toISOString())}` : 'Đang lấy số 24h đầu từ TikTok…';
   const undoable = canUndo(item, all);
 
   return (
@@ -61,8 +64,9 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
           window={item.after}
           compareTo={item.before}
           hint={DELAY_HINT}
-          pendingText={tooSoon ? `Chờ đủ ${evaluateAfterHours}h để đánh giá` : undefined}
+          pendingText={item.after ? undefined : waitText}
         />
+        <AfterDaysStrip item={item} summary={summary} />
       </div>
 
       <div className="flex flex-row flex-wrap items-center justify-between gap-2 lg:flex-col lg:items-end">

@@ -117,6 +117,17 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect((await runAgent()).proposals).toBe(1);
   });
 
+  it('video có đơn bù ở sản phẩm khác → vẫn đề xuất, kèm offset; xét lại thì cập nhật / bỏ offset', async () => {
+    mock.snapshot.videos.push(video({ id: 'v1', campaignId: 'c1', productId: 'p2', revenue: 900_000, orders: 2 }));
+    await runAgent();
+    const p = () => mock.runtime.proposals.find((x) => x.target.videoId === 'v1')!;
+    expect(p().status).toBe('pending');
+    expect(p().offset).toMatchObject({ revenue: 900_000, orders: 2, total: { cost: 200_000, revenue: 900_000 } });
+    mock.snapshot.videos.pop();
+    await runAgent();
+    expect(p().offset).toBeUndefined();
+  });
+
   it('quy tắc bị tắt → đề xuất đang chờ của nó chuyển Không còn khớp', async () => {
     await runAgent();
     mock.config.rules[0].mode = 'off';

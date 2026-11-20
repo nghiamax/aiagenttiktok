@@ -18,6 +18,7 @@ import SuggestionBanner from './components/SuggestionBanner';
 import AdsRangeControl from './components/AdsRangeControl';
 import VideoTable from './components/VideoTable';
 import { useAdsData } from './data';
+import { offsetOf } from '../../../shared/agentMatch';
 import { productKey } from './metrics';
 import type { GroupLevel } from './groups';
 import { breakEvenOf, useAdsSettings } from './settings';
@@ -28,6 +29,15 @@ const metricLine = (roi: number | null, cost: number | null) =>
   `ROI ${formatNumber(roi, 2)} · Chi ${cost == null ? '--' : shortVnd(cost)}`;
 
 const emptySummary = (): ActionSummary => ({ count: 0, rows: 0, cost: 0, revenue: 0 });
+
+/** Đối tượng đã xử lý / không làm được → ghi vào `skipped` (đếm 1 lần theo key), không tính số / chi / DT */
+function skipIn(summary: Record<string, ActionSummary>, groupId: string, key: string, seen: Set<string>) {
+  const k = `skip|${groupId}|${key}`;
+  if (seen.has(k)) return;
+  seen.add(k);
+  const s = (summary[groupId] ??= emptySummary());
+  s.skipped = (s.skipped ?? 0) + 1;
+}
 
 /**
  * Cộng một dòng đã phân loại vào ô của nhóm. key: đếm theo đối tượng khác nhau (video gắn nhiều sản phẩm
@@ -84,19 +94,44 @@ export default function AdsPage() {
     const map = new Map<AdsVideo, VideoClassification>();
     const summary: InboxSummary = { video: {}, product: {}, campaign: {} };
     const seenVideos = new Set<string>();
+    const seen = new Set<string>();
+    const cutRows = new Map<string, Set<AdsVideo>>();
+    const running = (id: string) => campaignById.get(id)?.status === 'running';
     for (const v of snapshot.videos) {
       const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
       if (!cls) continue;
       map.set(v, cls);
+      // Video đã gỡ / thuộc chiến dịch đã tắt → Agent không làm gì được, không tính vào hộp theo dõi (bảng vẫn hiện)
+      if (v.status === 'excluded' || !running(v.campaignId)) {
+        skipIn(summary.video, cls.action, `${v.campaignId}/${v.id}`, seen);
+        continue;
+      }
       addTo(summary.video, cls.action, v.cost, v.revenue, `${v.campaignId}/${v.id}`, seenVideos);
+      if (cls.action === 'cut') {
+        const k = `${v.campaignId}/${v.id}`;
+        if (!cutRows.has(k)) cutRows.set(k, new Set());
+        cutRows.get(k)!.add(v);
+      }
+    }
+    // Cắt lỗ nhưng tổng video (gồm đơn bù ở sản phẩm khác trong chiến dịch) vẫn có lời → ghi chú dưới ô, số đếm giữ nguyên
+    for (const [k, rows] of cutRows) {
+      const [c, id] = k.split('/');
+      if (offsetOf(snapshot, settings, c, id, rows)?.profitable) {
+        const s = summary.video.cut;
+        if (s) s.keepsProfit = (s.keepsProfit ?? 0) + 1;
+      }
     }
     for (const p of snapshot.products) {
       const cls = classifyProduct(p, campaignById.get(p.campaignId), settings);
-      if (cls) addTo(summary.product, cls.action, p.cost, p.revenue);
+      if (!cls) continue;
+      if (!running(p.campaignId)) skipIn(summary.product, cls.action, `${p.campaignId}/${p.id}`, seen);
+      else addTo(summary.product, cls.action, p.cost, p.revenue);
     }
     for (const c of snapshot.campaigns) {
       const cls = classifyCampaign(c, settings, days);
-      if (cls) addTo(summary.campaign, cls.action, c.cost, c.revenue);
+      if (!cls) continue;
+      if (c.status !== 'running') skipIn(summary.campaign, cls.action, c.id, seen);
+      else addTo(summary.campaign, cls.action, c.cost, c.revenue);
     }
     return { classification: map, inbox: summary };
   }, [settings, snapshot, campaignById, days]);
@@ -251,6 +286,7 @@ export default function AdsPage() {
             <VideoTable
               videos={videos}
               productByKey={productByKey}
+              campaignById={campaignById}
               onFilterProduct={filterProduct}
               classification={classification}
               action={action}

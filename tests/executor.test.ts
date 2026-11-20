@@ -392,3 +392,49 @@ describe('An toàn', () => {
     expect(mock.writes).toHaveLength(1);
   });
 });
+
+describe('Thao tác thủ công từ bảng Video (executeManual)', () => {
+  const target = { campaignId: 'c1', productId: 'p1', videoId: 'v1' };
+
+  it('Gỡ: gửi đúng tham số, nhật ký Thủ công không theo quy tắc, số liệu lúc quyết định từ snapshot', async () => {
+    mock.snapshot = snapshot({
+      videos: [
+        video({ id: 'v1', campaignId: 'c1', productId: 'p1', cost: 200_000 }),
+        video({ id: 'v1', campaignId: 'c1', productId: 'p2', cost: 50_000 }),
+      ],
+    });
+    const r = await ex.executeManual({ actionType: 'remove_creative', target });
+    expect(mock.writes).toEqual([
+      {
+        tool: 'gmv_max_creative_update',
+        params: { advertiser_id: '7579465349544869906', campaign_id: 'c1', action: 'REMOVE', item_list: [{ item_id: 'v1', spu_id_list: ['p1', 'p2'] }] },
+      },
+    ]);
+    expect(r.action).toMatchObject({ actor: 'manual', ruleId: null, actionType: 'remove_creative', status: 'running' });
+    expect(r.action.before.cost).toBe(250_000); // cộng các dòng theo sản phẩm
+  });
+
+  it('Tăng cường: dưới 260k / quá 7 ngày / vượt trần → không gửi lệnh', async () => {
+    await expect(ex.executeManual({ actionType: 'boost_creative', target, params: { boostBudget: 100_000, boostDays: 1 } })).rejects.toThrow('tối thiểu');
+    await expect(ex.executeManual({ actionType: 'boost_creative', target, params: { boostBudget: 300_000, boostDays: 9 } })).rejects.toThrow('Số ngày');
+    mock.config.guardrails.dailyBoostCap = 200_000;
+    await expect(ex.executeManual({ actionType: 'boost_creative', target, params: { boostBudget: 300_000, boostDays: 1 } })).rejects.toThrow('Vượt trần');
+    expect(mock.writes).toHaveLength(0);
+  });
+
+  it('chỉ nhận Gỡ / Thêm lại / Tăng cường; thiếu đối tượng → từ chối', async () => {
+    await expect(ex.executeManual({ actionType: 'update_budget', target, params: { budgetChangePct: 50 } })).rejects.toThrow('không làm thủ công');
+    await expect(ex.executeManual({ actionType: 'remove_creative', target: { campaignId: 'c1', productId: '', videoId: '' } })).rejects.toThrow('Thiếu');
+    expect(mock.writes).toHaveLength(0);
+  });
+
+  it('thao tác thủ công hoàn tác được', async () => {
+    mock.applyCreative = true;
+    const r = await ex.executeManual({ actionType: 'remove_creative', target });
+    await ex.followUpCreative(r.action.id);
+    expect(actionOf(r.action.id).status).toBe('success');
+    const u = await ex.undoAction(r.action.id);
+    expect(mock.writes.at(-1)?.params.action).toBe('ADD');
+    expect(u.action).toMatchObject({ actor: 'manual', undoOf: r.action.id });
+  });
+});

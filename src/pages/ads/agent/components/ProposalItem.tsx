@@ -1,8 +1,11 @@
-import { Check, X } from 'lucide-react';
-import { formatDateTime } from '../../../../lib/format';
+import { useState } from 'react';
+import { AlertTriangle, Check, ChevronDown, X } from 'lucide-react';
+import { formatDateTime, formatNumber } from '../../../../lib/format';
+import { offsetBadge, offsetTotal } from '../../../../../shared/offsetText';
 import type { AgentProposal } from '../types';
 import { ActionCell, ITEM_GRID, TargetCell } from './AgentBits';
 import MetricWindowBox from './MetricWindowBox';
+import OffsetNotice from './OffsetNotice';
 
 interface ProposalItemProps {
   item: AgentProposal;
@@ -23,6 +26,9 @@ interface ProposalItemProps {
 export default function ProposalItem({ item, ruleName, selected, busy, onToggle, onApprove, onReject }: ProposalItemProps) {
   // Duyệt từ trước khi bật chạy thật (chưa có thao tác) → chỉ còn nút Duyệt để chạy
   const legacyApproved = item.status === 'approved' && !item.actionId;
+  // Gỡ video có đơn bù ở sản phẩm khác → nhãn cạnh hành động, bấm để xem chi tiết
+  const offset = item.actionType === 'remove_creative' ? item.offset : undefined;
+  const [showOffset, setShowOffset] = useState(false);
 
   return (
     <li className={`${ITEM_GRID} transition-colors hover:bg-canvas/50`}>
@@ -44,15 +50,37 @@ export default function ProposalItem({ item, ruleName, selected, busy, onToggle,
         </div>
       </div>
 
-      <ActionCell actionType={item.actionType} ruleName={ruleName} params={item.params} />
+      <div className="min-w-0">
+        <ActionCell actionType={item.actionType} ruleName={ruleName} params={item.params} />
+        {offset && (
+          <button
+            type="button"
+            onClick={() => setShowOffset((s) => !s)}
+            aria-expanded={showOffset}
+            title="Video có đơn bù ở sản phẩm khác trong chiến dịch — bấm để xem số tổng"
+            className={`mt-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+              offset.profitable === false ? 'bg-canvas text-muted hover:text-ink' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+            }`}
+          >
+            {offset.profitable !== false && <AlertTriangle className="size-3.5" />}
+            {offsetBadge(offset)}
+            <ChevronDown className={`size-3.5 transition-transform ${showOffset ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+      </div>
       <TargetCell target={item.target} />
 
       <div className="space-y-2">
-        <MetricWindowBox title="Lúc đề xuất" window={item.before} />
+        <MetricWindowBox
+          title="Lúc đề xuất"
+          window={item.before}
+          extra={offset ? `Tổng video (gồm đơn bù): ${offsetTotal(offset)} · ${formatNumber(offset.total.orders)} đơn` : undefined}
+        />
         <p className="text-sm">
           <span className="font-semibold">Vì sao: </span>
           <span className="text-muted">{item.reason}</span>
         </p>
+        {offset && showOffset && <OffsetNotice offset={offset} />}
         {item.note && <p className="text-xs text-danger">{item.note}</p>}
       </div>
 

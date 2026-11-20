@@ -469,6 +469,91 @@ export function executeProposal(proposalId: string): Promise<ExecResult> {
   });
 }
 
+/* ───────── Thao tác thủ công (Sếp bấm trên bảng Video + xác nhận) ───────── */
+
+/** Thao tác thủ công cho phép từ bảng Video */
+export const MANUAL_ACTIONS = ['remove_creative', 'add_creative', 'boost_creative'] as const;
+export type ManualAction = (typeof MANUAL_ACTIONS)[number];
+export const MAX_MANUAL_BOOST_DAYS = 7;
+
+export interface ManualInput {
+  actionType: string;
+  target: AgentTarget;
+  params?: AgentRuleParams;
+}
+
+/** Số liệu `lookbackDays` của video (cộng các dòng theo sản phẩm) — "Lúc quyết định" trong Nhật ký */
+async function videoWindow(target: AgentTarget): Promise<AgentActionLog['before']> {
+  const lookback = Math.max(1, getAgentConfig().guardrails.lookbackDays ?? 7);
+  const range = { from: vnDate(lookback), to: vnDate(1) };
+  const w = { from: `${range.from}T00:00:00+07:00`, to: `${range.to}T23:59:59+07:00`, cost: 0, revenue: 0, orders: 0, roi: null as number | null, breakEven: null };
+  try {
+    const { snapshot } = await getSnapshot(range, false);
+    for (const v of snapshot.videos) {
+      if (v.campaignId !== target.campaignId || v.id !== target.videoId) continue;
+      w.cost += v.cost ?? 0;
+      w.revenue += v.revenue ?? 0;
+      w.orders += v.orders ?? 0;
+    }
+  } catch {
+    // thiếu số liệu → để 0
+  }
+  w.roi = w.cost > 0 ? w.revenue / w.cost : null;
+  return w;
+}
+
+/** Sếp bấm Gỡ / Thêm lại / Tăng cường trên bảng Video rồi xác nhận → chạy thật */
+export function executeManual(input: ManualInput): Promise<ExecResult> {
+  return serial(async () => {
+    if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
+    const actionType = input.actionType as ManualAction;
+    if (!(MANUAL_ACTIONS as readonly string[]).includes(actionType)) throw new PrecheckError('Thao tác này không làm thủ công được');
+    const t = input.target;
+    if (!t?.campaignId || !t.productId || !t.videoId) throw new PrecheckError('Thiếu chiến dịch / sản phẩm / video');
+    const target: AgentTarget = { campaignId: String(t.campaignId), productId: String(t.productId), videoId: String(t.videoId) };
+
+    let params: AgentRuleParams = {};
+    if (actionType === 'boost_creative') {
+      const boostBudget = Math.round(Number(input.params?.boostBudget));
+      const boostDays = Math.round(Number(input.params?.boostDays ?? 1));
+      if (!Number.isFinite(boostBudget) || boostBudget < MIN_BOOST_BUDGET_VND) {
+        throw new PrecheckError(`Ngân sách tăng cường tối thiểu ${fmt(MIN_BOOST_BUDGET_VND)}/ngày`);
+      }
+      if (!Number.isFinite(boostDays) || boostDays < 1 || boostDays > MAX_MANUAL_BOOST_DAYS) {
+        throw new PrecheckError(`Số ngày tăng cường từ 1 đến ${MAX_MANUAL_BOOST_DAYS}`);
+      }
+      params = { boostBudget, boostDays };
+    }
+
+    checkGuardrails(getRuntime(), actionType, params);
+    let plan: Plan;
+    try {
+      plan = await buildPlan(actionType, target, params);
+    } catch (e) {
+      throw e instanceof PrecheckError ? e : new PrecheckError(`Không kiểm tra được điều kiện: ${errText(e)}`);
+    }
+
+    const action: AgentActionLog = {
+      id: crypto.randomUUID(),
+      executedAt: new Date().toISOString(),
+      actor: 'manual',
+      ruleId: null,
+      actionType,
+      target,
+      params: { ...params, prev: plan.prev, next: plan.next },
+      before: await videoWindow(target),
+      after: null,
+      status: 'running',
+      note: 'Đang gửi lệnh lên TikTok',
+    };
+    updateRuntime((r) => {
+      r.actions.unshift(action);
+      r.actions = r.actions.slice(0, 2000);
+    });
+    return send(plan, action.id, target.campaignId);
+  });
+}
+
 /** Phép ngược của từng loại thao tác */
 const INVERSE: Partial<Record<AgentActionType, AgentActionType>> = {
   remove_creative: 'add_creative',

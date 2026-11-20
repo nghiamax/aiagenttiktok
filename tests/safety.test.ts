@@ -78,6 +78,9 @@ describe('Chỉ gọi tool ĐỌC của TikTok', () => {
     expect(approve.indexOf('confirm !== true')).toBeLessThan(approve.indexOf('executeProposal'));
     const undo = src.slice(src.indexOf("'/actions/:id/undo'"));
     expect(undo.indexOf('confirm !== true')).toBeLessThan(undo.indexOf('undoAction'));
+    const manual = src.slice(src.indexOf("'/actions/manual'"));
+    expect(manual.indexOf('confirm !== true')).toBeGreaterThan(-1);
+    expect(manual.indexOf('confirm !== true')).toBeLessThan(manual.indexOf('executeManual('));
   });
 });
 

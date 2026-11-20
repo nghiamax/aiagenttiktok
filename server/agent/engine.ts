@@ -137,6 +137,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       if (r.ok) {
         p.before = windowOf(r.match, range);
         p.reason = r.match.reason;
+        if (r.match.offset) p.offset = r.match.offset;
+        else delete p.offset;
       } else {
         p.status = 'outdated';
         p.decidedAt = ranAt;
@@ -242,6 +244,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           params,
           reason: t.reason,
           before: windowOf(t, range),
+          ...(t.offset && { offset: t.offset }),
           status: 'pending',
           ruleMode: rule.mode,
           ...(rule.mode === 'auto' && {

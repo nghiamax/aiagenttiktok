@@ -11,12 +11,14 @@ interface MetricWindowBoxProps {
   /** Ghi chú khi chưa có số / chưa đủ thời gian đánh giá */
   pendingText?: string;
   hint?: string;
+  /** Dòng thêm dưới khoảng ngày (vd tổng video gồm đơn bù) */
+  extra?: string;
 }
 
 const money = (n: number | null) => (n == null ? '--' : shortVnd(n));
 
 /** Ô số liệu: Chi · DT · ROI / hoà vốn · đơn trong một khoảng thời gian */
-export default function MetricWindowBox({ title, window: w, compareTo, pendingText, hint }: MetricWindowBoxProps) {
+export default function MetricWindowBox({ title, window: w, compareTo, pendingText, hint, extra }: MetricWindowBoxProps) {
   const delta = w?.roi != null && compareTo?.roi != null ? w.roi - compareTo.roi : null;
   const belowBreakEven = w?.roi != null && w.breakEven != null && w.roi < w.breakEven;
 
@@ -49,6 +51,7 @@ export default function MetricWindowBox({ title, window: w, compareTo, pendingTe
           <p className="text-xs text-muted">
             {formatShortDate(w.from)} → {formatShortDate(w.to)}
           </p>
+          {extra && <p className="mt-1 border-t border-line pt-1 text-xs tabular-nums">{extra}</p>}
         </>
       )}
     </div>

@@ -86,6 +86,21 @@ export interface MetricWindow {
   roi: number | null;
   /** ROI hoà vốn tại thời điểm đó */
   breakEven: number | null;
+  /** Chỉ ở "Sau thao tác": số liệu từng ngày đủ sau thao tác (Ngày 1, Ngày 2…), tối đa 7 */
+  days?: DayMetric[];
+}
+
+/** Số liệu 1 khối 24h sau thao tác của đối tượng */
+export interface DayMetric {
+  /** yyyy-MM-dd (giờ VN) ngày bắt đầu khối */
+  date: string;
+  /** ISO — khối 24h [from, to) */
+  from?: string;
+  to?: string;
+  cost: number;
+  revenue: number;
+  orders: number;
+  roi: number | null;
 }
 
 /** Đối tượng thao tác. Cấp chiến dịch: productId/videoId rỗng; cấp sản phẩm: videoId rỗng */
@@ -99,6 +114,21 @@ export interface AgentTarget {
 export type ProposalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'outdated';
 
 /** Đề xuất của Agent chờ Sếp duyệt */
+/**
+ * Video lỗ ở dòng đang xét nhưng có "đơn bù" ở dòng sản phẩm khác trong CÙNG chiến dịch (chiến dịch nhiều sản phẩm).
+ * Gỡ video = mất cả phần đơn bù → hiện để Sếp tự quyết. Dòng ở chiến dịch khác không tính.
+ */
+export interface VideoOffset {
+  /** Phần đơn bù (các dòng sản phẩm khác của video trong chiến dịch) */
+  cost: number;
+  revenue: number;
+  orders: number;
+  /** Tổng mọi dòng của video trong chiến dịch */
+  total: { cost: number; revenue: number; orders: number; roi: number | null; breakEven: number | null };
+  /** Tổng ROI ≥ hoà vốn tổng? null = thiếu hoà vốn để kết luận */
+  profitable: boolean | null;
+}
+
 export interface AgentProposal {
   id: string;
   createdAt: string;
@@ -120,6 +150,8 @@ export interface AgentProposal {
   note?: string;
   /** Dòng nhật ký của lần thực thi sau khi duyệt */
   actionId?: string;
+  /** Có đơn bù ở sản phẩm khác (cấp video) — cập nhật mỗi lượt quét */
+  offset?: VideoOffset;
 }
 
 export type ActionActor = 'agent' | 'approved' | 'manual';

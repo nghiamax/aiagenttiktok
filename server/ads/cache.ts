@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
 import { config } from '../config.js';
 import { buildSnapshot, type DateRange } from './buildSnapshot.js';
+import { annotateCrossProduct } from '../../shared/videoStatus.js';
 
 const DIR = path.join(config.dataDir, 'cache');
 /** Khoảng ngày có chứa hôm nay → số liệu còn đổi, cache ngắn */
@@ -46,7 +47,7 @@ function writeCache(r: DateRange, snap: AdsSnapshot) {
 export async function getSnapshot(r: DateRange, refresh = false): Promise<{ snapshot: AdsSnapshot; cached: boolean }> {
   if (!refresh) {
     const hit = readCache(r);
-    if (hit) return { snapshot: hit, cached: true };
+    if (hit) return { snapshot: annotateCrossProduct(hit), cached: true };
   }
   const key = `${r.from}_${r.to}`;
   let job = inflight.get(key);
@@ -59,5 +60,5 @@ export async function getSnapshot(r: DateRange, refresh = false): Promise<{ snap
       .finally(() => inflight.delete(key));
     inflight.set(key, job);
   }
-  return { snapshot: await job, cached: false };
+  return { snapshot: annotateCrossProduct(await job), cached: false };
 }

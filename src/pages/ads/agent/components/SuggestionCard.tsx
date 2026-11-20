@@ -100,6 +100,9 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
                     {e.name}
                   </span>
                 )}
+                {e.warning && (
+                  <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700">{e.warning}</span>
+                )}
                 <span className="shrink-0 tabular-nums text-muted">{e.metrics}</span>
               </li>
             );

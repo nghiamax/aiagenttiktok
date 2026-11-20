@@ -1,7 +1,8 @@
-import type { AdsSnapshot, VideoStatus } from './adsSnapshot.js';
-import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel } from './agentTypes.js';
+import type { AdsSnapshot, AdsVideo, VideoStatus } from './adsSnapshot.js';
+import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
 import { breakEvenOf, type AdsSettings } from './settings.js';
+import { effectiveStatus } from './videoStatus.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
 export const ruleLevel = (rule: Pick<AgentRule, 'level'>): RuleLevel => rule.level ?? 'video';
@@ -24,6 +25,7 @@ export function ineligibleReason(actionType: AgentActionType, params: AgentRuleP
     case 'remove_creative':
       if (!t.campaignRunning) return 'Chiến dịch đang tắt';
       if (t.videoStatus === 'excluded') return 'Video đã bị gỡ';
+      if (t.videoStatus === 'unavailable') return 'Video không khả dụng — đã ngừng chạy';
       return null;
     case 'add_creative':
       return t.videoStatus === 'excluded' ? null : 'Video chưa bị gỡ';
@@ -41,6 +43,41 @@ export function ineligibleReason(actionType: AgentActionType, params: AgentRuleP
   }
 }
 
+/**
+ * Đơn bù của video: các dòng sản phẩm khác (không thuộc `matched`) của cùng video trong cùng chiến dịch có DT / đơn.
+ * Hoà vốn tổng = Σ DT ÷ Σ (DT_i ÷ hoà vốn_i) (thiếu hoà vốn ở dòng có DT → null). Không có đơn bù → undefined.
+ */
+export function offsetOf(
+  snapshot: AdsSnapshot,
+  settings: AdsSettings,
+  campaignId: string,
+  videoId: string,
+  matched: ReadonlySet<AdsVideo>,
+): VideoOffset | undefined {
+  const rows = snapshot.videos.filter((v) => v.campaignId === campaignId && v.id === videoId && v.contentType !== 'product_card');
+  const others = rows.filter((v) => !matched.has(v));
+  const sum = (list: AdsVideo[], k: 'cost' | 'revenue' | 'orders') => list.reduce((s, v) => s + (v[k] ?? 0), 0);
+  const revenue = sum(others, 'revenue');
+  const orders = sum(others, 'orders');
+  if (revenue <= 0 && orders <= 0) return undefined;
+
+  const total = { cost: sum(rows, 'cost'), revenue: sum(rows, 'revenue'), orders: sum(rows, 'orders') };
+  // Hoà vốn tổng theo tỷ trọng doanh thu; chưa có DT → hoà vốn của dòng chi nhiều nhất
+  let weighted = 0;
+  let missing = false;
+  for (const v of rows) {
+    if (!(v.revenue && v.revenue > 0)) continue;
+    const be = breakEvenOf(settings, v.productId);
+    if (be == null) missing = true;
+    else weighted += v.revenue / be;
+  }
+  const main = [...rows].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))[0];
+  const breakEven = missing ? null : total.revenue > 0 ? total.revenue / weighted : (main && breakEvenOf(settings, main.productId)) ?? null;
+  const roi = total.cost > 0 ? total.revenue / total.cost : null;
+  const profitable = breakEven == null ? null : roi == null ? total.revenue > 0 : roi >= breakEven;
+  return { cost: sum(others, 'cost'), revenue, orders, total: { ...total, roi, breakEven }, profitable };
+}
+
 /** Một đối tượng đang khớp quy tắc */
 export interface RuleTarget {
   target: AgentTarget;
@@ -53,6 +90,8 @@ export interface RuleTarget {
   roi: number | null;
   /** ROI hoà vốn lúc xét (chỉ cấp video / sản phẩm) */
   breakEven: number | null;
+  /** Cấp video: có đơn bù ở sản phẩm khác trong cùng chiến dịch */
+  offset?: VideoOffset;
   /** Trạng thái phân phối (chỉ cấp video) */
   videoStatus?: VideoStatus;
   /** Chiến dịch đang chạy? */
@@ -115,6 +154,8 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
 
   // Một video gắn nhiều sản phẩm có nhiều dòng → gộp 1 đối tượng, CỘNG số liệu các dòng khớp nhóm
   const byKey = new Map<string, RuleTarget>();
+  /** Các dòng khớp nhóm của từng (chiến dịch, video) — phần còn lại là "đơn bù" */
+  const matchedRows = new Map<string, Set<AdsVideo>>();
   const out: RuleTarget[] = [];
   const add = (a: number | null, b: number | null) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
   for (const v of snapshot.videos) {
@@ -122,6 +163,7 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
     const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
     if (cls?.action !== rule.trigger) continue;
     const key = `${v.campaignId}/${v.id}`;
+    (matchedRows.get(key) ?? matchedRows.set(key, new Set()).get(key)!).add(v);
     const prev = byKey.get(key);
     if (prev) {
       prev.cost = add(prev.cost, v.cost);
@@ -139,11 +181,15 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
       orders: v.orders,
       roi: v.roi,
       breakEven: breakEvenOf(settings, v.productId),
-      videoStatus: v.status,
+      videoStatus: effectiveStatus(v),
       campaignRunning: running(v.campaignId),
     };
     byKey.set(key, t);
     out.push(t);
+  }
+  for (const t of out) {
+    const off = offsetOf(snapshot, settings, t.target.campaignId, t.target.videoId, matchedRows.get(`${t.target.campaignId}/${t.target.videoId}`)!);
+    if (off) t.offset = off;
   }
   return out;
 }

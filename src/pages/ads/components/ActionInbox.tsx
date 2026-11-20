@@ -18,6 +18,10 @@ export interface ActionSummary {
   rows: number;
   cost: number;
   revenue: number;
+  /** Đã gỡ / thuộc chiến dịch đã tắt — Agent không làm gì được nên không tính vào số / chi / DT */
+  skipped?: number;
+  /** Video Cắt lỗ mà tổng video (gồm đơn bù ở sản phẩm khác) vẫn có lời — đã nằm trong count */
+  keepsProfit?: number;
 }
 
 /** Số đối tượng / chi phí / doanh thu theo ID nhóm, cho từng cấp */
@@ -165,6 +169,16 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     </span>
                     {s.rows > s.count && (
                       <span className="block text-xs text-muted">{formatNumber(s.rows)} dòng theo sản phẩm</span>
+                    )}
+                    {!!s.keepsProfit && (
+                      <span className="block text-xs font-medium text-amber-700">
+                        trong đó {formatNumber(s.keepsProfit)} {unit} tổng vẫn có lời (có đơn bù)
+                      </span>
+                    )}
+                    {!!s.skipped && (
+                      <span className="block text-xs text-muted">
+                        +{formatNumber(s.skipped)} {level === 'campaign' ? 'đã tắt' : level === 'product' ? 'thuộc chiến dịch tắt' : 'đã gỡ / thuộc chiến dịch tắt'} (không tính)
+                      </span>
                     )}
                     {needsBreakEven ? (
                       <span className="block text-sm font-medium text-amber-700">Chưa tính được — thiếu ROI hoà vốn</span>

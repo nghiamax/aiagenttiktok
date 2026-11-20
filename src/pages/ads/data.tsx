@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import staticSnapshot from '../../data/ads-snapshot.json';
 import type { AdsSnapshot } from './types';
+import { annotateCrossProduct } from '../../../shared/videoStatus';
 
 export interface DateRange {
   from: string;
@@ -31,7 +32,7 @@ interface AdsDataValue {
   baseline: AdsSnapshot;
 }
 
-const STATIC = staticSnapshot as AdsSnapshot;
+const STATIC = annotateCrossProduct(staticSnapshot as AdsSnapshot);
 const STORAGE_KEY = 'ads-range';
 /** Đợi một chút sau khi đổi ngày rồi mới tải, để khỏi gọi khi đang chọn dở */
 const DEBOUNCE_MS = 500;
@@ -52,11 +53,24 @@ export function daysOf(range: { from: string; to: string } | null | undefined): 
   return Math.round((Date.parse(range.to) - Date.parse(range.from)) / DAY) + 1;
 }
 
+/** Khoảng tương đối (nút nhanh): lưu tên, mở lại trang thì tính lại theo hôm nay */
+const RELATIVE: Record<string, () => DateRange> = {
+  today: () => ({ from: vnDate(), to: vnDate() }),
+  yesterday: () => ({ from: vnDate(1), to: vnDate(1) }),
+  '7d': () => lastDays(7),
+  '14d': () => lastDays(14),
+  '30d': () => lastDays(30),
+};
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function readStoredRange(): DateRange | null {
   try {
-    const r = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as DateRange | null;
-    if (r && DATE_RE.test(r.from) && DATE_RE.test(r.to) && r.from <= r.to && r.to <= vnDate()) return r;
+    const r = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as (DateRange & { preset?: string }) | null;
+    if (r?.preset && RELATIVE[r.preset]) return RELATIVE[r.preset]();
+    // Bản cũ lưu ngày cố định → coi như "7 ngày qua" để luôn có số mới nhất
+    if (r && DATE_RE.test(r.from) && DATE_RE.test(r.to) && r.from <= r.to && r.to <= vnDate()) {
+      return r.preset === 'custom' ? r : lastDays(7);
+    }
   } catch {
     /* localStorage bị chặn */
   }
@@ -64,8 +78,12 @@ function readStoredRange(): DateRange | null {
 }
 
 function storeRange(r: DateRange) {
+  const preset = Object.keys(RELATIVE).find((k) => {
+    const p = RELATIVE[k]();
+    return p.from === r.from && p.to === r.to;
+  });
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(preset ? { preset } : { ...r, preset: 'custom' }));
   } catch {
     /* bỏ qua */
   }
@@ -114,7 +132,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
             setLoginRequired(body?.code === 'TIKTOK_LOGIN_REQUIRED');
             throw new Error(body?.error ?? 'Không kết nối được server số liệu (npm run server)');
           }
-          setSnapshot(body.snapshot);
+          setSnapshot(annotateCrossProduct(body.snapshot));
           setSource('live');
           setLoginRequired(false);
           setError(null);

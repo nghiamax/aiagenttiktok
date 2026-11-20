@@ -10,7 +10,7 @@ import type { VideoAction } from '../../types';
 import { useAdsData } from '../../data';
 import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
 import { ACTIONS_BY_LEVEL, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
-import { matchRuleTargets } from '../ruleMatch';
+import { matchRuleTargets, skippedText } from '../ruleMatch';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, RuleLevel, RuleMode } from '../types';
 import GroupPicker from './GroupPicker';
 import NumberField from './NumberField';
@@ -189,6 +189,7 @@ export default function RuleFormModal({
                 {matches.names.length > 2 ? '…' : ''})
               </span>
             )}
+            {skippedText(matches) && <span className="block text-xs text-muted">{skippedText(matches)}</span>}
           </p>
         </fieldset>
 

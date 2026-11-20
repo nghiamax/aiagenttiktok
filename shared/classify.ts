@@ -3,6 +3,7 @@ import { formatNumber, shortVnd } from './format.js';
 import { matchesPlatform, matchSet, reasonFor, type EvalContext, type GroupDef } from './groups.js';
 import { breakEvenOf, type AdsSettings } from './settings.js';
 import type { AdsProduct, AdsVideo, Campaign } from './adsSnapshot.js';
+import { effectiveStatus } from './videoStatus.js';
 
 /** ID nhóm */
 export type VideoAction = string;
@@ -84,6 +85,8 @@ export function classifyVideo(
   settings: AdsSettings,
 ): VideoClassification | null {
   if (video.contentType !== 'video') return null;
+  // Video không khả dụng (TikTok ngừng chạy): chưa có cách xử lý → không xếp nhóm, chỉ lọc riêng ở bảng Video
+  if (effectiveStatus(video) === 'unavailable') return null;
 
   const cost = video.cost ?? 0;
   const orders = video.orders ?? 0;

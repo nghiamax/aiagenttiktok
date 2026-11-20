@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import type { AdsSettings } from '../../shared/settings.js';
 import type { AgentConfig, AgentGuardrails, AgentRule } from '../../shared/agentTypes.js';
-import { executeProposal, PrecheckError, undoAction, verifyAction, type ExecResult } from '../agent/executor.js';
+import { executeManual, executeProposal, PrecheckError, undoAction, verifyAction, type ExecResult, type ManualInput } from '../agent/executor.js';
 import { AGENT_INTERVAL_MINUTES, getNextRunAt, isAgentRunning, runAgentOnce } from '../agent/scheduler.js';
 import {
   agentConfigStored,
@@ -141,6 +141,17 @@ agentRouter.post('/actions/:id/undo', async (req, res) => {
     return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi hoàn tác trên TikTok' });
   }
   await respondExec(res, () => undoAction(req.params.id));
+});
+
+/** Thao tác thủ công từ bảng Video (Gỡ / Thêm lại / Tăng cường) — CHẠY THẬT, bắt buộc { confirm: true } */
+agentRouter.post('/actions/manual', async (req, res) => {
+  const body = req.body as (Partial<ManualInput> & { confirm?: unknown }) | undefined;
+  if (body?.confirm !== true) {
+    return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi chạy thật trên TikTok' });
+  }
+  await respondExec(res, () =>
+    executeManual({ actionType: String(body.actionType ?? ''), target: body.target as ManualInput['target'], params: body.params }),
+  );
 });
 
 /** Kiểm tra ngay kết quả gỡ / thêm video — CHỈ ĐỌC trạng thái trên TikTok, không gửi lệnh ghi */

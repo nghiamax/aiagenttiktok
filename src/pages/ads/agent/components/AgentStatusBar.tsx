@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Bot, Loader2, RefreshCw } from 'lucide-react';
 import Card from '../../../../components/ui/Card';
+import { useAuth } from '../../../../auth/AuthProvider';
 import { formatDateTime, formatNumber } from '../../../../lib/format';
 import { shortVnd } from '../../classify';
 import type { AgentSchedule, RunSummary } from '../agentStore';
@@ -59,6 +60,7 @@ export default function AgentStatusBar({
   activeRules,
 }: AgentStatusBarProps) {
   const [result, setResult] = useState<string | null>(null);
+  const canConfigure = useAuth().can('configure');
   // Đề xuất hôm nay (còn hiệu lực) + thao tác thật hôm nay (không tính nhắc việc) — cùng cách đếm với server
   const todayProposals = proposals.filter((p) => isToday(p.createdAt) && (p.status === 'pending' || p.status === 'approved'));
   const todayActions = actions.filter((a) => isToday(a.executedAt) && a.status !== 'failed' && a.actionType !== 'remind');
@@ -126,8 +128,8 @@ export default function AgentStatusBar({
           <button
             type="button"
             onClick={runNow}
-            disabled={!on || running}
-            title={on ? 'Lấy số liệu mới từ TikTok rồi xét quy tắc ngay' : 'Bật Agent để quét'}
+            disabled={!on || running || !canConfigure}
+            title={!canConfigure ? 'Tài khoản không có quyền' : on ? 'Lấy số liệu mới từ TikTok rồi xét quy tắc ngay' : 'Bật Agent để quét'}
             className="flex w-fit items-center gap-2 whitespace-nowrap rounded-xl border border-line px-3.5 py-2 text-sm font-medium text-muted transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className={`size-4 ${running ? 'animate-spin' : ''}`} />
@@ -141,7 +143,8 @@ export default function AgentStatusBar({
             aria-checked={on}
             aria-label="Bật/tắt tự quét của Agent"
             onClick={onTogglePause}
-            disabled={!connected}
+            disabled={!connected || !canConfigure}
+            title={canConfigure ? undefined : 'Tài khoản không có quyền'}
             className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
               on ? 'border-accent-green/30 bg-green-50 text-accent-green' : 'border-line bg-white text-muted hover:bg-canvas'
             }`}

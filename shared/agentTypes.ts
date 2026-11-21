@@ -1,5 +1,6 @@
 /** Kiểu dữ liệu AI Agent (quy tắc, đề xuất, nhật ký). Dùng chung web + server. */
 import type { ConditionSet, GroupLevel } from './groups.js';
+import type { ActorRef } from './permissions.js';
 
 /** ID nhóm */
 type VideoAction = string;
@@ -146,6 +147,8 @@ export interface AgentProposal {
   ruleMode?: RuleMode;
   /** Thời điểm Sếp duyệt / bỏ qua */
   decidedAt?: string;
+  /** Người Duyệt / Bỏ qua trên web */
+  decidedBy?: ActorRef;
   /** Ghi chú cho Sếp (vd quy tắc Tự chạy nhưng chưa bật thực thi) */
   note?: string;
   /** Dòng nhật ký của lần thực thi sau khi duyệt */
@@ -185,6 +188,8 @@ export interface AgentActionLog {
    * "Sau thao tác" chỉ tính các ngày TRƯỚC `date` (ngày VN), không đo thêm.
    */
   measureStop?: { date: string; reason: string };
+  /** Người bấm trên web (Duyệt / Thủ công / Hoàn tác); thiếu = dòng cũ trước khi có đăng nhập, hoặc Agent tự chạy */
+  by?: ActorRef;
 }
 
 export interface AgentGuardrails {

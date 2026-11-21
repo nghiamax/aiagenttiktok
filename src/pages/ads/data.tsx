@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import staticSnapshot from '../../data/ads-snapshot.json';
 import type { AdsSnapshot } from './types';
 import { annotateCrossProduct } from '../../../shared/videoStatus';
+import { notifyAuthRequired } from '../../lib/api';
 
 export interface DateRange {
   from: string;
@@ -129,6 +130,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
           const res = await fetch(`/api/ads/snapshot?${qs}`, { signal: controller.signal });
           const body = (await res.json().catch(() => null)) as ({ snapshot?: AdsSnapshot } & ApiError) | null;
           if (!res.ok || !body?.snapshot) {
+            notifyAuthRequired(res.status, body?.code);
             setLoginRequired(body?.code === 'TIKTOK_LOGIN_REQUIRED');
             throw new Error(body?.error ?? 'Không kết nối được server số liệu (npm run server)');
           }

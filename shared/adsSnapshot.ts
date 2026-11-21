@@ -103,6 +103,8 @@ export interface AdsVideo {
 
 /** Cấu trúc snapshot số liệu (file src/data/ads-snapshot.json hoặc API /api/ads/snapshot) */
 export interface AdsSnapshot {
+  /** Phiên bản cách dựng snapshot (server) — cache khác phiên bản được dựng lại */
+  build?: number;
   /** ISO datetime lần lấy dữ liệu, null = chưa lấy lần nào */
   updatedAt: string | null;
   /** Khoảng ngày của số liệu, dạng yyyy-MM-dd */

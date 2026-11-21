@@ -4,6 +4,7 @@ import { ExternalLink, Loader2, RotateCcw, Trash2, Zap, type LucideIcon } from '
 import { ineligibleReason, offsetOf, type RuleTarget } from '../../../../shared/agentMatch';
 import { offsetWarning, profitWarning } from '../../../../shared/offsetText';
 import { useAdsSettings } from '../settings';
+import { useNoPermission } from '../../../auth/AuthProvider';
 import { effectiveStatus } from '../../../../shared/videoStatus';
 import { useAgentConfig } from '../agent/useAgentConfig';
 import { useAgentStore, type ExecOutcome } from '../agent/agentStore';
@@ -70,7 +71,8 @@ export default function VideoActions({ video: v, campaignRunning, videoUrl }: Vi
 
   const probe = { campaignRunning, videoStatus: status } as RuleTarget;
   const boostParams = { boostBudget: 1, boostDays: 1 };
-  const reason = (t: AgentActionType, params: AgentRuleParams = {}) => ineligibleReason(t, params, probe);
+  const noExec = useNoPermission('execute');
+  const reason = (t: AgentActionType, params: AgentRuleParams = {}) => noExec ?? ineligibleReason(t, params, probe);
   const removed = status === 'excluded';
 
   const todayStart = startOfToday();

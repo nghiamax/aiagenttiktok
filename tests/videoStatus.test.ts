@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { classifyVideo } from '../shared/classify';
 import { findRuleTargets, ineligibleReason } from '../shared/agentMatch';
-import { annotateCrossProduct } from '../shared/videoStatus';
+import { annotateCrossProduct, markCrossProduct } from '../shared/videoStatus';
+import { isIdleVideo } from '../server/ads/mapping';
 import { campaign, product, rule, settingsWith, snapshot, video } from './fixtures';
 
 /* Chiến dịch nhiều sản phẩm: "Cần ủy quyền" giả khi video đang chạy ở sản phẩm khác */
@@ -45,5 +46,43 @@ describe('annotateCrossProduct', () => {
     expect(t.map((x) => `${x.target.campaignId}/${x.target.videoId}`)).toEqual(['c1/v2']);
     const probe = { campaignRunning: true, videoStatus: 'delivering' } as Parameters<typeof ineligibleReason>[2];
     expect(ineligibleReason('boost_creative', { boostBudget: 300_000 }, probe)).toBeNull();
+  });
+});
+
+describe('Đối chiếu trước khi lọc (dòng thật 0 chi ở sản phẩm khác)', () => {
+  // Ca thật 21/11: video Ap4 ANC — dòng A4 NOT_DELIVERING 0 chi (bị lọc), dòng PR GEN3 AUTHORIZATION_NEEDED 1đ
+  const rows = () => [
+    video({ id: 'ap4', campaignId: 'c1', productId: 'GEN3', status: 'authorization_needed', cost: 1, revenue: 0, orders: 0 }),
+    video({ id: 'ap4', campaignId: 'c1', productId: 'A4', status: 'not_delivering', cost: 0, revenue: 0, orders: 0 }),
+  ];
+
+  it('markCrossProduct trên mọi dòng → dòng GEN3 là giả, trỏ về A4 (không phân phối)', () => {
+    const [gen3] = markCrossProduct(rows());
+    expect(gen3).toMatchObject({ crossProduct: true, mainProductId: 'A4', mainStatus: 'not_delivering' });
+  });
+
+  it('sau khi lọc dòng 0 chi, web chạy lại annotateCrossProduct vẫn giữ nhãn → không vào Cần ủy quyền', () => {
+    const kept = markCrossProduct(rows()).filter((v) => !isIdleVideo(v));
+    expect(kept).toHaveLength(1);
+    const s = annotateCrossProduct(snapshot({ campaigns: [campaign({ id: 'c1' })], products: [product({ id: 'GEN3', campaignId: 'c1' })], videos: kept }));
+    expect(s.videos[0].crossProduct).toBe(true);
+    expect(classifyVideo(s.videos[0], s.campaigns[0], S)?.action).not.toBe('authorize');
+  });
+
+  it('chỉ có dòng cần ủy quyền ở mọi sản phẩm → vẫn là cần ủy quyền thật', () => {
+    const only = markCrossProduct([
+      video({ id: 'x', campaignId: 'c1', productId: 'A', status: 'authorization_needed', revenue: 300_000, orders: 1 }),
+      video({ id: 'x', campaignId: 'c1', productId: 'B', status: 'authorization_needed', cost: 0 }),
+    ]);
+    expect(only.every((v) => !v.crossProduct)).toBe(true);
+  });
+
+  it('chi bằng nhau → ưu tiên dòng đang phân phối làm nơi chạy thật', () => {
+    const [a] = markCrossProduct([
+      video({ id: 'y', campaignId: 'c1', productId: 'A', status: 'authorization_needed', cost: 5 }),
+      video({ id: 'y', campaignId: 'c1', productId: 'B', status: 'not_delivering', cost: 0 }),
+      video({ id: 'y', campaignId: 'c1', productId: 'C', status: 'delivering', cost: 0 }),
+    ]);
+    expect(a.mainProductId).toBe('C');
   });
 });

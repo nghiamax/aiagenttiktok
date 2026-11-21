@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
 import { config } from '../config.js';
-import { buildSnapshot, type DateRange } from './buildSnapshot.js';
+import { buildSnapshot, SNAPSHOT_BUILD, type DateRange } from './buildSnapshot.js';
 import { annotateCrossProduct } from '../../shared/videoStatus.js';
 
 const DIR = path.join(config.dataDir, 'cache');
@@ -31,6 +31,8 @@ function ttlFor(r: DateRange): number {
 function readCache(r: DateRange): AdsSnapshot | null {
   try {
     const snap = JSON.parse(fs.readFileSync(fileOf(r), 'utf8')) as AdsSnapshot;
+    // Dựng bằng code cũ → dựng lại (kể cả khoảng ngày "giữ mãi")
+    if (snap.build !== SNAPSHOT_BUILD) return null;
     const age = Date.now() - Date.parse(snap.updatedAt ?? '');
     return age < ttlFor(r) ? snap : null;
   } catch {

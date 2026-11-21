@@ -174,6 +174,17 @@ describe('Gỡ / thêm video (gmv_max_creative_update)', () => {
     expect(actionOf(r.action.id).verifyAfter).toBeUndefined();
   });
 
+  it('dòng thật bị lọc khỏi snapshot (0 chi) → spu_id_list vẫn có sản phẩm thật lấy từ nhãn "cần ủy quyền giả"', async () => {
+    mock.snapshot = snapshot({
+      videos: [
+        video({ id: 'v1', campaignId: 'c1', productId: 'p1', status: 'authorization_needed', crossProduct: true, mainCampaignId: 'c1', mainProductId: 'p3', mainStatus: 'not_delivering' }),
+      ],
+    });
+    await ex.executeProposal(proposal('remove_creative').id);
+    const item = (mock.writes[0].params.item_list as { spu_id_list: string[] }[])[0];
+    expect(item.spu_id_list.sort()).toEqual(['p1', 'p3']);
+  });
+
   it('TikTok chưa đổi trạng thái → kiểm tra mỗi 20 giây trong 10 phút đầu, sau đó giãn dần', async () => {
     const r = await ex.executeProposal(proposal('remove_creative').id);
     expect(r.action.status).toBe('running');

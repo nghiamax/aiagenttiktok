@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { VideoStatus } from '../../shared/adsSnapshot.js';
+import type { ActorRef } from '../../shared/permissions.js';
 import {
   CREATIVE_INLINE_CHECKS_MS,
   CREATIVE_VERIFY_FAST_MIN,
@@ -113,7 +114,10 @@ async function spuIdsOf(target: AgentTarget): Promise<string[]> {
   try {
     const { snapshot } = await getSnapshot({ from: vnDate(lookback), to: vnDate(1) }, false);
     for (const v of snapshot.videos) {
-      if (v.campaignId === target.campaignId && v.id === target.videoId) ids.add(v.productId);
+      if (v.id !== target.videoId) continue;
+      if (v.campaignId === target.campaignId) ids.add(v.productId);
+      // Dòng thật của video có thể bị lọc khỏi snapshot (0 chi) → lấy từ nhãn "cần ủy quyền giả"
+      if (v.crossProduct && v.mainCampaignId === target.campaignId && v.mainProductId) ids.add(v.mainProductId);
     }
   } catch {
     // thiếu snapshot → dùng sản phẩm của đề xuất
@@ -399,7 +403,7 @@ function markUndone(rt: AgentRuntime, originalId: string) {
 }
 
 /** Duyệt + thực thi 1 đề xuất. PrecheckError = không gửi lệnh, đề xuất vẫn chờ duyệt. */
-export function executeProposal(proposalId: string): Promise<ExecResult> {
+export function executeProposal(proposalId: string, by?: ActorRef): Promise<ExecResult> {
   return serial(async () => {
     if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
     const rt = getRuntime();
@@ -453,6 +457,7 @@ export function executeProposal(proposalId: string): Promise<ExecResult> {
       status: 'running',
       note: 'Đang gửi lệnh lên TikTok',
       proposalId: p.id,
+      ...(by ? { by } : {}),
     };
     updateRuntime((r: AgentRuntime) => {
       const x = r.proposals.find((y) => y.id === proposalId);
@@ -461,6 +466,7 @@ export function executeProposal(proposalId: string): Promise<ExecResult> {
         x.decidedAt = action.executedAt;
         x.actionId = action.id;
         x.note = undefined;
+        if (by) x.decidedBy = by;
       }
       r.actions.unshift(action);
       r.actions = r.actions.slice(0, 2000);
@@ -503,7 +509,7 @@ async function videoWindow(target: AgentTarget): Promise<AgentActionLog['before'
 }
 
 /** Sếp bấm Gỡ / Thêm lại / Tăng cường trên bảng Video rồi xác nhận → chạy thật */
-export function executeManual(input: ManualInput): Promise<ExecResult> {
+export function executeManual(input: ManualInput, by?: ActorRef): Promise<ExecResult> {
   return serial(async () => {
     if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
     const actionType = input.actionType as ManualAction;
@@ -545,6 +551,7 @@ export function executeManual(input: ManualInput): Promise<ExecResult> {
       after: null,
       status: 'running',
       note: 'Đang gửi lệnh lên TikTok',
+      ...(by ? { by } : {}),
     };
     updateRuntime((r) => {
       r.actions.unshift(action);
@@ -607,7 +614,7 @@ async function buildPlanWithInfo(actionType: AgentActionType, target: AgentTarge
 }
 
 /** Hoàn tác 1 thao tác đã thành công (cũng cần Sếp xác nhận) */
-export function undoAction(actionId: string): Promise<ExecResult> {
+export function undoAction(actionId: string, by?: ActorRef): Promise<ExecResult> {
   return serial(async () => {
     if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
     const a = getRuntime().actions.find((x) => x.id === actionId);
@@ -637,6 +644,7 @@ export function undoAction(actionId: string): Promise<ExecResult> {
       status: 'running',
       note: 'Đang gửi lệnh hoàn tác lên TikTok',
       undoOf: a.id,
+      ...(by ? { by } : {}),
     };
     updateRuntime((r) => {
       r.actions.unshift(undo);

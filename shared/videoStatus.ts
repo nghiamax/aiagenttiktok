@@ -9,30 +9,35 @@ import type { AdsSnapshot, AdsVideo } from './adsSnapshot.js';
  *   Không đổi `status` gốc. Dùng chung web + server (gọi khi nhận snapshot, kể cả bản cache cũ).
  */
 export function annotateCrossProduct(snapshot: AdsSnapshot): AdsSnapshot {
-  const better = (cur: AdsVideo | undefined, v: AdsVideo) => !cur || (v.cost ?? 0) > (cur.cost ?? 0);
+  return { ...snapshot, videos: markCrossProduct(snapshot.videos) };
+}
+
+/** Đang phân phối / học / chờ được ưu tiên làm "nơi chạy thật" khi chi bằng nhau */
+const ACTIVE = new Set(['delivering', 'learning', 'in_queue']);
+
+/**
+ * Gắn crossProduct cho các dòng trong `rows`. Server gọi trên MỌI dòng (kể cả dòng 0 chi) TRƯỚC khi lọc.
+ * Dòng đã có nhãn từ server mà trong `rows` (đã lọc) không còn dòng thật → giữ nguyên nhãn (dòng thật bị lọc vì 0 chi).
+ */
+export function markCrossProduct(rows: AdsVideo[]): AdsVideo[] {
+  const better = (cur: AdsVideo | undefined, v: AdsVideo) =>
+    !cur ||
+    (v.cost ?? 0) > (cur.cost ?? 0) ||
+    ((v.cost ?? 0) === (cur.cost ?? 0) && ACTIVE.has(v.status) && !ACTIVE.has(cur.status));
   const sameCampaign = new Map<string, AdsVideo>();
   const anyCampaign = new Map<string, AdsVideo>();
-  for (const v of snapshot.videos) {
+  for (const v of rows) {
     if (v.contentType === 'product_card' || v.status === 'authorization_needed') continue;
     const k = `${v.campaignId}/${v.id}`;
     if (better(sameCampaign.get(k), v)) sameCampaign.set(k, v);
     if (better(anyCampaign.get(v.id), v)) anyCampaign.set(v.id, v);
   }
-  return {
-    ...snapshot,
-    videos: snapshot.videos.map((v) => {
-      const m =
-        v.status === 'authorization_needed' && v.contentType !== 'product_card'
-          ? (sameCampaign.get(`${v.campaignId}/${v.id}`) ?? anyCampaign.get(v.id))
-          : undefined;
-      if (!m) {
-        if (!v.crossProduct) return v;
-        const { crossProduct: _c, mainCampaignId: _mc, mainProductId: _p, mainStatus: _s, ...rest } = v;
-        return rest;
-      }
-      return { ...v, crossProduct: true, mainCampaignId: m.campaignId, mainProductId: m.productId, mainStatus: m.status };
-    }),
-  };
+  return rows.map((v) => {
+    if (v.status !== 'authorization_needed' || v.contentType === 'product_card') return v;
+    const m = sameCampaign.get(`${v.campaignId}/${v.id}`) ?? anyCampaign.get(v.id);
+    if (!m) return v; // giữ nhãn server đã gắn (nếu có)
+    return { ...v, crossProduct: true, mainCampaignId: m.campaignId, mainProductId: m.productId, mainStatus: m.status };
+  });
 }
 
 /** Trạng thái dùng để xét điều kiện TikTok (dòng cần ủy quyền giả → trạng thái ở nơi video chạy thật) */

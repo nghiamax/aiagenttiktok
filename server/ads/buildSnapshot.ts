@@ -2,7 +2,8 @@ import type { AdsProduct, AdsSnapshot, AdsVideo, Campaign, PreviousSummary } fro
 import { config } from '../config.js';
 import { callReadTool } from '../tiktok/mcpClient.js';
 import { getAuthors } from './authors.js';
-import { hasActivity, num, roiOf, toCampaign, toProduct, toVideo, type ReportRow } from './mapping.js';
+import { markCrossProduct } from '../../shared/videoStatus.js';
+import { hasActivity, isIdleVideo, num, roiOf, rowToVideo, toCampaign, toProduct, type ReportRow } from './mapping.js';
 
 export interface DateRange {
   from: string;
@@ -14,6 +15,12 @@ interface ReportData {
   page_info?: { page: number; total_page: number };
   total_metrics?: Record<string, string>;
 }
+
+/**
+ * Phiên bản cách dựng snapshot. ĐỔI CÁCH DỰNG / LỌC / ĐỐI CHIẾU → TĂNG SỐ NÀY để cache cũ (kể cả cache "giữ mãi") tự dựng lại.
+ * 2 (21/11/2026): đối chiếu dòng "cần ủy quyền" giả trước khi lọc dòng 0 chi.
+ */
+export const SNAPSHOT_BUILD = 2;
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 20;
@@ -82,7 +89,7 @@ async function fetchVideos(range: DateRange, campaignId: string, productId: stri
     metrics: ['title', 'tt_account_name', 'creative_delivery_status', 'shop_content_type', 'cost', 'gross_revenue', 'orders'],
     filtering: { campaign_ids: [campaignId], item_group_ids: [productId] },
   });
-  return rows.map((r) => toVideo(r, campaignId, productId)).filter((v): v is AdsVideo => v !== null);
+  return rows.map((r) => rowToVideo(r, campaignId, productId));
 }
 
 /** Dựng snapshot số liệu GMV Max sản phẩm cho khoảng ngày (chỉ gọi tool đọc) */
@@ -97,10 +104,11 @@ export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const productLists = await Promise.all(baseCampaigns.map((c) => fetchProducts(range, c.id)));
   const baseProducts = productLists.flat();
 
-  // Video của từng (chiến dịch, sản phẩm)
+  // Video của từng (chiến dịch, sản phẩm). Đối chiếu dòng "cần ủy quyền" giả trên MỌI dòng (kể cả dòng không hoạt động)
+  // rồi mới bỏ dòng không hoạt động — nếu lọc trước, dòng thật 0 chi ở sản phẩm khác bị mất, dòng giả bị coi là thật.
   const videoLists = await Promise.all(baseProducts.map((p) => fetchVideos(range, p.campaignId, p.id)));
   const authors = getAuthors();
-  const videos: AdsVideo[] = videoLists.flat().map((v) => ({
+  const videos: AdsVideo[] = markCrossProduct(videoLists.flat()).filter((v) => !isIdleVideo(v)).map((v) => ({
     ...v,
     authorUsername: v.contentType === 'video' ? (authors[v.id] ?? null) : null,
   }));
@@ -127,6 +135,7 @@ export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const totalRevenue = num(total?.gross_revenue);
 
   return {
+    build: SNAPSHOT_BUILD,
     updatedAt: new Date().toISOString(),
     range: { from: range.from, to: range.to },
     advertiser: { id: config.tiktok.advertiserId, name: config.tiktok.advertiserName, currency: config.tiktok.currency },

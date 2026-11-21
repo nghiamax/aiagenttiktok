@@ -90,7 +90,7 @@ export const UNDOABLE: AgentActionType[] = [
 export function friendlyError(error: string): string {
   if (/IN_ROLL_OUT|NOT_AVAILABLE/.test(error))
     return 'TikTok chặn lệnh này ở kết nối cũ (19/11). Server đã chuyển sang kết nối mới — lần duyệt sau sẽ chạy được.';
-  if (/login|đăng nhập|401/i.test(error)) return 'Chưa đăng nhập TikTok — chạy npm run login rồi thử lại.';
+  if (/login|đăng nhập|401/i.test(error)) return 'Chưa kết nối TikTok — bấm tên shop ở trên cùng → Kết nối TikTok, rồi thử lại.';
   if (/rate limit/i.test(error)) return 'TikTok đang giới hạn tần suất — thử lại sau ít phút.';
   return error.length > 160 ? `${error.slice(0, 160)}…` : error;
 }

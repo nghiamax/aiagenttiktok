@@ -89,8 +89,18 @@ export function toProduct(row: ReportRow, campaignId: string): Omit<AdsProduct, 
   };
 }
 
+/** Dòng video không chi / đơn / DT và không đang phân phối / học / chờ → không giữ trong snapshot */
+export const isIdleVideo = (v: Pick<AdsVideo, 'cost' | 'revenue' | 'orders' | 'status'>) =>
+  !hasActivity(v) && !KEEP_IDLE_STATUSES.has(v.status);
+
 /** Dòng video → AdsVideo, hoặc null nếu bỏ qua (không hoạt động) */
 export function toVideo(row: ReportRow, campaignId: string, productId: string): AdsVideo | null {
+  const v = rowToVideo(row, campaignId, productId);
+  return isIdleVideo(v) ? null : v;
+}
+
+/** Dòng video → AdsVideo (kể cả dòng không hoạt động — dùng để đối chiếu dòng "cần ủy quyền" giả trước khi lọc) */
+export function rowToVideo(row: ReportRow, campaignId: string, productId: string): AdsVideo {
   const m = row.metrics;
   const id = row.dimensions.item_id;
   const isCard = id === '-1' || m.shop_content_type === 'PRODUCT_CARD';
@@ -98,7 +108,6 @@ export function toVideo(row: ReportRow, campaignId: string, productId: string): 
   const revenue = num(m.gross_revenue);
   const orders = num(m.orders);
   const status = videoStatus(m.creative_delivery_status);
-  if (!hasActivity({ cost, revenue, orders }) && !KEEP_IDLE_STATUSES.has(status)) return null;
   return {
     id,
     campaignId,

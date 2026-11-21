@@ -9,6 +9,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Phiên đăng nhập hết / chưa đăng nhập → AuthProvider nghe sự kiện này để về trang đăng nhập */
+export const AUTH_REQUIRED_EVENT = 'auth:required';
+
+/** Gọi khi một phản hồi API báo AUTH_REQUIRED (cả các chỗ dùng fetch trực tiếp) */
+export function notifyAuthRequired(status: number, code: string | undefined) {
+  if (status === 401 && code === 'AUTH_REQUIRED') window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+}
+
 export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
   let res: Response;
   try {
@@ -24,6 +32,8 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   }
   const body = (await res.json().catch(() => null)) as (T & { code?: string; error?: string }) | null;
   if (!res.ok || body === null) {
+    // /auth/me tự xử lý 401 (trang đăng nhập), không cần phát sự kiện
+    if (!path.startsWith('/auth/')) notifyAuthRequired(res.status, body?.code);
     throw new ApiError(body?.error ?? `Server lỗi (HTTP ${res.status})`, body?.code, res.status);
   }
   return body;

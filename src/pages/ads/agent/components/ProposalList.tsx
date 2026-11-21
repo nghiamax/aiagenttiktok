@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, Check, CheckCircle2, ChevronRight, X } from 'lucide-react';
 import EmptyTableState from '../../components/EmptyTableState';
 import { useAdsData } from '../../data';
+import { useNoPermission } from '../../../../auth/AuthProvider';
 import type { ExecOutcome } from '../agentStore';
 import { describeExec } from '../execText';
 import { bulkSelectable, offsetWarning, profitWarning, removeKeepsProfit } from '../../../../../shared/offsetText';
@@ -47,6 +48,8 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [showClosed, setShowClosed] = useState(false);
+  // Tài khoản không có quyền chạy thao tác → chỉ xem
+  const noExec = useNoPermission('execute');
 
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? null;
   const byId = new Map(proposals.map((p) => [p.id, p]));
@@ -97,7 +100,12 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
 
   return (
     <>
-      {selectable.length > 0 && (
+      {noExec && open.length > 0 && (
+        <p className="border-b border-line bg-canvas px-5 py-3 text-sm text-muted">
+          Tài khoản của bạn chỉ được xem — không duyệt / bỏ qua đề xuất được.
+        </p>
+      )}
+      {selectable.length > 0 && !noExec && (
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
@@ -152,7 +160,7 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
               item={p}
               ruleName={ruleName(p.ruleId)}
               selected={selected.has(p.id)}
-              busy={busy}
+              busy={busy || !!noExec}
               onToggle={() => toggle(p.id)}
               onApprove={() => setConfirmIds([p.id])}
               onReject={() => decide([p.id], 'reject')}

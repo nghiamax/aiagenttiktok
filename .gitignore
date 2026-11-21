@@ -7,3 +7,6 @@ server-data/
 # Thư viện + bản build — tạo lại bằng npm install / npm run build
 node_modules/
 dist/
+
+# Biến môi trường trên VPS (PUBLIC_URL, COOKIE_SECURE…) — không commit
+.env

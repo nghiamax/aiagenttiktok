@@ -1,0 +1,19 @@
+[Unit]
+Description=TikTok Shop Admin (web + API + AI Agent)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=app
+WorkingDirectory=/opt/tiktok-admin
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+# Hạn chế quyền: chỉ ghi được thư mục dữ liệu của app
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

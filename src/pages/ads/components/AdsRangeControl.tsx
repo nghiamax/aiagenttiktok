@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { useTikTok } from '../../../tiktok/TikTokProvider';
 import DateRangeSelect, { type DateRangePreset } from '../../../components/ui/DateRangeSelect';
 import { formatDmy } from '../../../lib/dates';
 import { lastDays, useAdsData, vnDate } from '../data';
@@ -21,6 +23,11 @@ export default function AdsRangeControl() {
   const { snapshot, range, setRange, status, source, error, loginRequired, reload } = useAdsData();
   const today = vnDate();
   const loading = status === 'loading';
+  // Server báo chưa kết nối TikTok → đọc lại trạng thái để dải "Mất kết nối" hiện ngay
+  const { refresh: refreshTikTok } = useTikTok();
+  useEffect(() => {
+    if (loginRequired) void refreshTikTok();
+  }, [loginRequired, refreshTikTok]);
 
   const presets: DateRangePreset[] = [
     { label: 'Hôm nay', range: { from: today, to: today } },
@@ -59,7 +66,7 @@ export default function AdsRangeControl() {
             <AlertTriangle className="size-3.5 shrink-0 text-danger" />
             <span>
               <span className="font-medium text-danger">
-                {loginRequired ? 'Chưa đăng nhập TikTok trên server (chạy npm run login)' : error}
+                {loginRequired ? 'Mất kết nối TikTok' : error}
               </span>
               {shownRange && ` · Đang hiện ${source === 'static' ? 'dữ liệu lưu sẵn' : 'số liệu'} ${shownRange}`}
             </span>

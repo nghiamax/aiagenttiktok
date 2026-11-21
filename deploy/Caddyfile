@@ -1,0 +1,11 @@
+# Caddy tự xin chứng chỉ HTTPS (Let's Encrypt) cho tên miền; chuyển mọi yêu cầu vào server Node
+<TEN_MIEN> {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

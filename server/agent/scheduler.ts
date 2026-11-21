@@ -1,4 +1,5 @@
 import { updateRuntime } from '../store.js';
+import { readToken } from '../tiktok/auth.js';
 import { runAgent, type RunSummary } from './engine.js';
 import { verifyPendingActions } from './executor.js';
 import { fillAfterMetrics } from './afterMetrics.js';
@@ -86,6 +87,8 @@ export function startScheduler() {
   const intervalMs = INTERVAL_MIN * 60_000;
   const tick = () => {
     nextRunAt = Date.now() + intervalMs;
+    // Chưa kết nối TikTok lần nào → bỏ qua lượt, không ghi lỗi (kết nối xong lượt sau tự chạy)
+    if (!readToken()?.access_token) return;
     runAgentOnce('schedule').catch(() => undefined);
   };
   nextRunAt = Date.now() + FIRST_RUN_DELAY_MS;

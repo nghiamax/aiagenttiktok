@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { RefreshCw, Undo2 } from 'lucide-react';
 import { formatDateTime } from '../../../../lib/format';
 import { useAdsData } from '../../data';
+import { useAuth } from '../../../../auth/AuthProvider';
 import type { ExecOutcome } from '../agentStore';
 import { canUndo, describeUndo, friendlyError } from '../execText';
 import { ACTOR_META, STATUS_META } from '../meta';
@@ -53,7 +54,16 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
           : Date.now() < readyAt
             ? `Có số ngày ${day1} lúc ~${formatDateTime(new Date(readyAt).toISOString())}`
             : `Đang lấy số ngày ${day1} từ TikTok…`;
-  const undoable = canUndo(item, all);
+  const canExec = useAuth().can('execute');
+  const undoable = canExec && canUndo(item, all);
+  // Người bấm: dòng có tên (sau khi có đăng nhập) → "Duyệt bởi …"; dòng cũ giữ nhãn cũ
+  const actorText = item.undoOf
+    ? `Hoàn tác${item.by ? ` · ${item.by.name}` : ''}`
+    : item.by
+      ? item.actor === 'approved'
+        ? `Duyệt bởi ${item.by.name}`
+        : `Thủ công · ${item.by.name}`
+      : actor.label;
 
   return (
     <li className={`${ITEM_GRID} transition-colors hover:bg-canvas/50`}>
@@ -61,7 +71,7 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
         <p className="text-sm font-semibold tabular-nums">{formatDateTime(item.executedAt)}</p>
         <p className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${actor.className}`}>
           <actor.icon className="size-3.5" />
-          {item.undoOf ? 'Hoàn tác' : actor.label}
+          {actorText}
         </p>
         {proposedAt && <p className="mt-0.5 text-xs text-muted">Đề xuất lúc {formatDateTime(proposedAt)}</p>}
       </div>
@@ -93,7 +103,7 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
           </p>
         )}
         <VerdictBadge ev={ev} />
-        {item.status === 'running' && (
+        {item.status === 'running' && canExec && (
           <button
             type="button"
             disabled={checking}

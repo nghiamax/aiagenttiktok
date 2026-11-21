@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { config } from './config.js';
+import { config, unsafeDirReason } from './config.js';
 import { startScheduler } from './agent/scheduler.js';
 import { adsRouter } from './routes/ads.js';
 import { agentRouter, settingsRouter } from './routes/agent.js';
@@ -9,6 +9,13 @@ import { authRouter } from './routes/auth.js';
 import { CALLBACK_PATH, tiktokCallback, tiktokRouter } from './routes/tiktok.js';
 import { requireAuth } from './auth/middleware.js';
 import { hasUsers } from './auth/users.js';
+
+// Hàng rào: thư mục chìa khoá / dữ liệu nằm trong thư mục web công khai → không chạy
+const unsafe = unsafeDirReason({ secretsDir: config.secretsDir, dataDir: config.dataDir });
+if (unsafe) {
+  console.error(`\n✖ KHÔNG KHỞI ĐỘNG: ${unsafe}\n`);
+  process.exit(1);
+}
 
 const app = express();
 app.disable('x-powered-by');

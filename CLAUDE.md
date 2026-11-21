@@ -218,6 +218,8 @@ Không hard-code mã màu trong component — dùng token.
 
 ### Server API (`server/`)
 
+**Triển khai**: hosting cPanel InterData (`tool.necomax.com`, Setup Node.js App / Passenger, startup `app.mjs` = tsx register + server) theo `deploy/HUONG-DAN-CPANEL.md`; VPS theo `deploy/HUONG-DAN.md` (`setup.sh`, Caddy, systemd). Code ở `~/tiktok-admin` NGOÀI thư mục web — sự cố 21/11/2026: up cả repo vào thư mục subdomain → `.secrets/tiktok-mcp.json` + `server-data/` tải công khai được (đã thu hồi token, xoá file). Hàng rào: `unsafeDirReason` (`config.ts`) → server từ chối chạy khi `secretsDir`/`dataDir` nằm trong `public_html|www|htdocs|httpdocs|wwwroot`. Nhiều tiến trình Passenger → `leaderLock.ts` (`server-data/scheduler.lock`, hết hạn 2 phút) chỉ 1 tiến trình chạy lịch Agent / kiểm tra / đo. Cron `/api/health` mỗi 5 phút giữ app không ngủ. Sau khi triển khai: curl kiểm tra file bí mật trả 404.
+
 Lộ trình: **1. Server + API lấy số liệu theo ngày (đã xong)** → **2. Ô chọn ngày trên web đổ dữ liệu từ API (đã xong)** → 3. **Đăng nhập người dùng web (đã xong 21/11)**, **Kết nối TikTok trên web (đã xong 21/11)**, còn: server phục vụ `dist/`, HTTPS → 4. Deploy VPS. Host cần ổ đĩa lâu dài + Node chạy liên tục (không dùng serverless).
 
 **Đăng nhập web** (Sếp chốt 21/11: 1 tài khoản bây giờ, thiết kế cho nhiều người dùng sau này; chưa có trang quản trị):

@@ -7,6 +7,19 @@ function list(value: string | undefined, fallback: string[]): string[] {
   return value ? value.split(',').map((s) => s.trim()).filter(Boolean) : fallback;
 }
 
+/** Thư mục web công khai của hosting — dữ liệu bí mật KHÔNG được nằm trong đây (sự cố 21/11/2026) */
+const PUBLIC_WEB_DIR = /[\\/](public_html|www|htdocs|httpdocs|wwwroot)([\\/]|$)/i;
+
+/** Lý do không an toàn nếu thư mục chìa khoá / dữ liệu nằm trong thư mục web công khai; null = an toàn */
+export function unsafeDirReason(dirs: { secretsDir: string; dataDir: string }): string | null {
+  for (const [name, dir] of Object.entries(dirs)) {
+    if (PUBLIC_WEB_DIR.test(dir)) {
+      return `${name} (${dir}) nằm trong thư mục web công khai — ai cũng tải được chìa khoá TikTok / tài khoản. Đặt code ngoài public_html (vd ~/tiktok-admin) hoặc đặt SECRETS_DIR / DATA_DIR ra ngoài.`;
+    }
+  }
+  return null;
+}
+
 /** Địa chỉ web công khai trên VPS (vd https://ads.tenmien.vn), không có dấu / cuối */
 const PUBLIC_URL = process.env.PUBLIC_URL?.replace(/\/+$/, '') || null;
 

@@ -1,5 +1,6 @@
 import { updateRuntime } from '../store.js';
 import { readToken } from '../tiktok/auth.js';
+import { holdSchedulerLock } from './leaderLock.js';
 import { runAgent, type RunSummary } from './engine.js';
 import { verifyPendingActions } from './executor.js';
 import { fillAfterMetrics } from './afterMetrics.js';
@@ -8,6 +9,7 @@ import { fillAfterMetrics } from './afterMetrics.js';
 const AFTER_FIRST_MS = 60_000;
 const AFTER_EVERY_MS = 15 * 60_000;
 async function afterTick() {
+  if (!holdSchedulerLock()) return;
   try {
     const n = await fillAfterMetrics();
     if (n) console.log(`[agent] đã cập nhật số liệu sau thao tác cho ${n} thao tác`);
@@ -20,7 +22,7 @@ async function afterTick() {
 const VERIFY_EVERY_MS = 10_000;
 let verifying = false;
 async function verifyTick() {
-  if (verifying) return;
+  if (verifying || !holdSchedulerLock()) return;
   verifying = true;
   try {
     const n = await verifyPendingActions();
@@ -89,6 +91,8 @@ export function startScheduler() {
     nextRunAt = Date.now() + intervalMs;
     // Chưa kết nối TikTok lần nào → bỏ qua lượt, không ghi lỗi (kết nối xong lượt sau tự chạy)
     if (!readToken()?.access_token) return;
+    // Tiến trình khác đang giữ lịch (cPanel có thể chạy nhiều tiến trình) → không quét trùng
+    if (!holdSchedulerLock()) return;
     runAgentOnce('schedule').catch(() => undefined);
   };
   nextRunAt = Date.now() + FIRST_RUN_DELAY_MS;

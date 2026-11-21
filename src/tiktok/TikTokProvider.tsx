@@ -51,7 +51,15 @@ export function TikTokProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const t = setInterval(() => void refresh(), POLL_MS);
-    return () => clearInterval(t);
+    // Quay lại tab (vd vừa cho phép TikTok ở trình duyệt / tab khác) → đọc lại ngay
+    const onVisible = () => document.visibilityState === 'visible' && void refresh();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [refresh]);
 
   const connect = useCallback(async () => {

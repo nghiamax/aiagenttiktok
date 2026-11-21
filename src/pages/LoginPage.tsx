@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, Eye, EyeOff, Loader2, LogIn, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, LogIn, Sparkles } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { APP_NAME, APP_TAGLINE } from '../config/navigation';
 import { ApiError } from '../lib/api';
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const { status, login } = useAuth();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));
+  const tiktok = params.get('tiktok');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -66,6 +67,20 @@ export default function LoginPage() {
             <h1 className="text-xl font-bold">Đăng nhập</h1>
             <p className="mt-1 text-sm text-muted">Dùng tài khoản được cấp để vào trang quản lý.</p>
           </div>
+
+          {/* TikTok trả về trình duyệt chưa đăng nhập web (Sếp copy link sang trình duyệt đang đăng nhập TikTok Ads) */}
+          {tiktok === 'connected' && (
+            <p className="flex items-start gap-2 rounded-xl bg-green-50 px-3 py-2 text-sm text-accent-green">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+              Đã kết nối TikTok. Quay lại trang đang mở để dùng, hoặc đăng nhập ở đây.
+            </p>
+          )}
+          {tiktok === 'error' && (
+            <p className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-danger">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              Chưa kết nối được TikTok: {params.get('reason') ?? 'lỗi không rõ'}
+            </p>
+          )}
 
           {status === 'offline' && (
             <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">

@@ -117,14 +117,15 @@ export async function startConnect(redirect: string, user: ActorRef, now = Date.
 /** Bước 2 (web): TikTok trả về → kiểm tra state (đúng người, còn hạn, dùng 1 lần) → đổi code lấy token */
 export async function finishConnect(
   q: { state?: string; code?: string; error?: string; error_description?: string },
-  userId: string,
+  /** Người đang đăng nhập web ở trình duyệt TikTok trả về; null = trình duyệt khác chưa đăng nhập web (copy link) — state đã gắn người bấm */
+  userId: string | null,
   now = Date.now(),
 ) {
   const p = q.state ? pending.get(q.state) : undefined;
   if (!p) throw new ConnectError('BAD_STATE', 'Phiên kết nối không hợp lệ hoặc đã dùng — bấm Kết nối TikTok lại');
   pending.delete(p.state); // dùng 1 lần
   if (p.expires <= now) throw new ConnectError('EXPIRED', 'Quá 10 phút chưa đăng nhập xong — bấm Kết nối TikTok lại');
-  if (p.userId !== userId) throw new ConnectError('WRONG_USER', 'Phiên kết nối không phải của tài khoản này');
+  if (userId !== null && p.userId !== userId) throw new ConnectError('WRONG_USER', 'Phiên kết nối không phải của tài khoản này');
   if (q.error) throw new ConnectError('DENIED', `TikTok từ chối: ${q.error_description || q.error}`);
   if (!q.code) throw new ConnectError('NO_CODE', 'TikTok không trả mã đăng nhập');
   try {

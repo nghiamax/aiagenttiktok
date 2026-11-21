@@ -113,11 +113,25 @@ describe('GET /api/tiktok/callback', () => {
     return tiktokCallback(req, res).then(() => location);
   }
 
-  it('chưa đăng nhập web / nhân viên → về trang báo lỗi, không lưu token', async () => {
+  it('trình duyệt đang đăng nhập nhân viên (người khác) → báo lỗi, không lưu token', async () => {
     const authUrl = await flow.startConnect(REDIRECT, SEP);
-    expect(await call(undefined, { state: stateOf(authUrl), code: 'x' })).toMatch(/^\/ads\?tiktok=error/);
     const nv = users.createUser({ username: 'nhanvien', password: 'matkhau123', role: 'staff' });
-    expect(await call(`sid=${sessions.createSession(nv.id)}`, { state: stateOf(authUrl), code: 'x' })).toMatch(/tiktok=error/);
+    expect(await call(`sid=${sessions.createSession(nv.id)}`, { state: stateOf(authUrl), code: 'x' })).toMatch(/^\/ads\?tiktok=error/);
+    expect(fs.existsSync(tokenFile())).toBe(false);
+  });
+
+  it('copy link sang trình duyệt chưa đăng nhập web + state đúng → lưu token (người bấm), về /login?tiktok=connected', async () => {
+    const authUrl = await flow.startConnect(REDIRECT, SEP);
+    const loc = await call(undefined, { state: stateOf(authUrl), code: 'abc' });
+    expect(loc).toBe('/login?tiktok=connected');
+    expect(tAuth.readToken()?.connectedBy).toEqual(SEP);
+    expect(loc).not.toContain(SECRET);
+  });
+
+  it('trình duyệt chưa đăng nhập web + state sai / đã dùng / hết hạn → không lưu, /login?tiktok=error', async () => {
+    expect(await call(undefined, { state: 'doan-bua', code: 'x' })).toMatch(/^\/login\?tiktok=error/);
+    const s = stateOf(await flow.startConnect(REDIRECT, SEP, Date.now() - flow.PENDING_TTL_MS - 1));
+    expect(await call(undefined, { state: s, code: 'x' })).toMatch(/^\/login\?tiktok=error/);
     expect(fs.existsSync(tokenFile())).toBe(false);
   });
 

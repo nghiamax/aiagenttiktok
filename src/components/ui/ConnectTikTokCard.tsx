@@ -32,6 +32,11 @@ export default function ConnectTikTokCard() {
           Kết nối TikTok
         </button>
       )}
+      {canConnect && (
+        <p className="mt-3 max-w-sm text-xs text-muted">
+          Trình duyệt này chưa đăng nhập TikTok Ads? Copy link trang TikTok sang trình duyệt đã đăng nhập để cho phép.
+        </p>
+      )}
       {error && <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-danger">{error}</p>}
     </Card>
   );

@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
-import { classifyCampaign, classifyProduct, classifyVideo } from '../../classify';
+import { buildTrendIndex } from '../../../../../shared/trend';
+import { useTrend } from '../../trend';
 import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
 import { useAdsData } from '../../data';
-import type { AdsSnapshot } from '../../types';
+import type { TrendSnaps } from '../../../../../shared/trend';
 import { LEVEL_OPTIONS, ruleLevel } from '../meta';
 import type { AgentRule } from '../types';
 import GroupCard from './GroupCard';
@@ -36,25 +37,24 @@ function validate(g: GroupDef): string[] {
   return errors;
 }
 
-/** Số đối tượng mỗi nhóm theo một bản thiết lập (dùng bản nháp để thấy ảnh hưởng trước khi lưu) */
-function countByGroup(snapshot: AdsSnapshot, days: number, level: GroupLevel, settings: AdsSettings): Map<string, number> {
-  const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
-  const map = new Map<string, number>();
-  const add = (id: string | undefined) => id && map.set(id, (map.get(id) ?? 0) + 1);
-  if (level === 'video') {
-    for (const v of snapshot.videos) add(classifyVideo(v, campaignById.get(v.campaignId), settings)?.action);
-  } else if (level === 'product') {
-    for (const p of snapshot.products) add(classifyProduct(p, campaignById.get(p.campaignId), settings)?.action);
-  } else {
-    for (const c of snapshot.campaigns) add(classifyCampaign(c, settings, days)?.action);
+/**
+ * Số đối tượng mỗi nhóm theo một bản thiết lập (bản nháp → thấy ảnh hưởng trước khi lưu).
+ * Đếm nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (giống cột Nhóm / Agent); unconfirmed = 7 ngày thuộc nhóm nhưng 14 ngày khác.
+ */
+function countByGroup(snaps: TrendSnaps, level: GroupLevel, settings: AdsSettings, confirmOn: boolean) {
+  const counts = new Map<string, number>();
+  const unconfirmed = new Map<string, number>();
+  for (const t of buildTrendIndex(level, snaps, settings, confirmOn).values()) {
+    if (t.group) counts.set(t.group, (counts.get(t.group) ?? 0) + 1);
+    else if (t.unconfirmed && t.g7) unconfirmed.set(t.g7, (unconfirmed.get(t.g7) ?? 0) + 1);
   }
-  return map;
+  return { counts, unconfirmed };
 }
 
 /** Tab "Nhóm": định nghĩa nhóm video / sản phẩm / chiến dịch (sửa trên bản nháp, bấm Lưu mới áp dụng) + ROI hoà vốn */
 export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakEven }: GroupsEditorProps) {
   const { settings, saveGroups, resetGroups } = useAdsSettings();
-  const { snapshot, days } = useAdsData();
+  const { snapshot } = useAdsData();
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   const uniqueProducts = useMemo(() => [...new Map(snapshot.products.map((p) => [p.id, p])).values()], [snapshot]);
   const saved = groupsOf(settings, level);
@@ -100,9 +100,10 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
     setTimeout(() => setSavedFlash(false), 2500);
   }
 
-  const counts = useMemo(
-    () => countByGroup(snapshot, days, level, { ...settings, [GROUP_KEY[level]]: draft }),
-    [snapshot, days, level, draft, settings],
+  const trends = useTrend();
+  const { counts, unconfirmed } = useMemo(
+    () => countByGroup(trends.snaps, level, { ...settings, [GROUP_KEY[level]]: draft }, trends.confirmOn),
+    [trends.snaps, trends.confirmOn, level, draft, settings],
   );
 
   const errors = new Map(draft.map((g) => [g.id, validate(g)]));
@@ -227,6 +228,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             group={g}
             level={level}
             count={counts.get(g.id) ?? 0}
+            unconfirmed={unconfirmed.get(g.id) ?? 0}
             usedByRules={rules.filter((r) => ruleLevel(r) === level && r.trigger === g.id).length}
             errors={errors.get(g.id) ?? []}
             canMoveUp={g.kind !== 'fallback' && i > 0}

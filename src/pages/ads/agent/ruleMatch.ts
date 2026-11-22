@@ -1,4 +1,11 @@
-import { findRuleTargets, ineligibleReason, ruleLevel } from '../../../../shared/agentMatch';
+import {
+  confirmRuleTargets,
+  findRuleTargets,
+  ineligibleReason,
+  ruleLevel,
+  UNCONFIRMED_REASON,
+  type ConfirmSnaps,
+} from '../../../../shared/agentMatch';
 import { LEVEL_UNIT } from '../groups';
 import type { AdsSettings } from '../../../../shared/settings';
 import type { AdsSnapshot } from '../types';
@@ -14,10 +21,18 @@ export interface RuleMatches {
 }
 
 /** Đối tượng đang thuộc nhóm của quy tắc theo số liệu đang xem (logic chung với Agent trên server) */
-export function matchRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot: AdsSnapshot): RuleMatches {
+export function matchRuleTargets(
+  rule: AgentRule,
+  settings: AdsSettings,
+  snapshot: AdsSnapshot,
+  /** Khung 14 / 30 ngày: đối tượng 14 ngày không cùng nhóm → "chưa xác nhận" (giống Agent) */
+  confirm: ConfirmSnaps = { d14: null, d30: null },
+): RuleMatches {
   const names: string[] = [];
   const skipped: Record<string, number> = {};
-  for (const t of findRuleTargets(rule, settings, snapshot)) {
+  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, snapshot), confirm);
+  if (unconfirmed.length > 0) skipped[UNCONFIRMED_REASON] = unconfirmed.length;
+  for (const t of kept) {
     const why = ineligibleReason(rule.actionType, rule.params, t);
     if (why) skipped[why] = (skipped[why] ?? 0) + 1;
     else names.push(t.name);

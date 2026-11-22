@@ -8,6 +8,7 @@ import { formatNumber } from '../../../../lib/format';
 import { groupDescription, LEVEL_UNIT } from '../../groups';
 import { findGroup, groupsOf, type AdsSettings } from '../../settings';
 import { useAdsData } from '../../data';
+import { useTrend } from '../../trend';
 import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
 import {
   actionText,
@@ -46,7 +47,9 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
   const [confirmRemove, setConfirmRemove] = useState(false);
   const typeMeta = actionTypeMeta(rule.actionType, rule.params);
   const level = ruleLevel(rule);
-  const matches = matchRuleTargets(rule, settings, snapshot);
+  // Đếm đúng như Agent: 7 ngày đến hôm qua + xác nhận 14 ngày (không theo ô chọn ngày)
+  const trends = useTrend();
+  const matches = matchRuleTargets(rule, settings, trends.snaps.d7, trends.confirm);
   const exampleTarget = campaignTargetRoi(snapshot, rule.campaignIds?.[0] ?? null);
   const unitName = LEVEL_UNIT[level];
   const group = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
@@ -119,7 +122,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             />
           )}
           <p className="text-xs text-muted" title={matches.names.join('\n')}>
-            Hiện có <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} khớp theo số liệu hiện tại
+            Hiện có <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} khớp (7 ngày{trends.confirmOn ? ', đã xác nhận 14 ngày' : ''})
             {skippedText(matches) && <span className="block">{skippedText(matches)}</span>}
           </p>
         </dd>

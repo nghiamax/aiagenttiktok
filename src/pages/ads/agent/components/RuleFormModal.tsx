@@ -8,6 +8,7 @@ import { defaultGroupId, groupDescription, LEVEL_UNIT } from '../../groups';
 import { groupsOf, type AdsSettings } from '../../settings';
 import type { VideoAction } from '../../types';
 import { useAdsData } from '../../data';
+import { useTrend } from '../../trend';
 import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
 import { ACTIONS_BY_LEVEL, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
 import { matchRuleTargets, skippedText } from '../ruleMatch';
@@ -77,7 +78,8 @@ export default function RuleFormModal({
     campaignIds: campaignId ? [campaignId] : null,
     productIds: level !== 'campaign' && productId ? [productId] : null,
   };
-  const matches = matchRuleTargets(preview, settings, snapshot);
+  const trends = useTrend();
+  const matches = matchRuleTargets(preview, settings, trends.snaps.d7, trends.confirm);
 
   function changeLevel(next: RuleLevel) {
     setLevel(next);

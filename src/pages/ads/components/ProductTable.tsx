@@ -5,12 +5,12 @@ import Pagination from '../../../components/ui/Pagination';
 import SegmentedControl from '../../../components/ui/SegmentedControl';
 import { formatNumber, formatVnd } from '../../../lib/format';
 import { usePagination } from '../../../lib/usePagination';
-import { classifyProduct } from '../classify';
 import { groupDescription } from '../groups';
 import { cpa, nextSort, sortByValue } from '../metrics';
 import { breakEvenOf, findGroup, type AdsSettings } from '../settings';
 import type { AdsProduct, Campaign, SortState } from '../types';
-import ActionBadge from './ActionBadge';
+import TrendGroupCell from './TrendGroupCell';
+import { useTrend } from '../trend';
 import EmptyTableState from './EmptyTableState';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
@@ -44,20 +44,25 @@ export default function ProductTable({
 }: ProductTableProps) {
   const [sort, setSort] = useState<SortState<ProductSortKey>>({ key: 'cost', dir: 'desc' });
 
-  const rows = products.map((p) => ({
-    p,
-    cpa: cpa(p.cost, p.orders),
-    cls: classifyProduct(p, campaignById.get(p.campaignId), settings),
-  }));
-  const filtered = filter === 'all' ? rows : rows.filter((r) => r.cls?.action === filter);
+  // Nhóm theo 7 · 14 · 30 ngày đến hôm qua (đã xác nhận = 7 và 14 ngày cùng nhóm), không đổi theo ô chọn ngày
+  const trends = useTrend();
+  const rows = products.map((p) => ({ p, cpa: cpa(p.cost, p.orders), trend: trends.product(p) }));
+  const filtered =
+    filter === 'all'
+      ? rows
+      : filter === 'unconfirmed'
+        ? rows.filter((r) => r.trend?.unconfirmed)
+        : rows.filter((r) => r.trend?.group === filter);
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
   // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
   const counts = new Map<string, number>();
-  for (const r of rows) if (r.cls) counts.set(r.cls.action, (counts.get(r.cls.action) ?? 0) + 1);
+  for (const r of rows) if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
+  const unconfirmedCount = rows.filter((r) => r.trend?.unconfirmed).length;
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     ...settings.productGroups.map((g) => ({ value: g.id, label: `${g.name} (${counts.get(g.id) ?? 0})` })),
+    ...(unconfirmedCount > 0 ? [{ value: 'unconfirmed', label: `Chưa xác nhận (${unconfirmedCount})` }] : []),
   ];
   const sorted = sortByValue(filtered, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
@@ -102,7 +107,7 @@ export default function ProductTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {pageItems.map(({ p, cpa: cpaValue, cls }) => {
+            {pageItems.map(({ p, cpa: cpaValue, trend }) => {
               const campaign = campaignById.get(p.campaignId);
               return (
                 <tr key={`${p.campaignId}-${p.id}`} className="transition-colors hover:bg-canvas">
@@ -164,7 +169,7 @@ export default function ProductTable({
                     })()}
                   </td>
                   <td className={TD}>
-                    <ActionBadge action={cls?.action ?? null} reason={cls?.reason} level="product" />
+                    <TrendGroupCell level="product" trend={trend} />
                   </td>
                 </tr>
               );

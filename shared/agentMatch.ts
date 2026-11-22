@@ -1,7 +1,8 @@
 import type { AdsSnapshot, AdsVideo, VideoStatus } from './adsSnapshot.js';
 import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
-import { breakEvenOf, type AdsSettings } from './settings.js';
+import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
+import type { WindowStat } from './trend.js';
 import { effectiveStatus } from './videoStatus.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
@@ -211,3 +212,74 @@ export function collectVideoTargets(
   }
   return out;
 }
+
+/* ───────── Xác nhận bằng khung 14 ngày (+ 30 ngày để giải thích) — Sếp chốt 22/11/2026 ───────── */
+
+export interface ConfirmSnaps {
+  /** 14 ngày đến hôm qua; null = chưa có (đang tải / lỗi) → không lọc */
+  d14: AdsSnapshot | null;
+  /** 30 ngày đến hôm qua — chỉ để ghi độ tin + số liệu, không quyết định */
+  d30: AdsSnapshot | null;
+}
+
+/** Đối tượng đã qua xác nhận, kèm số 14 / 30 ngày */
+export interface ConfirmedTarget extends RuleTarget {
+  windows?: { d14: WindowStat | null; d30: WindowStat | null };
+  /** 30 ngày cũng thuộc nhóm này ("kéo dài") */
+  long?: boolean;
+}
+
+/** Khoá đối tượng của quy tắc: video gộp theo (chiến dịch, video) như findRuleTargets */
+export function targetKey(level: RuleLevel, t: AgentTarget): string {
+  return level === 'video' ? `${t.campaignId}/${t.videoId}` : level === 'product' ? `${t.campaignId}/${t.productId}` : t.campaignId;
+}
+
+/** Số liệu của đối tượng trong snapshot (video = cộng mọi dòng sản phẩm của video trong chiến dịch); không có → null */
+export function metricsOf(t: AgentTarget, snapshot: AdsSnapshot): WindowStat | null {
+  const rows: { cost: number | null; revenue: number | null; orders: number | null }[] = t.videoId
+    ? snapshot.videos.filter((v) => v.campaignId === t.campaignId && v.id === t.videoId && v.contentType !== 'product_card')
+    : t.productId
+      ? snapshot.products.filter((p) => p.campaignId === t.campaignId && p.id === t.productId)
+      : snapshot.campaigns.filter((c) => c.id === t.campaignId);
+  if (rows.length === 0) return null;
+  const sum = (k: 'cost' | 'revenue' | 'orders') => rows.reduce((s, r) => s + (r[k] ?? 0), 0);
+  const cost = sum('cost');
+  const revenue = sum('revenue');
+  return { cost, revenue, orders: sum('orders'), roi: cost > 0 ? revenue / cost : null };
+}
+
+/**
+ * Giữ đối tượng mà khung 14 ngày cũng thuộc nhóm của quy tắc; còn lại = "chưa xác nhận".
+ * Nhóm theo trạng thái TikTok (Cần ủy quyền) hoặc chưa có snapshot 14 ngày → giữ hết (như cũ).
+ */
+export function confirmRuleTargets(
+  rule: AgentRule,
+  settings: AdsSettings,
+  targets: RuleTarget[],
+  snaps: ConfirmSnaps,
+): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[] } {
+  const level = ruleLevel(rule);
+  const withWindows = (t: RuleTarget, long?: boolean): ConfirmedTarget => ({
+    ...t,
+    windows: {
+      d14: snaps.d14 ? metricsOf(t.target, snaps.d14) : null,
+      d30: snaps.d30 ? metricsOf(t.target, snaps.d30) : null,
+    },
+    ...(long !== undefined && { long }),
+  });
+  const exempt = !snaps.d14 || !rule.trigger || findGroup(settings, rule.trigger, level)?.kind === 'platform';
+  if (exempt) return { kept: targets.map((t) => withWindows(t)), unconfirmed: [] };
+  const in14 = new Set(findRuleTargets(rule, settings, snaps.d14!).map((t) => targetKey(level, t.target)));
+  const in30 = snaps.d30 ? new Set(findRuleTargets(rule, settings, snaps.d30).map((t) => targetKey(level, t.target))) : null;
+  const kept: ConfirmedTarget[] = [];
+  const unconfirmed: RuleTarget[] = [];
+  for (const t of targets) {
+    const k = targetKey(level, t.target);
+    if (in14.has(k)) kept.push(withWindows(t, in30 ? in30.has(k) : undefined));
+    else unconfirmed.push(t);
+  }
+  return { kept, unconfirmed };
+}
+
+/** Lý do bỏ qua khi khung 14 ngày không cùng nhóm */
+export const UNCONFIRMED_REASON = 'Chưa xác nhận — 14 ngày không cùng nhóm';

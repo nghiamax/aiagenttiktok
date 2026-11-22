@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import staticSnapshot from '../../data/ads-snapshot.json';
 import type { AdsSnapshot } from './types';
 import { annotateCrossProduct } from '../../../shared/videoStatus';
+import type { TrendSnaps } from '../../../shared/trend';
 import { notifyAuthRequired } from '../../lib/api';
 
 export interface DateRange {
@@ -31,6 +32,8 @@ interface AdsDataValue {
   days: number;
   /** Số liệu chuẩn "7 ngày đến hôm qua" — cùng khoảng Agent xét, dùng cho Gợi ý (không đổi theo ngày đang xem) */
   baseline: AdsSnapshot;
+  /** 7 · 14 · 30 ngày đến hôm qua — xếp nhóm đã xác nhận (14 / 30 null khi đang tải / lỗi) */
+  trendSnaps: TrendSnaps;
 }
 
 const STATIC = annotateCrossProduct(staticSnapshot as AdsSnapshot);
@@ -154,20 +157,14 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
     };
   }, [range.from, range.to, reloadKey]);
 
-  // Số liệu chuẩn 7 ngày đến hôm qua: trùng khoảng đang xem thì dùng luôn, không thì tải riêng (server có cache)
-  const base = lastDays(7);
-  const viewingBase = range.from === base.from && range.to === base.to;
-  const [baselineSnap, setBaselineSnap] = useState<AdsSnapshot | null>(null);
-  useEffect(() => {
-    if (viewingBase) return;
-    const controller = new AbortController();
-    fetch(`/api/ads/snapshot?${new URLSearchParams({ from: base.from, to: base.to })}`, { signal: controller.signal })
-      .then((res) => (res.ok ? (res.json() as Promise<{ snapshot?: AdsSnapshot }>) : null))
-      .then((body) => body?.snapshot && setBaselineSnap(body.snapshot))
-      .catch(() => undefined); // lỗi → dùng snapshot đang xem
-    return () => controller.abort();
-  }, [viewingBase, base.from, base.to, reloadKey]);
-  const baseline = viewingBase ? snapshot : (baselineSnap ?? snapshot);
+  // Số liệu cố định 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
+  // không thì tải nền (server có cache). Dùng cho Gợi ý, nhóm đã xác nhận ở các bảng / hộp Tổng quan
+  const live = source === 'live' && status === 'ready' ? snapshot : null;
+  const d7 = useFixedSnapshot(7, range, live, reloadKey);
+  const d14 = useFixedSnapshot(14, range, live, reloadKey);
+  const d30 = useFixedSnapshot(30, range, live, reloadKey);
+  const baseline = d7 ?? snapshot;
+  const trendSnaps = useMemo<TrendSnaps>(() => ({ d7: baseline, d14, d30 }), [baseline, d14, d30]);
 
   const value = useMemo<AdsDataValue>(
     () => ({
@@ -181,11 +178,33 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
       reload,
       days: daysOf(snapshot.range),
       baseline,
+      trendSnaps,
     }),
-    [snapshot, range, setRange, status, source, error, loginRequired, reload, baseline],
+    [snapshot, range, setRange, status, source, error, loginRequired, reload, baseline, trendSnaps],
   );
 
   return <AdsDataContext.Provider value={value}>{children}</AdsDataContext.Provider>;
+}
+
+/**
+ * Snapshot n ngày đến hôm qua. Khoảng đang xem trùng → dùng snapshot đang xem (đã tải xong); không thì tải nền.
+ * null = chưa có (đang tải / lỗi) — nơi dùng tự quay về cách cũ.
+ */
+function useFixedSnapshot(n: number, viewing: DateRange, live: AdsSnapshot | null, reloadKey: number): AdsSnapshot | null {
+  const want = lastDays(n);
+  const same = viewing.from === want.from && viewing.to === want.to;
+  const [snap, setSnap] = useState<AdsSnapshot | null>(null);
+  useEffect(() => {
+    if (same) return;
+    const controller = new AbortController();
+    fetch(`/api/ads/snapshot?${new URLSearchParams({ from: want.from, to: want.to })}`, { signal: controller.signal })
+      .then((res) => (res.ok ? (res.json() as Promise<{ snapshot?: AdsSnapshot }>) : null))
+      .then((body) => body?.snapshot && setSnap(annotateCrossProduct(body.snapshot)))
+      .catch(() => undefined);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [same, want.from, want.to, reloadKey]);
+  return same ? (live ?? snap) : snap;
 }
 
 export function useAdsData(): AdsDataValue {

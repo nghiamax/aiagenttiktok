@@ -5,6 +5,7 @@ import { offsetBadge, offsetTotal } from '../../../../../shared/offsetText';
 import type { AgentProposal } from '../types';
 import { ActionCell, ITEM_GRID, TargetCell } from './AgentBits';
 import MetricWindowBox from './MetricWindowBox';
+import WindowsTable from './WindowsTable';
 import OffsetNotice from './OffsetNotice';
 
 interface ProposalItemProps {
@@ -71,11 +72,23 @@ export default function ProposalItem({ item, ruleName, selected, busy, onToggle,
       <TargetCell target={item.target} />
 
       <div className="space-y-2">
-        <MetricWindowBox
-          title="Lúc đề xuất"
-          window={item.before}
-          extra={offset ? `Tổng video (gồm đơn bù): ${offsetTotal(offset)} · ${formatNumber(offset.total.orders)} đơn` : undefined}
-        />
+        {item.windows ? (
+          // Đề xuất có số 14 / 30 ngày (sau khi bật xác nhận 22/11) → bảng 3 khung
+          <>
+            <WindowsTable before={item.before} windows={item.windows} long={item.long} />
+            {offset && (
+              <p className="text-xs tabular-nums text-muted">
+                Tổng video (gồm đơn bù, 7 ngày): {offsetTotal(offset)} · {formatNumber(offset.total.orders)} đơn
+              </p>
+            )}
+          </>
+        ) : (
+          <MetricWindowBox
+            title="Lúc đề xuất"
+            window={item.before}
+            extra={offset ? `Tổng video (gồm đơn bù): ${offsetTotal(offset)} · ${formatNumber(offset.total.orders)} đơn` : undefined}
+          />
+        )}
         <p className="text-sm">
           <span className="font-semibold">Vì sao: </span>
           <span className="text-muted">{item.reason}</span>

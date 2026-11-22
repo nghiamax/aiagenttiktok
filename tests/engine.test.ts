@@ -9,11 +9,13 @@ const mock = vi.hoisted(() => ({
   config: null as unknown as AgentConfig,
   runtime: null as unknown as AgentRuntime,
   settings: null as unknown,
+  /** Snapshot riêng theo ngày bắt đầu (khung 14 / 30 ngày); thiếu → dùng snapshot chung */
+  byFrom: {} as Record<string, AdsSnapshot>,
 }));
 
 vi.mock('../server/ads/cache', () => ({
   todayVN: () => '2026-11-18',
-  getSnapshot: vi.fn(async () => ({ snapshot: mock.snapshot, cached: true })),
+  getSnapshot: vi.fn(async (r: { from: string }) => ({ snapshot: mock.byFrom[r.from] ?? mock.snapshot, cached: true })),
 }));
 vi.mock('../server/store', () => ({
   getAgentConfig: () => mock.config,
@@ -46,6 +48,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-18T05:00:00Z')); // 12:00 giờ VN
   mock.snapshot = shop();
+  mock.byFrom = {};
   mock.settings = settingsWith();
   mock.runtime = { lastRunAt: null, lastRunError: null, proposals: [], actions: [] };
   mock.config = {
@@ -188,9 +191,61 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
   });
 
   it('Quét ngay (fresh) lấy số liệu mới, lịch tự động dùng cache', async () => {
+    vi.mocked(cache.getSnapshot).mockClear();
     await runAgent({ fresh: true });
-    expect(cache.getSnapshot).toHaveBeenLastCalledWith({ from: '2026-11-11', to: '2026-11-17' }, true);
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-11', to: '2026-11-17' }, true);
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-04', to: '2026-11-17' }, true); // 14 ngày
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-10-19', to: '2026-11-17' }, false); // 30 ngày dùng cache
+    vi.mocked(cache.getSnapshot).mockClear();
     await runAgent();
-    expect(cache.getSnapshot).toHaveBeenLastCalledWith({ from: '2026-11-11', to: '2026-11-17' }, false);
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-11', to: '2026-11-17' }, false);
+    expect(cache.getSnapshot).not.toHaveBeenCalledWith(expect.anything(), true);
+  });
+
+  describe('xác nhận bằng khung 14 ngày (Sếp chốt 22/11)', () => {
+    /** 14 ngày: v1 vẫn lỗ (chi lớn, 0 đơn), v2 đã có lời → v2 chỉ lỗ trong 7 ngày */
+    const d14 = () =>
+      snapshot({
+        range: { from: '2026-11-04', to: '2026-11-17' },
+        campaigns: [campaign({ id: 'c1', targetRoi: 5, budget: 1_000_000 })],
+        products: [product({ id: 'p1', campaignId: 'c1' })],
+        videos: [
+          video({ id: 'v1', campaignId: 'c1', productId: 'p1', cost: 400_000 }),
+          video({ id: 'v2', campaignId: 'c1', productId: 'p1', cost: 300_000, revenue: 3_000_000, orders: 6 }),
+          video({ id: 'v3', campaignId: 'c1', productId: 'p1', cost: 250_000 }),
+          video({ id: 'v5', campaignId: 'c1', productId: 'p1', status: 'authorization_needed', revenue: 900_000, orders: 2 }),
+        ],
+      });
+
+    it('7 + 14 ngày cùng Cắt lỗ → đề xuất (kèm số 14 / 30 ngày); chỉ lỗ 7 ngày → bỏ qua "chưa xác nhận"', async () => {
+      mock.byFrom['2026-11-04'] = d14();
+      mock.byFrom['2026-10-19'] = { ...d14(), range: { from: '2026-10-19', to: '2026-11-17' } };
+      const s = await runAgent();
+      const ids = mock.runtime.proposals.map((p) => p.target.videoId).sort();
+      expect(ids).toEqual(['v1', 'v3']);
+      expect(s.skippedTargets['Chưa xác nhận — 14 ngày không cùng nhóm']).toBe(1);
+      const p1 = mock.runtime.proposals.find((p) => p.target.videoId === 'v1')!;
+      expect(p1.windows?.d14).toMatchObject({ cost: 400_000, orders: 0 });
+      expect(p1.long).toBe(true); // 30 ngày cũng Cắt lỗ
+      // Cần ủy quyền theo trạng thái TikTok → không cần xác nhận
+      expect(s.reminders).toBe(1);
+    });
+
+    it('Sếp tắt xác nhận → chỉ xét 7 ngày như cũ', async () => {
+      mock.byFrom['2026-11-04'] = d14();
+      mock.config.guardrails = { ...mock.config.guardrails, confirmWindow: false };
+      const s = await runAgent();
+      expect(s.proposals).toBe(3);
+    });
+
+    it('đề xuất đang chờ: 14 ngày không còn cùng nhóm → tự huỷ (outdated) kèm lý do', async () => {
+      await runAgent(); // tạo 3 đề xuất (14 ngày = chung snapshot → khớp)
+      mock.byFrom['2026-11-04'] = d14();
+      const s = await runAgent();
+      const v2 = mock.runtime.proposals.find((p) => p.target.videoId === 'v2')!;
+      expect(v2.status).toBe('outdated');
+      expect(v2.note).toMatch(/Chưa xác nhận/);
+      expect(s.outdated).toBe(1);
+    });
   });
 });

@@ -1,10 +1,19 @@
 import crypto from 'node:crypto';
-import { findRuleTargets, ineligibleReason, type RuleTarget } from '../../shared/agentMatch.js';
+import {
+  confirmRuleTargets,
+  findRuleTargets,
+  ineligibleReason,
+  UNCONFIRMED_REASON,
+  type ConfirmedTarget,
+  type ConfirmSnaps,
+  type RuleTarget,
+} from '../../shared/agentMatch.js';
 import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
 import type {
   AgentActionLog,
   AgentActionType,
   AgentConfig,
+  AgentGuardrails,
   AgentProposal,
   AgentRuntime,
   AgentTarget,
@@ -89,7 +98,9 @@ export function recheckProposal(
   cfg: AgentConfig,
   settings: AdsSettings,
   snapshot: AdsSnapshot,
-): { ok: true; match: RuleTarget } | { ok: false; reason: string } {
+  /** Khung 14 / 30 ngày để xác nhận (thiếu = chỉ xét 1 khung) */
+  confirm: ConfirmSnaps = { d14: null, d30: null },
+): { ok: true; match: ConfirmedTarget } | { ok: false; reason: string } {
   const rule = cfg.rules.find((r) => r.id === p.ruleId);
   if (!rule) return { ok: false, reason: 'Quy tắc đã bị xoá' };
   if (rule.mode === 'off') return { ok: false, reason: 'Quy tắc đã tắt' };
@@ -100,7 +111,31 @@ export function recheckProposal(
   if (!match) return { ok: false, reason: `${range}:${currentText(p.target, snapshot)} — không còn khớp quy tắc «${rule.name}»` };
   const why = ineligibleReason(rule.actionType, rule.params, match);
   if (why) return { ok: false, reason: why };
-  return { ok: true, match };
+  const { kept } = confirmRuleTargets(rule, settings, [match], confirm);
+  if (kept.length === 0) return { ok: false, reason: `${UNCONFIRMED_REASON} — chưa chắc chắn, không nên làm lúc này` };
+  return { ok: true, match: kept[0] };
+}
+
+/**
+ * Snapshot 14 + 30 ngày đến hôm qua để xác nhận (cache server; Quét ngay lấy mới khung 14 ngày).
+ * Sếp tắt xác nhận / lỗi đọc → null (chỉ xét 1 khung như cũ).
+ */
+export async function loadConfirmSnaps(guardrails: AgentGuardrails, fresh = false): Promise<ConfirmSnaps> {
+  if (guardrails.confirmWindow === false) return { d14: null, d30: null };
+  const read = (days: number, f: boolean) =>
+    getSnapshot({ from: vnDate(days), to: vnDate(1) }, f)
+      .then((r) => r.snapshot)
+      .catch(() => null);
+  const [d14, d30] = await Promise.all([read(14, fresh), read(30, false)]);
+  return { d14, d30 };
+}
+
+/** Ghi số 14 / 30 ngày + "kéo dài" vào đề xuất */
+function applyWindows(p: AgentProposal, t: ConfirmedTarget) {
+  if (t.windows) p.windows = t.windows;
+  else delete p.windows;
+  if (t.long !== undefined) p.long = t.long;
+  else delete p.long;
 }
 
 /** fresh = lấy số liệu mới từ TikTok (bỏ qua cache) — dùng cho "Quét ngay" */
@@ -118,6 +153,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
   const range = { from: vnDate(lookback), to: vnDate(1) };
   summary.range = range;
   const { snapshot } = await getSnapshot(range, opts?.fresh === true);
+  const confirm = await loadConfirmSnaps(guardrails, opts?.fresh === true);
   const settings = getSettings();
   const now = Date.now();
 
@@ -133,12 +169,13 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
     // Xét lại đề xuất đang chờ theo số liệu mới: không còn khớp → tự huỷ; còn khớp → cập nhật số
     for (const p of rt.proposals) {
       if (p.status !== 'pending') continue;
-      const r = recheckProposal(p, cfg, settings, snapshot);
+      const r = recheckProposal(p, cfg, settings, snapshot, confirm);
       if (r.ok) {
         p.before = windowOf(r.match, range);
         p.reason = r.match.reason;
         if (r.match.offset) p.offset = r.match.offset;
         else delete p.offset;
+        applyWindows(p, r.match);
       } else {
         p.status = 'outdated';
         p.decidedAt = ranAt;
@@ -177,7 +214,10 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       if (rule.mode === 'off' || !rule.trigger) continue;
       const cooldownMs = (rule.cooldownHours ?? guardrails.cooldownHours) * HOUR;
 
-      for (const t of findRuleTargets(rule, settings, snapshot)) {
+      // Chỉ đối tượng đã xác nhận bằng khung 14 ngày (Sếp chốt 22/11); còn lại ghi "bỏ qua"
+      const { kept, unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, snapshot), confirm);
+      unconfirmed.forEach(() => skip(UNCONFIRMED_REASON));
+      for (const t of kept) {
         const k = keyOf(rule.actionType, t.target);
         if (pendingKeys.has(k)) {
           skip('Đã có đề xuất đang chờ');
@@ -245,6 +285,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           reason: t.reason,
           before: windowOf(t, range),
           ...(t.offset && { offset: t.offset }),
+          ...(t.windows && { windows: t.windows }),
+          ...(t.long !== undefined && { long: t.long }),
           status: 'pending',
           ruleMode: rule.mode,
           ...(rule.mode === 'auto' && {

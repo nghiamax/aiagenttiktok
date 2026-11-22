@@ -9,10 +9,12 @@ interface ActionBadgeProps {
   reason?: string;
   /** Cấp của nhóm (mặc định video) */
   level?: GroupLevel;
+  /** Nhóm 7 ngày chưa được khung 14 ngày xác nhận → badge viền đứt, mờ, có dấu ? */
+  unconfirmed?: boolean;
 }
 
 /** Badge nhóm video / sản phẩm / chiến dịch (tên, màu, icon lấy từ định nghĩa nhóm Sếp đặt) */
-export default function ActionBadge({ action, reason, level = 'video' }: ActionBadgeProps) {
+export default function ActionBadge({ action, reason, level = 'video', unconfirmed }: ActionBadgeProps) {
   const { settings } = useAdsSettings();
   if (!action) return <span className="text-muted">--</span>;
 
@@ -33,10 +35,13 @@ export default function ActionBadge({ action, reason, level = 'video' }: ActionB
   return (
     <span
       title={reason}
-      className={`inline-flex cursor-help items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${meta.tone}`}
+      className={`inline-flex cursor-help items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+        unconfirmed ? 'border border-dashed border-muted/40 bg-white text-muted' : meta.tone
+      }`}
     >
       <meta.icon className="size-3.5" />
       {meta.label}
+      {unconfirmed && '?'}
     </span>
   );
 }

@@ -22,6 +22,10 @@ export interface ActionSummary {
   skipped?: number;
   /** Video Cắt lỗ mà tổng video (gồm đơn bù ở sản phẩm khác) vẫn có lời — đã nằm trong count */
   keepsProfit?: number;
+  /** Đã xác nhận và 30 ngày cũng thuộc nhóm ("kéo dài") — đã nằm trong count */
+  long?: number;
+  /** 7 ngày thuộc nhóm này nhưng 14 ngày khác nhóm — không tính vào count */
+  unconfirmed?: number;
 }
 
 /** Số đối tượng / chi phí / doanh thu theo ID nhóm, cho từng cấp */
@@ -170,6 +174,11 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     {s.rows > s.count && (
                       <span className="block text-xs text-muted">{formatNumber(s.rows)} dòng theo sản phẩm</span>
                     )}
+                    {!!s.long && s.count > 0 && (
+                      <span className="block text-xs text-muted" title="7, 14 và 30 ngày đều thuộc nhóm này">
+                        trong đó {formatNumber(s.long)} kéo dài 30 ngày
+                      </span>
+                    )}
                     {!!s.keepsProfit && (
                       <span className="block text-xs font-medium text-amber-700">
                         trong đó {formatNumber(s.keepsProfit)} {unit} tổng vẫn có lời (có đơn bù)
@@ -178,6 +187,11 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     {!!s.skipped && (
                       <span className="block text-xs text-muted">
                         +{formatNumber(s.skipped)} {level === 'campaign' ? 'đã tắt' : level === 'product' ? 'thuộc chiến dịch tắt' : 'đã gỡ / thuộc chiến dịch tắt'} (không tính)
+                      </span>
+                    )}
+                    {!!s.unconfirmed && (
+                      <span className="block text-xs text-muted" title="7 ngày thuộc nhóm này nhưng 14 ngày khác nhóm — chưa chắc chắn, Agent không đề xuất">
+                        +{formatNumber(s.unconfirmed)} chưa xác nhận (không tính)
                       </span>
                     )}
                     {needsBreakEven ? (

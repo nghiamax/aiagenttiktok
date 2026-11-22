@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { buildSuggestions, findMatchingRule, type Suggestion } from '../../../../shared/suggest';
 import { useAdsData } from '../data';
+import { useTrend } from '../trend';
 import { useAdsSettings } from '../settings';
 import { useAgentStore } from './agentStore';
 
@@ -29,13 +30,15 @@ function writeDismissed(map: Record<string, number>) {
 export function useSuggestions() {
   // Gợi ý luôn xét 7 ngày đến hôm qua (giống Agent), không theo khoảng ngày đang xem
   const { baseline: snapshot } = useAdsData();
+  // Xác nhận bằng 14 ngày như Agent (tắt ở Giới hạn an toàn / chưa tải → chỉ xét 7 ngày)
+  const confirm14 = useTrend().confirm.d14;
   const { settings } = useAdsSettings();
   const { state, addRule, updateRule, updateGuardrails } = useAgentStore();
   const [dismissed, setDismissed] = useState<Record<string, number>>(readDismissed);
 
   const all = useMemo(
-    () => buildSuggestions(snapshot, settings, state.rules, state.guardrails),
-    [snapshot, settings, state.rules, state.guardrails],
+    () => buildSuggestions(snapshot, settings, state.rules, state.guardrails, confirm14),
+    [snapshot, settings, state.rules, state.guardrails, confirm14],
   );
   const visible = all.filter((s) => !(dismissed[s.id] != null && s.count <= dismissed[s.id]));
   const open = visible.filter((s) => !s.done);

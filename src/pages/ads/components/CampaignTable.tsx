@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { formatNumber, formatVnd } from '../../../lib/format';
-import { classifyCampaign, contextForCampaign } from '../classify';
+import { contextForCampaign } from '../classify';
 import { nextSort, sortByValue } from '../metrics';
 import { useAdsData } from '../data';
 import { findGroup, useAdsSettings } from '../settings';
 import type { Campaign, CampaignFilter, SortState } from '../types';
-import ActionBadge from './ActionBadge';
+import TrendGroupCell from './TrendGroupCell';
+import { useTrend } from '../trend';
 import CampaignFilterBar from './CampaignFilterBar';
 import EmptyTableState from './EmptyTableState';
 import SortableHeader from './SortableHeader';
@@ -51,11 +52,13 @@ export default function CampaignTable({
   const { settings } = useAdsSettings();
   const { days } = useAdsData();
   const activeGroup = groupId ? findGroup(settings, groupId, 'campaign') : undefined;
+  // Nhóm theo 7 · 14 · 30 ngày đến hôm qua (đã xác nhận = 7 và 14 ngày cùng nhóm)
+  const trends = useTrend();
 
   const rows = campaigns
     .filter((c) => matchesStatus(c, filter))
-    .map((c) => ({ c, cls: classifyCampaign(c, settings, days), budgetUse: contextForCampaign(c, days).budgetUse }))
-    .filter((r) => !activeGroup || r.cls?.action === activeGroup.id);
+    .map((c) => ({ c, trend: trends.campaign(c), budgetUse: contextForCampaign(c, days).budgetUse }))
+    .filter((r) => !activeGroup || r.trend?.group === activeGroup.id);
   const sorted = sortByValue(rows, (r) => (sort.key === 'budgetUse' ? r.budgetUse : r.c[sort.key]), sort.dir);
 
   const counts: Record<CampaignFilter, number> = {
@@ -94,7 +97,7 @@ export default function CampaignTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {sorted.map(({ c, cls, budgetUse }) => {
+            {sorted.map(({ c, trend, budgetUse }) => {
               const noSpend = !c.cost && !c.orders && !c.revenue;
               const belowTarget = c.roi != null && c.targetRoi != null && c.roi < c.targetRoi;
               return (
@@ -117,7 +120,7 @@ export default function CampaignTable({
                     {noSpend ? (
                       <span className="whitespace-nowrap text-xs text-muted">Chưa chi tiêu</span>
                     ) : (
-                      <ActionBadge action={cls?.action ?? null} reason={cls?.reason} level="campaign" />
+                      <TrendGroupCell level="campaign" trend={trend} />
                     )}
                   </td>
                   <td className={`${TD_NUM} text-muted`}>{formatNumber(c.selectedVideos)}</td>

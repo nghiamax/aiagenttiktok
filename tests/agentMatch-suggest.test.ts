@@ -38,6 +38,26 @@ describe('findRuleTargets (Agent và Gợi ý dùng chung)', () => {
   });
 });
 
+describe('buildSuggestions — xác nhận bằng 14 ngày (Sếp chốt 22/11)', () => {
+  it('video lỗ 7 ngày nhưng 14 ngày có lời → không gợi ý gỡ, đếm vào "chưa xác nhận"', () => {
+    const d14 = snapshot({
+      ...snap,
+      range: { from: '2026-11-04', to: '2026-11-17' },
+      videos: [
+        video({ id: 'v1', campaignId: 'c1', productId: 'p1', cost: 400_000 }),
+        video({ id: 'v1', campaignId: 'c1', productId: 'p2', cost: 300_000 }),
+        video({ id: 'v2', campaignId: 'c2', productId: 'p3', cost: 500_000, revenue: 5_000_000, orders: 10 }),
+      ],
+    });
+    const g = buildSuggestions(snap, S, [], GUARDRAILS, d14).find((x) => x.id === 'video-cut');
+    expect(g?.count).toBe(1);
+    expect(g?.examples.map((e) => e.target.videoId)).toEqual(['v1']);
+    expect(g?.unconfirmed).toBe(1);
+    // Không có khung 14 ngày → như cũ
+    expect(buildSuggestions(snap, S, [], GUARDRAILS, null).find((x) => x.id === 'video-cut')?.count).toBe(2);
+  });
+});
+
 describe('buildSuggestions', () => {
   it('gợi ý Gỡ video lỗ, đếm 2 video, tổng chi 650k; done khi quy tắc đang bật', () => {
     const off = buildSuggestions(snap, S, [], GUARDRAILS).find((s) => s.id === 'video-cut');

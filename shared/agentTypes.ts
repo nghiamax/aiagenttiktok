@@ -1,6 +1,7 @@
 /** Kiểu dữ liệu AI Agent (quy tắc, đề xuất, nhật ký). Dùng chung web + server. */
 import type { ConditionSet, GroupLevel } from './groups.js';
 import type { ActorRef } from './permissions.js';
+import type { WindowStat } from './trend.js';
 
 /** ID nhóm */
 type VideoAction = string;
@@ -155,6 +156,10 @@ export interface AgentProposal {
   actionId?: string;
   /** Có đơn bù ở sản phẩm khác (cấp video) — cập nhật mỗi lượt quét */
   offset?: VideoOffset;
+  /** Số liệu khung 14 / 30 ngày (đến hôm qua) lúc đề xuất — cập nhật mỗi lượt quét */
+  windows?: { d14: WindowStat | null; d30: WindowStat | null };
+  /** 30 ngày cũng thuộc nhóm này ("kéo dài"); false = mới 2 tuần gần đây */
+  long?: boolean;
 }
 
 export type ActionActor = 'agent' | 'approved' | 'manual';
@@ -206,6 +211,8 @@ export interface AgentGuardrails {
   maxBudgetDecreasePct: number;
   /** Số ngày số liệu Agent xét mỗi lượt (thiếu = 7) */
   lookbackDays?: number;
+  /** Xác nhận bằng khung 14 ngày: chỉ đề xuất khi 14 ngày cùng nhóm (thiếu = bật; false = chỉ xét 1 khung như cũ) */
+  confirmWindow?: boolean;
 }
 
 /** Phần Sếp chỉnh trên giao diện (server lưu server-data/agent-config.json) */

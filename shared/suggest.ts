@@ -7,7 +7,7 @@
  */
 import type { AdsSnapshot, AdsVideo, Campaign } from './adsSnapshot.js';
 import { MIN_BOOST_BUDGET_VND } from './agentPolicy.js';
-import { collectVideoTargets, ineligibleReason, ruleLevel, snapshotDays, type RuleTarget } from './agentMatch.js';
+import { collectVideoTargets, ineligibleReason, ruleLevel, snapshotDays, targetKey, type RuleTarget } from './agentMatch.js';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, AgentTarget, RuleLevel } from './agentTypes.js';
 import { contextForCampaign } from './classify.js';
 import { formatNumber, shortVnd } from './format.js';
@@ -71,7 +71,17 @@ export interface Suggestion {
   action: SuggestionAction;
   /** Đã có quy tắc tương ứng đang bật */
   done: boolean;
+  /** Số đối tượng khớp 7 ngày nhưng khung 14 ngày không khớp (không tính vào gợi ý) */
+  unconfirmed?: number;
 }
+
+/** Xác nhận bằng khung 14 ngày: collect = gom khoá đối tượng khớp; keep = chỉ giữ đối tượng có trong bộ đã gom */
+interface ConfirmPass {
+  collect?: Map<SuggestionId, Set<string>>;
+  keep?: Map<SuggestionId, Set<string>>;
+}
+/** Gợi ý theo trạng thái TikTok (không phụ thuộc khung thời gian) → không cần xác nhận */
+const NO_CONFIRM = new Set<SuggestionId>(['video-authorize']);
 
 const SEVERITY_ORDER: Record<SuggestionSeverity, number> = { urgent: 0, opportunity: 1, tidy: 2 };
 const MAX_EXAMPLES = 3;
@@ -118,11 +128,29 @@ const defaultExample = (t: RuleTarget) =>
 
 const CPA_WORD = 'mốc chi cho 1 đơn (= giá trị đơn TB ÷ ROI hoà vốn';
 
+/**
+ * Gợi ý cho shop. `confirm` = snapshot 14 ngày đến hôm qua: gợi ý về video / sản phẩm / chiến dịch chỉ tính đối tượng
+ * đúng điều kiện ở CẢ khung chính (7 ngày) và 14 ngày — giống cách Agent xác nhận (Sếp chốt 22/11). Thiếu → chỉ xét 1 khung.
+ */
 export function buildSuggestions(
   snapshot: AdsSnapshot,
   settings: AdsSettings,
   rules: AgentRule[],
   guardrails: AgentGuardrails,
+  confirm?: AdsSnapshot | null,
+): Suggestion[] {
+  if (!confirm) return buildCore(snapshot, settings, rules, guardrails);
+  const collect = new Map<SuggestionId, Set<string>>();
+  buildCore(confirm, settings, rules, guardrails, { collect });
+  return buildCore(snapshot, settings, rules, guardrails, { keep: collect });
+}
+
+function buildCore(
+  snapshot: AdsSnapshot,
+  settings: AdsSettings,
+  rules: AgentRule[],
+  guardrails: AgentGuardrails,
+  pass: ConfirmPass = {},
 ): Suggestion[] {
   const out: Suggestion[] = [];
   const days = snapshotDays(snapshot);
@@ -410,7 +438,16 @@ export function buildSuggestions(
   for (const s of specs) {
     if (!on(s.id)) continue;
     // Bỏ đối tượng TikTok không cho làm (vd video đã bị gỡ, chiến dịch tắt) — giống bộ máy quét
-    const targets = s.targets.filter((t) => ineligibleReason(s.actionType, s.params, t) == null);
+    let targets = s.targets.filter((t) => ineligibleReason(s.actionType, s.params, t) == null);
+    const keyOf = (t: RuleTarget) => targetKey(s.level, t.target);
+    if (pass.collect) pass.collect.set(s.id, new Set(targets.map(keyOf)));
+    let unconfirmed = 0;
+    if (pass.keep && !NO_CONFIRM.has(s.id)) {
+      const ok = pass.keep.get(s.id) ?? new Set<string>();
+      const all = targets.length;
+      targets = targets.filter((t) => ok.has(keyOf(t)));
+      unconfirmed = all - targets.length;
+    }
     if (targets.length === 0) continue;
 
     const guardrailsPatch: Partial<AgentGuardrails> | undefined =
@@ -449,6 +486,7 @@ export function buildSuggestions(
         ...(groupMissing && { groupMissing: true }),
       },
       done: !groupMissing && isActive(findMatchingRule(rules, { level: s.level, trigger: s.group, actionType: s.actionType })),
+      ...(unconfirmed > 0 && { unconfirmed }),
     });
   }
 

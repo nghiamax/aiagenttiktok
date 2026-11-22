@@ -6,6 +6,7 @@ import { useTikTok } from '../../tiktok/TikTokProvider';
 import { AgentStoreProvider } from './agent/agentStore';
 import { AdsDataProvider } from './data';
 import { AdsSettingsProvider } from './settings';
+import { TrendProvider } from './trend';
 
 /**
  * Khung chung của ADS 24/7 (Tổng quan + AI Agent): số liệu theo ngày + thiết lập phân loại + dữ liệu Agent (server).
@@ -27,7 +28,9 @@ export default function AdsLayout() {
     <AdsDataProvider>
       <AdsSettingsProvider>
         <AgentStoreProvider>
-          <Outlet />
+          <TrendProvider>
+            <Outlet />
+          </TrendProvider>
         </AgentStoreProvider>
       </AdsSettingsProvider>
     </AdsDataProvider>

@@ -87,6 +87,22 @@ export default function GuardrailsCard({ guardrails: g, onChange, onReset }: Gua
           onCommit={(n) => onChange({ evaluateAfterHours: n })}
         />
       </div>
+
+      {/* Xác nhận bằng khung 14 ngày (Sếp chốt 22/11): tắt → chỉ xét 7 ngày như cũ */}
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-white p-3.5">
+        <input
+          type="checkbox"
+          checked={g.confirmWindow !== false}
+          onChange={(e) => onChange({ confirmWindow: e.target.checked })}
+          className="mt-0.5 size-4 accent-primary"
+        />
+        <span>
+          <span className="block text-sm font-semibold">Xác nhận bằng 14 ngày</span>
+          <span className="block text-xs text-muted">
+            Chỉ đề xuất khi 7 ngày và 14 ngày cùng nhóm — tránh làm theo vài ngày bất thường. 30 ngày dùng để báo độ tin.
+          </span>
+        </span>
+      </label>
     </section>
   );
 }

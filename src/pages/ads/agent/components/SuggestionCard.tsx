@@ -126,6 +126,11 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
             );
           })}
           {s.count > s.examples.length && <li className="text-xs text-muted">… và {s.count - s.examples.length} nữa</li>}
+          {!!s.unconfirmed && (
+            <li className="text-xs text-muted" title="7 ngày đúng điều kiện nhưng 14 ngày thì không — chưa chắc chắn">
+              +{s.unconfirmed} chưa xác nhận bằng 14 ngày (không tính)
+            </li>
+          )}
         </ul>
       )}
 

@@ -29,6 +29,8 @@ interface GroupCardProps {
   level: GroupLevel;
   /** Số đối tượng khớp nhóm theo bản nháp hiện tại */
   count: number;
+  /** 7 ngày thuộc nhóm nhưng 14 ngày khác (không tính vào count) */
+  unconfirmed?: number;
   /** Số quy tắc Agent đang dùng nhóm này */
   usedByRules: number;
   errors: string[];
@@ -51,6 +53,7 @@ export default function GroupCard({
   group,
   level,
   count,
+  unconfirmed,
   usedByRules,
   errors,
   canMoveUp,
@@ -115,8 +118,12 @@ export default function GroupCard({
               Chưa lưu
             </span>
           )}
-          <span className="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-xs font-semibold tabular-nums text-muted">
+          <span
+            className="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-xs font-semibold tabular-nums text-muted"
+            title={unconfirmed ? `+${unconfirmed} chưa xác nhận: 7 ngày thuộc nhóm này nhưng 14 ngày khác` : 'Đã xác nhận theo 7 và 14 ngày'}
+          >
             {formatNumber(count)} {LEVEL_UNIT[level]}
+            {!!unconfirmed && <span className="font-normal"> · +{formatNumber(unconfirmed)} chưa xác nhận</span>}
           </span>
         </div>
 

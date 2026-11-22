@@ -6,7 +6,9 @@ import { formatNumber } from '../../lib/format';
 import { impactTotal } from './agent/evaluate';
 import { useAgentStore } from './agent/agentStore';
 import { activeRuleCount, pendingProposals, ruleForTrigger } from './agent/useAgentConfig';
-import { classifyCampaign, classifyProduct, classifyVideo, shortVnd, type VideoClassification } from './classify';
+import { shortVnd } from './classify';
+import { useTrend } from './trend';
+import type { TrendInfo } from '../../../shared/trend';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
 import AdsSubNav from './components/AdsSubNav';
@@ -23,6 +25,15 @@ import { productKey } from './metrics';
 import type { GroupLevel } from './groups';
 import { breakEvenOf, useAdsSettings } from './settings';
 import type { AdsListTab, AdsProduct, AdsVideo, VideoAction } from './types';
+
+/** Ghi chú dưới ô (đếm 1 lần theo key): nhóm "kéo dài 30 ngày" / nhóm 7 ngày chưa được 14 ngày xác nhận */
+function markIn(summary: Record<string, ActionSummary>, groupId: string, key: string, seen: Set<string>, field: 'long' | 'unconfirmed') {
+  const k = `${field}|${groupId}|${key}`;
+  if (seen.has(k)) return;
+  seen.add(k);
+  const s = (summary[groupId] ??= emptySummary());
+  s[field] = (s[field] ?? 0) + 1;
+}
 import { useAdsListParams } from './useAdsListParams';
 
 const metricLine = (roi: number | null, cost: number | null) =>
@@ -69,7 +80,7 @@ export default function AdsPage() {
   const { tab, campaignId, productId, query, action, update } = useAdsListParams();
   const { settings, save, reset } = useAdsSettings();
   // Số liệu theo khoảng ngày đang chọn (server lấy qua MCP TikTok; chưa có server → file lưu sẵn)
-  const { snapshot, days } = useAdsData();
+  const { snapshot } = useAdsData();
   const { campaignById, productByKey, productIds, campaignOptions } = useMemo(
     () => ({
       campaignById: new Map(snapshot.campaigns.map((c) => [c.id, c])),
@@ -89,52 +100,60 @@ export default function AdsPage() {
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
-  // Phân loại toàn bộ video / sản phẩm / chiến dịch vào nhóm (tính lại khi đổi thiết lập)
-  const { classification, inbox } = useMemo(() => {
-    const map = new Map<AdsVideo, VideoClassification>();
+  // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét, không đổi theo ô chọn ngày).
+  // Chưa xác nhận (7 ngày khác 14 ngày) → không tính, chỉ ghi chú dưới ô của nhóm 7 ngày
+  const trends = useTrend();
+  const inbox = useMemo(() => {
+    const d7 = trends.snaps.d7;
+    const campaigns7 = new Map(d7.campaigns.map((c) => [c.id, c]));
     const summary: InboxSummary = { video: {}, product: {}, campaign: {} };
     const seenVideos = new Set<string>();
     const seen = new Set<string>();
     const cutRows = new Map<string, Set<AdsVideo>>();
-    const running = (id: string) => campaignById.get(id)?.status === 'running';
-    for (const v of snapshot.videos) {
-      const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
-      if (!cls) continue;
-      map.set(v, cls);
+    const running = (id: string) => campaigns7.get(id)?.status === 'running';
+    /** Nhóm đã xác nhận; chưa xác nhận → ghi chú, trả null */
+    const confirmedGroup = (bucket: Record<string, ActionSummary>, t: TrendInfo | undefined, key: string) => {
+      if (!t) return null;
+      if (t.unconfirmed && t.g7) markIn(bucket, t.g7, key, seen, 'unconfirmed');
+      if (t.group && t.long) markIn(bucket, t.group, key, seen, 'long');
+      return t.group;
+    };
+    for (const v of d7.videos) {
+      if (v.contentType !== 'video') continue;
+      const key = `${v.campaignId}/${v.id}`;
+      const group = confirmedGroup(summary.video, trends.video(v), key);
+      if (!group) continue;
       // Video đã gỡ / thuộc chiến dịch đã tắt → Agent không làm gì được, không tính vào hộp theo dõi (bảng vẫn hiện)
       if (v.status === 'excluded' || !running(v.campaignId)) {
-        skipIn(summary.video, cls.action, `${v.campaignId}/${v.id}`, seen);
+        skipIn(summary.video, group, key, seen);
         continue;
       }
-      addTo(summary.video, cls.action, v.cost, v.revenue, `${v.campaignId}/${v.id}`, seenVideos);
-      if (cls.action === 'cut') {
-        const k = `${v.campaignId}/${v.id}`;
-        if (!cutRows.has(k)) cutRows.set(k, new Set());
-        cutRows.get(k)!.add(v);
-      }
+      addTo(summary.video, group, v.cost, v.revenue, key, seenVideos);
+      if (group === 'cut') (cutRows.get(key) ?? cutRows.set(key, new Set()).get(key)!).add(v);
     }
     // Cắt lỗ nhưng tổng video (gồm đơn bù ở sản phẩm khác trong chiến dịch) vẫn có lời → ghi chú dưới ô, số đếm giữ nguyên
     for (const [k, rows] of cutRows) {
       const [c, id] = k.split('/');
-      if (offsetOf(snapshot, settings, c, id, rows)?.profitable) {
+      if (offsetOf(d7, settings, c, id, rows)?.profitable) {
         const s = summary.video.cut;
         if (s) s.keepsProfit = (s.keepsProfit ?? 0) + 1;
       }
     }
-    for (const p of snapshot.products) {
-      const cls = classifyProduct(p, campaignById.get(p.campaignId), settings);
-      if (!cls) continue;
-      if (!running(p.campaignId)) skipIn(summary.product, cls.action, `${p.campaignId}/${p.id}`, seen);
-      else addTo(summary.product, cls.action, p.cost, p.revenue);
+    for (const p of d7.products) {
+      const key = `${p.campaignId}/${p.id}`;
+      const group = confirmedGroup(summary.product, trends.product(p), key);
+      if (!group) continue;
+      if (!running(p.campaignId)) skipIn(summary.product, group, key, seen);
+      else addTo(summary.product, group, p.cost, p.revenue);
     }
-    for (const c of snapshot.campaigns) {
-      const cls = classifyCampaign(c, settings, days);
-      if (!cls) continue;
-      if (c.status !== 'running') skipIn(summary.campaign, cls.action, c.id, seen);
-      else addTo(summary.campaign, cls.action, c.cost, c.revenue);
+    for (const c of d7.campaigns) {
+      const group = confirmedGroup(summary.campaign, trends.campaign(c), c.id);
+      if (!group) continue;
+      if (c.status !== 'running') skipIn(summary.campaign, group, c.id, seen);
+      else addTo(summary.campaign, group, c.cost, c.revenue);
     }
-    return { classification: map, inbox: summary };
-  }, [settings, snapshot, campaignById, days]);
+    return summary;
+  }, [settings, trends]);
 
   const missingBreakEven = productIds.filter((id) => breakEvenOf(settings, id) == null).length;
 
@@ -288,7 +307,6 @@ export default function AdsPage() {
               productByKey={productByKey}
               campaignById={campaignById}
               onFilterProduct={filterProduct}
-              classification={classification}
               action={action}
               onActionChange={(a) => update({ action: a })}
             />

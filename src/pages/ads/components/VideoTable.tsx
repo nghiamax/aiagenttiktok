@@ -38,7 +38,7 @@ const WAIT = 'bg-blue-50 text-primary';
 const WARN = 'bg-amber-50 text-amber-600';
 const OFF = 'bg-canvas text-muted';
 
-const STATUS: Record<VideoStatus, { label: string; className: string } | null> = {
+export const STATUS: Record<VideoStatus, { label: string; className: string } | null> = {
   delivering: { label: 'Đang phân phối', className: GOOD },
   learning: { label: 'Đang học', className: WAIT },
   in_queue: { label: 'Chờ phân phối', className: WAIT },

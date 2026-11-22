@@ -19,6 +19,7 @@ import ProductTable from './components/ProductTable';
 import SuggestionBanner from './components/SuggestionBanner';
 import AdsRangeControl from './components/AdsRangeControl';
 import VideoTable from './components/VideoTable';
+import WatchCard from './components/WatchCard';
 import { SIGNAL_ANCHOR } from './components/SignalDivider';
 import { useAdsData } from './data';
 import { offsetOf } from '../../../shared/agentMatch';
@@ -263,6 +264,7 @@ export default function AdsPage() {
             ruleFor: (level, id) => ruleForTrigger(agentState.rules, id, level),
           }}
         />
+        <WatchCard />
         <GmvMaxListCard
           tab={tab}
           onTabChange={(t) => update({ tab: t, action: null })}

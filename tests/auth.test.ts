@@ -149,7 +149,8 @@ describe('Mọi route đều có kiểm tra quyền', () => {
   it('route ghi (POST/PUT) cần execute hoặc configure; route đọc cần view', async () => {
     const { agentRouter, settingsRouter } = await import('../server/routes/agent');
     const { adsRouter } = await import('../server/routes/ads');
-    const routes = [agentRouter, settingsRouter, adsRouter].flatMap((r) =>
+    const { watchlistRouter } = await import('../server/routes/watchlist');
+    const routes = [agentRouter, settingsRouter, adsRouter, watchlistRouter].flatMap((r) =>
       (r.stack as { route?: { path: string; methods: Record<string, boolean>; stack: { handle: { permission?: string } }[] } }[])
         .filter((l) => l.route)
         .map((l) => ({

@@ -9,11 +9,14 @@ import KocBookingPage from './pages/koc-booking/KocBookingPage';
 import FinancePage from './pages/finance/FinancePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import TikTokDonePage from './pages/TikTokDonePage';
 
 export default function App() {
   return (
     <Routes>
       <Route path="login" element={<LoginPage />} />
+      {/* TikTok chuyển về sau khi cho phép — không cần đăng nhập web (tab mới / trình duyệt khác) */}
+      <Route path="tiktok/done" element={<TikTokDonePage />} />
       <Route
         element={
           <RequireAuth>

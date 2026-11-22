@@ -4,10 +4,11 @@ import Modal from '../ui/Modal';
 import { useAuth } from '../../auth/AuthProvider';
 import { api, ApiError } from '../../lib/api';
 import { useTikTok } from '../../tiktok/TikTokProvider';
+import TikTokPendingBox from '../ui/TikTokPendingBox';
 
 /** Kết nối TikTok: chỉ thông tin chính (trạng thái + tài khoản) + nút Kết nối / Kết nối lại */
 export default function TikTokConnectModal({ onClose }: { onClose: () => void }) {
-  const { status, connect, connecting, refresh } = useTikTok();
+  const { status, connect, connecting, refresh, pending } = useTikTok();
   const canConnect = useAuth().can('configure');
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -91,7 +92,9 @@ export default function TikTokConnectModal({ onClose }: { onClose: () => void })
         {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-danger">{error}</p>}
 
         {/* Ngắt (phụ, xám) cạnh Kết nối (chính) — cùng bên phải; đóng hộp bằng nút ✕ */}
-        {canConnect ? (
+        {canConnect && pending ? (
+          <TikTokPendingBox />
+        ) : canConnect ? (
           <div className="flex items-center justify-end gap-2">
             {hasToken && (
               <button

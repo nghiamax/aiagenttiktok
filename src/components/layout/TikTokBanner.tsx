@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, PlugZap, X } from 'lucide-react';
-import { useTikTok } from '../../tiktok/TikTokProvider';
+import { JUST_CONNECTED_KEY, useTikTok } from '../../tiktok/TikTokProvider';
 
 interface TikTokBannerProps {
   onOpenConnect: () => void;
@@ -9,29 +9,25 @@ interface TikTokBannerProps {
 
 /**
  * Dải trên cùng nội dung:
- *  - kết quả sau khi TikTok chuyển về (?tiktok=connected | error&reason=…), rồi xoá khỏi URL
+ *  - "Đã kết nối TikTok" sau khi trang tự tải lại lúc kết nối xong
  *  - mất kết nối TikTok (TikTok từ chối gia hạn / chưa kết nối) → nút Kết nối lại
  */
 export default function TikTokBanner({ onOpenConnect }: TikTokBannerProps) {
-  const { status, refresh } = useTikTok();
-  const [params, setParams] = useSearchParams();
+  const { status } = useTikTok();
   const { pathname } = useLocation();
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Trang vừa tự tải lại sau khi kết nối xong (TikTokProvider đánh dấu) → báo 1 lần
   useEffect(() => {
-    const r = params.get('tiktok');
-    if (!r) return;
-    setResult(
-      r === 'connected'
-        ? { ok: true, text: 'Đã kết nối TikTok.' }
-        : { ok: false, text: `Chưa kết nối được TikTok: ${params.get('reason') ?? 'lỗi không rõ'}` },
-    );
-    void refresh();
-    const next = new URLSearchParams(params);
-    next.delete('tiktok');
-    next.delete('reason');
-    setParams(next, { replace: true });
-  }, [params, setParams, refresh]);
+    try {
+      if (sessionStorage.getItem(JUST_CONNECTED_KEY)) {
+        sessionStorage.removeItem(JUST_CONNECTED_KEY);
+        setResult({ ok: true, text: 'Đã kết nối TikTok.' });
+      }
+    } catch {
+      /* bỏ qua */
+    }
+  }, []);
 
   const lost = status?.state === 'lost';
   // Lần đầu chưa kết nối: trang ADS đã có thẻ "Kết nối TikTok để bắt đầu" → dải nhẹ chỉ hiện ở các tab khác

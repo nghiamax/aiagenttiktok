@@ -1,7 +1,7 @@
 import {
-  confirmRuleTargets,
-  findRuleTargets,
   ineligibleReason,
+  matchRuleTrend,
+  RECOVERING_REASON,
   ruleLevel,
   UNCONFIRMED_REASON,
   type ConfirmSnaps,
@@ -30,8 +30,9 @@ export function matchRuleTargets(
 ): RuleMatches {
   const names: string[] = [];
   const skipped: Record<string, number> = {};
-  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, snapshot), confirm);
+  const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm);
   if (unconfirmed.length > 0) skipped[UNCONFIRMED_REASON] = unconfirmed.length;
+  if (recovering.length > 0) skipped[RECOVERING_REASON] = recovering.length;
   for (const t of kept) {
     const why = ineligibleReason(rule.actionType, rule.params, t);
     if (why) skipped[why] = (skipped[why] ?? 0) + 1;

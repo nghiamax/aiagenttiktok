@@ -66,3 +66,40 @@ describe('buildTrendIndex', () => {
     expect([...idx.values()][0].group).toBe('cut');
   });
 });
+
+describe('Lỗ âm thầm / đang hồi phục (cửa vào 14 + 30 ngày)', () => {
+  const ctx = (cost: number, orders: number, revenue = 0) => ({
+    cost,
+    revenue,
+    orders,
+    roi: cost > 0 ? revenue / cost : null,
+    cpa: orders > 0 ? cost / orders : null,
+    breakEven: 3,
+    target: 5,
+    budgetUse: null,
+  });
+  const g = { g7: 'watch', g14: 'cut', g30: 'cut' };
+
+  it('7 ngày chi ít chưa tới ngưỡng, 0 đơn; 14 + 30 ngày Cắt lỗ → lỗ âm thầm, tính là Cắt lỗ', () => {
+    const t = trendOf('video', S, g, w, true, ctx(42_000, 0));
+    expect(t).toMatchObject({ group: 'cut', slowLoss: true, unconfirmed: false, long: true });
+    expect(trendLabel(t, (id) => id ?? '--')).toBe('lỗ âm thầm · 7 ngày chi ít, 14 + 30 ngày đều cut');
+  });
+
+  it('7 ngày đã có đơn có lời → đang hồi phục, không thuộc Cắt lỗ', () => {
+    const t = trendOf('video', S, g, w, true, ctx(40_000, 2, 200_000));
+    expect(t).toMatchObject({ group: null, recovering: true });
+    expect(trendLabel(t, (id) => id ?? '--')).toBe('đang hồi phục · 14 + 30 ngày: cut');
+  });
+
+  it('7 ngày không còn chi → không làm gì; 14 ≠ 30 → không vào cửa này', () => {
+    expect(trendOf('video', S, g, w, true, ctx(0, 0)).slowLoss).toBeUndefined();
+    expect(trendOf('video', S, { g7: 'watch', g14: 'cut', g30: 'watch' }, w, true, ctx(42_000, 0)).slowLoss).toBeUndefined();
+  });
+
+  it('nhóm không có ngưỡng chi (vd Nhân rộng) → chỉ theo cửa 7 ngày như cũ', () => {
+    const t = trendOf('video', S, { g7: 'watch', g14: 'scale', g30: 'scale' }, w, true, ctx(42_000, 3, 300_000));
+    expect(t.group).toBeNull();
+    expect(t.slowLoss).toBeUndefined();
+  });
+});

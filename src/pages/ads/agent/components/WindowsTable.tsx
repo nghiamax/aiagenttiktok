@@ -9,6 +9,8 @@ interface WindowsTableProps {
   windows: { d14: WindowStat | null; d30: WindowStat | null };
   /** 30 ngày cũng thuộc nhóm ("kéo dài") */
   long?: boolean;
+  /** Lỗ âm thầm: 7 ngày chi ít chưa tới ngưỡng nhưng 14 + 30 ngày đều thuộc nhóm */
+  slowLoss?: boolean;
 }
 
 const money = (n: number | null | undefined) => (n == null ? '--' : shortVnd(n));
@@ -17,7 +19,7 @@ const money = (n: number | null | undefined) => (n == null ? '--' : shortVnd(n))
  * Số 7 · 14 · 30 ngày của đề xuất (Sếp chốt 22/11): 7 và 14 ngày cùng nhóm mới đề xuất;
  * 30 ngày cho biết "kéo dài" (chắc chắn) hay "2 tuần gần đây" (cân nhắc thêm).
  */
-export default function WindowsTable({ before, windows, long }: WindowsTableProps) {
+export default function WindowsTable({ before, windows, long, slowLoss }: WindowsTableProps) {
   const cols: { label: string; w: WindowStat | null }[] = [
     { label: '7 ngày', w: before },
     { label: '14 ngày', w: windows.d14 },
@@ -66,7 +68,11 @@ export default function WindowsTable({ before, windows, long }: WindowsTableProp
           </tr>
         </tbody>
       </table>
-      {long !== undefined && (
+      {slowLoss ? (
+        <p className="mt-1.5 border-t border-line pt-1.5 text-xs font-medium text-ink">
+          Lỗ âm thầm — 7 ngày chi ít nên chưa tới ngưỡng, nhưng 14 và 30 ngày đều cùng nhóm.
+        </p>
+      ) : long !== undefined && (
         <p className={`mt-1.5 border-t border-line pt-1.5 text-xs ${long ? 'font-medium text-ink' : 'text-amber-700'}`}>
           {long
             ? 'Cả 7, 14 và 30 ngày đều cùng nhóm — kéo dài, đáng tin.'

@@ -160,6 +160,8 @@ export interface AgentProposal {
   windows?: { d14: WindowStat | null; d30: WindowStat | null };
   /** 30 ngày cũng thuộc nhóm này ("kéo dài"); false = mới 2 tuần gần đây */
   long?: boolean;
+  /** Lỗ âm thầm: 7 ngày chi ít chưa tới ngưỡng nhưng 14 + 30 ngày đều thuộc nhóm */
+  slowLoss?: boolean;
 }
 
 export type ActionActor = 'agent' | 'approved' | 'manual';

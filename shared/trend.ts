@@ -179,12 +179,20 @@ function classifyAll(level: RuleLevel, s: AdsSnapshot, settings: AdsSettings): M
   return m;
 }
 
-/** Câu ngắn dưới badge nhóm */
-export function trendLabel(t: TrendInfo, groupName: (id: string | null) => string): string | null {
-  if (t.slowLoss) return `lỗ âm thầm · 7 ngày chi ít, 14 + 30 ngày đều ${groupName(t.group)}`;
-  if (t.recovering) return `đang hồi phục · 14 + 30 ngày: ${groupName(t.g14)}`;
-  if (t.unconfirmed) return `dấu hiệu · 14 ngày: ${groupName(t.g14)}`;
+/** Nhãn 1–2 từ dưới badge nhóm (câu đầy đủ ở trendDetail, hiện khi rê chuột) */
+export function trendLabel(t: TrendInfo): string | null {
+  if (t.slowLoss) return 'lỗ âm thầm';
+  if (t.recovering) return 'đang hồi phục';
+  if (t.unconfirmed) return 'dấu hiệu';
   if (!t.group) return null;
-  if (t.long) return 'kéo dài 30 ngày';
-  return t.g30 == null ? '2 tuần gần đây' : `2 tuần gần đây · 30 ngày: ${groupName(t.g30)}`;
+  return t.long ? 'kéo dài' : '2 tuần';
+}
+
+/** Câu đầy đủ (tooltip) */
+export function trendDetail(t: TrendInfo, groupName: (id: string | null) => string): string | null {
+  if (t.slowLoss) return `Lỗ âm thầm: 7 ngày chi ít chưa tới ngưỡng, nhưng 14 và 30 ngày đều ${groupName(t.group)}`;
+  if (t.recovering) return `Đang hồi phục: 14 và 30 ngày thuộc ${groupName(t.g14)}, nhưng 7 ngày gần nhất đã tốt lên — Agent không làm gì`;
+  if (t.unconfirmed) return `Dấu hiệu: 7 ngày gần nhất thuộc ${groupName(t.g7)}, 14 ngày vẫn là ${groupName(t.g14)} — Agent chờ thêm, chưa đề xuất`;
+  if (!t.group) return null;
+  return t.long ? 'Kéo dài: 7, 14 và 30 ngày đều cùng nhóm' : `2 tuần gần đây: 7 và 14 ngày cùng nhóm, 30 ngày là ${groupName(t.g30)}`;
 }

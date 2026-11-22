@@ -49,15 +49,19 @@ export default function ProductTable({
   const trends = useTrend();
   const rows = products.map((p) => ({ p, cpa: cpa(p.cost, p.orders), trend: trends.product(p) }));
   type Row = (typeof rows)[number];
+  /** Thuộc chiến dịch đã tắt → không tính (phần cuối khi lọc nhóm) */
+  const isPausedRow = (r: Row) => campaignById.get(r.p.campaignId)?.status !== 'running';
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
-  const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter;
-  const filtered = filter === 'all' ? rows : rows.filter((r) => r.trend?.group === filter || isSignalRow(r));
+  const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter && !isPausedRow(r);
+  const filtered =
+    filter === 'all' ? rows : rows.filter((r) => r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter));
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
   // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
   const counts = new Map<string, number>();
   const signals = new Map<string, number>();
   for (const r of rows) {
+    if (isPausedRow(r)) continue; // số trên nút lọc = sản phẩm Agent làm được (khớp ô Tổng quan)
     if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
     else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
   }
@@ -71,8 +75,11 @@ export default function ProductTable({
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
   // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
   const signalRows = activeGroup ? filtered.filter(isSignalRow) : [];
-  const sorted = activeGroup ? [...sortRows(filtered.filter((r) => !isSignalRow(r))), ...sortRows(signalRows)] : sortRows(filtered);
-  const firstSignal = signalRows.length > 0 ? sorted[sorted.length - signalRows.length] : null;
+  const pausedRows = activeGroup ? filtered.filter(isPausedRow) : [];
+  const actionRows = activeGroup ? filtered.filter((r) => !isSignalRow(r) && !isPausedRow(r)) : [];
+  const sorted = activeGroup ? [...sortRows(actionRows), ...sortRows(signalRows), ...sortRows(pausedRows)] : sortRows(filtered);
+  const firstSignal = signalRows.length > 0 ? sorted[actionRows.length] : null;
+  const firstPaused = pausedRows.length > 0 ? sorted[actionRows.length + signalRows.length] : null;
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
 
   const header = { sort, onSort: (key: ProductSortKey) => setSort(nextSort(sort, key)) };
@@ -123,7 +130,12 @@ export default function ProductTable({
                 {row === firstSignal && activeGroup && (
                   <SignalDivider colSpan={10} groupName={activeGroup.name} count={signalRows.length} unit="sản phẩm" />
                 )}
-                <tr className={`transition-colors hover:bg-canvas ${isSignalRow(row) ? 'opacity-70 hover:opacity-100' : ''}`}>
+                {row === firstPaused && activeGroup && (
+                  <SignalDivider colSpan={10} groupName={activeGroup.name} count={pausedRows.length} unit="sản phẩm" kind="paused" />
+                )}
+                <tr
+                  className={`transition-colors hover:bg-canvas ${activeGroup && (isSignalRow(row) || isPausedRow(row)) ? 'opacity-70 hover:opacity-100' : ''}`}
+                >
                   <td className={`${TD} max-w-[320px]`}>
                     <div className="flex items-center gap-3">
                       <MediaThumb src={p.imageUrl} icon={Package} shape="square" />

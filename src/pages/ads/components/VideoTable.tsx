@@ -57,6 +57,8 @@ const PAGE_SIZE = 20;
 const CARD_FILTER = 'product_card';
 /** Giá trị bộ lọc cho video không khả dụng (không xếp nhóm) */
 const UNAVAILABLE_FILTER = 'unavailable';
+/** Video đã gỡ khỏi chiến dịch: ô lọc riêng, không nằm trong nhóm nào (Sếp chốt 22/11 — đã có Nhật ký theo dõi) */
+const REMOVED_FILTER = 'removed';
 
 interface VideoRow {
   v: AdsVideo;
@@ -102,8 +104,13 @@ export default function VideoTable({
   }));
   const isCardRow = (r: VideoRow) => r.v.contentType === 'product_card';
   const isUnavailableRow = (r: VideoRow) => !isCardRow(r) && effectiveStatus(r.v) === 'unavailable';
+  const isRemovedRow = (r: VideoRow) => !isCardRow(r) && effectiveStatus(r.v) === 'excluded';
+  /** Thuộc chiến dịch đã tắt → Agent không làm gì, không tính (phần cuối khi lọc nhóm) */
+  const isPausedRow = (r: VideoRow) => campaignById.get(r.v.mainCampaignId ?? r.v.campaignId)?.status !== 'running';
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
-  const isSignalRow = (r: VideoRow) => !!r.trend?.unconfirmed && r.trend.g7 === action;
+  const isSignalRow = (r: VideoRow) => !!r.trend?.unconfirmed && r.trend.g7 === action && !isPausedRow(r);
+  /** Lọc nhóm: chỉ video chưa gỡ (đã gỡ ở ô lọc riêng) */
+  const inGroup = (r: VideoRow) => !isRemovedRow(r) && (r.trend?.group === action || (!!r.trend?.unconfirmed && r.trend.g7 === action));
   const filtered =
     action === 'all'
       ? rows
@@ -111,17 +118,21 @@ export default function VideoTable({
         ? rows.filter(isCardRow)
         : action === UNAVAILABLE_FILTER
           ? rows.filter(isUnavailableRow)
-          : rows.filter((r) => r.trend?.group === action || isSignalRow(r));
+          : action === REMOVED_FILTER
+            ? rows.filter(isRemovedRow)
+            : rows.filter(inGroup);
 
-  // Số video mỗi nhóm (theo bộ lọc chiến dịch/sản phẩm/tìm kiếm hiện tại) hiện ngay trên nút lọc
+  // Số trên nút lọc = video Agent làm được (đã thuộc nhóm, chưa gỡ, chiến dịch đang chạy) — khớp ô Tổng quan
   const counts = new Map<string, number>();
   const signals = new Map<string, number>();
   for (const r of rows) {
+    if (isRemovedRow(r) || isPausedRow(r)) continue;
     if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
     else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
   }
   const cardCount = rows.filter(isCardRow).length;
   const unavailableCount = rows.filter(isUnavailableRow).length;
+  const removedCount = rows.filter(isRemovedRow).length;
   const filterOptions: { value: VideoActionFilter; label: string }[] = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     // "Cắt lỗ 1 · 4 dấu hiệu": dấu hiệu nằm trong đúng nhóm của nó (không gộp chung)
@@ -133,12 +144,16 @@ export default function VideoTable({
     ...(cardCount > 0 ? [{ value: CARD_FILTER, label: `Thẻ sản phẩm (${cardCount})` }] : []),
     // Video không khả dụng: chưa có cách xử lý, không xếp nhóm → chỉ lọc riêng ở đây
     ...(unavailableCount > 0 ? [{ value: UNAVAILABLE_FILTER, label: `Không khả dụng (${unavailableCount})` }] : []),
+    ...(removedCount > 0 ? [{ value: REMOVED_FILTER, label: `Đã gỡ (${removedCount})` }] : []),
   ];
   const sortRows = (list: VideoRow[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.v[sort.key]), sort.dir);
-  // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
+  // Lọc theo nhóm: Cần xử lý → Dấu hiệu → Thuộc chiến dịch đã tắt (mỗi phần có dải tiêu đề)
   const signalRows = activeGroup ? filtered.filter(isSignalRow) : [];
-  const sorted = activeGroup ? [...sortRows(filtered.filter((r) => !isSignalRow(r))), ...sortRows(signalRows)] : sortRows(filtered);
-  const firstSignal = signalRows.length > 0 ? sorted[sorted.length - signalRows.length] : null;
+  const pausedRows = activeGroup ? filtered.filter(isPausedRow) : [];
+  const actionRows = activeGroup ? filtered.filter((r) => !isSignalRow(r) && !isPausedRow(r)) : [];
+  const sorted = activeGroup ? [...sortRows(actionRows), ...sortRows(signalRows), ...sortRows(pausedRows)] : sortRows(filtered);
+  const firstSignal = signalRows.length > 0 ? sorted[actionRows.length] : null;
+  const firstPaused = pausedRows.length > 0 ? sorted[actionRows.length + signalRows.length] : null;
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
 
   const header = { sort, onSort: (key: VideoSortKey) => setSort(nextSort(sort, key)) };
@@ -154,7 +169,9 @@ export default function VideoTable({
               ? 'Thẻ sản phẩm do TikTok tự tạo từ trang sản phẩm, không phải video'
               : action === UNAVAILABLE_FILTER
                 ? 'TikTok báo video không khả dụng (đã ngừng chạy) — chưa có cách xử lý, không xếp nhóm, Agent không đề xuất'
-                : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
+                : action === REMOVED_FILTER
+                  ? 'Video đã gỡ khỏi chiến dịch — không thuộc nhóm nào. Kết quả sau khi gỡ xem ở AI Agent → Nhật ký'
+                  : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
         </span>
       </div>
 
@@ -177,10 +194,10 @@ export default function VideoTable({
           <tbody className="divide-y divide-line">
             {pageItems.map((row) => {
               const { v, cpa: cpaValue, trend } = row;
-              const signal = isSignalRow(row);
+              const faded = activeGroup ? isSignalRow(row) || isPausedRow(row) : false;
               const product = productByKey.get(productKey(v.campaignId, v.productId));
               const status = STATUS[v.status];
-              const cut = trend?.group === 'cut';
+              const cut = trend?.group === 'cut' && !isRemovedRow(row) && !isPausedRow(row);
               const isCard = v.contentType === 'product_card';
               const videoUrl = isCard ? null : tiktokVideoUrl(v.id, v.authorUsername);
               return (
@@ -188,9 +205,12 @@ export default function VideoTable({
                 {row === firstSignal && activeGroup && (
                   <SignalDivider colSpan={10} groupName={activeGroup.name} count={signalRows.length} unit="video" />
                 )}
+                {row === firstPaused && activeGroup && (
+                  <SignalDivider colSpan={10} groupName={activeGroup.name} count={pausedRows.length} unit="video" kind="paused" />
+                )}
                 <tr
                   // Thẻ sản phẩm không phải video → nền nhạt; dấu hiệu → mờ hơn
-                  className={`transition-colors hover:bg-canvas ${isCard ? 'bg-canvas/50' : ''} ${signal ? 'opacity-70 hover:opacity-100' : ''}`}
+                  className={`transition-colors hover:bg-canvas ${isCard ? 'bg-canvas/50' : ''} ${faded ? 'opacity-70 hover:opacity-100' : ''}`}
                 >
                   <td className={`${TD} max-w-[320px] ${cut ? 'shadow-[inset_3px_0_0_theme(colors.danger)]' : ''}`}>
                     <VideoTitleCell video={v} product={product} videoUrl={videoUrl} />
@@ -206,8 +226,11 @@ export default function VideoTable({
                     </button>
                   </td>
                   <td className={TD}>
-                    {isCard || effectiveStatus(v) === 'unavailable' ? (
-                      <span className="text-muted" title={isCard ? undefined : 'Video không khả dụng — không xếp nhóm'}>
+                    {isCard || effectiveStatus(v) === 'unavailable' || isRemovedRow(row) ? (
+                      <span
+                        className="text-muted"
+                        title={isCard ? undefined : isRemovedRow(row) ? 'Đã gỡ khỏi chiến dịch — không xếp nhóm (xem kết quả ở Nhật ký)' : 'Video không khả dụng — không xếp nhóm'}
+                      >
                         --
                       </span>
                     ) : (

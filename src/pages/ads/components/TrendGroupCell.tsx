@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { formatNumber, shortVnd } from '../../../../shared/format';
-import { trendLabel, type TrendInfo, type WindowStat } from '../../../../shared/trend';
+import { trendDetail, trendLabel, type TrendInfo, type WindowStat } from '../../../../shared/trend';
 import { GROUP_TONE_DOT, type GroupLevel } from '../groups';
 import { findGroup, useAdsSettings } from '../settings';
 import ActionBadge from './ActionBadge';
@@ -39,7 +39,8 @@ export default function TrendGroupCell({ level, trend, extra }: TrendGroupCellPr
     const g = id ? findGroup(settings, id, level) : undefined;
     return g ? GROUP_TONE_DOT[g.tone] ?? 'bg-muted' : 'bg-line';
   };
-  const label = trendLabel(trend, nameOf);
+  const label = trendLabel(trend);
+  const detail = trendDetail(trend, nameOf);
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -59,7 +60,11 @@ export default function TrendGroupCell({ level, trend, extra }: TrendGroupCellPr
             />
           ))}
         </span>
-        {label && <span className={`whitespace-nowrap text-xs ${trend.unconfirmed ? 'text-muted' : trend.long ? 'font-medium text-ink' : 'text-muted'}`}>{label}</span>}
+        {label && (
+          <span title={detail ?? undefined} className={`cursor-help whitespace-nowrap text-xs ${trend.long || trend.slowLoss ? 'font-medium text-ink' : 'text-muted'}`}>
+            {label}
+          </span>
+        )}
       </span>
       {extra}
     </div>

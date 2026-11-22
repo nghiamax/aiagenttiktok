@@ -175,19 +175,9 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     {s.rows > s.count && (
                       <span className="block text-xs text-muted">{formatNumber(s.rows)} dòng theo sản phẩm</span>
                     )}
-                    {!!s.long && s.count > 0 && (
-                      <span className="block text-xs text-muted" title="7, 14 và 30 ngày đều thuộc nhóm này">
-                        trong đó {formatNumber(s.long)} kéo dài 30 ngày
-                      </span>
-                    )}
                     {!!s.keepsProfit && (
                       <span className="block text-xs font-medium text-amber-700">
                         trong đó {formatNumber(s.keepsProfit)} {unit} tổng vẫn có lời (có đơn bù)
-                      </span>
-                    )}
-                    {!!s.skipped && (
-                      <span className="block text-xs text-muted">
-                        +{formatNumber(s.skipped)} {level === 'campaign' ? 'đã tắt' : level === 'product' ? 'thuộc chiến dịch tắt' : 'đã gỡ / thuộc chiến dịch tắt'} (không tính)
                       </span>
                     )}
                     {!!s.unconfirmed && (
@@ -206,7 +196,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                         className="block text-xs text-muted underline decoration-dotted underline-offset-2 hover:text-primary"
                         title="7 ngày gần nhất thuộc nhóm này, 14 ngày chưa — Agent chờ thêm, chưa đề xuất. Bấm để xem"
                       >
-                        +{formatNumber(s.unconfirmed)} có dấu hiệu (chưa tính)
+                        {formatNumber(s.unconfirmed)} dấu hiệu
                       </span>
                     )}
                     {needsBreakEven ? (

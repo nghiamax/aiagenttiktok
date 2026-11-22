@@ -19,7 +19,7 @@ describe('matchRuleTargets', () => {
     const m = matchRuleTargets(rule({ id: 'r', trigger: 'cut', actionType: 'remove_creative' }), S, snap);
     expect(m.names).toHaveLength(1);
     expect(m.skipped).toEqual({ 'Video đã bị gỡ': 1, 'Chiến dịch đang tắt': 1 });
-    expect(skippedText(m)).toBe('+2 bỏ qua: video đã bị gỡ 1, chiến dịch đang tắt 1');
+    expect(skippedText(m)).toBe('+1 đã gỡ · +1 chiến dịch tắt');
   });
 
   it('Nhắc việc: không bỏ qua gì', () => {

@@ -52,23 +52,6 @@
       ]
     },
     {
-      "id": "watch",
-      "name": "Theo dõi",
-      "tone": "blue",
-      "icon": "hourglass",
-      "kind": "custom",
-      "builtin": true,
-      "showInInbox": true,
-      "conditionSets": [
-        {
-          "clauses": [
-            { "metric": "cost", "op": "gt", "value": { "type": "number", "n": 0 } },
-            { "metric": "cost", "op": "lt", "value": { "type": "number", "n": 100000 } }
-          ]
-        }
-      ]
-    },
-    {
       "id": "stable",
       "name": "Ổn định",
       "tone": "gray",

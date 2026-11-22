@@ -200,6 +200,10 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <p className="max-w-2xl text-sm text-muted">
           {INTRO[level]} Dùng ↑↓ để đổi thứ tự ưu tiên. Số {unit} tính trên số liệu hiện tại và cập nhật ngay khi sửa.
+          <span className="mt-1 block">
+            Ngưỡng chi đặt theo 7 ngày. Mọi nhóm được kiểm tra thêm bằng 14 ngày (và 30 ngày để bắt lỗ âm thầm) — dùng chung điều
+            kiện, không cần đặt riêng. 7 ngày thuộc nhóm mà 14 ngày chưa = <b className="font-medium text-ink">dấu hiệu</b> (chưa tính).
+          </span>
         </p>
         <div className="flex shrink-0 gap-2">
           <button

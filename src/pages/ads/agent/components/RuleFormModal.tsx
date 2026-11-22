@@ -183,7 +183,7 @@ export default function RuleFormModal({
             </Link>
           </p>
           <p className="mt-2 text-sm">
-            Hiện có <b>{formatNumber(matches.names.length)}</b> {matches.unit} khớp
+            <b>{formatNumber(matches.names.length)}</b> {matches.unit} Agent làm được
             {matches.names.length > 0 && (
               <span className="text-muted" title={matches.names.join('\n')}>
                 {' '}

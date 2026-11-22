@@ -33,12 +33,12 @@ interface TikTokValue {
   /** Đã thử đọc trạng thái ít nhất 1 lần (thành công hay lỗi) */
   checked: boolean;
   refresh: () => Promise<void>;
-  /** Mở trang TikTok ở tab mới rồi chờ; trả lỗi nếu không mở được */
+  /** Lấy link TikTok + hiện khung chờ (không tự mở tab); trả lỗi nếu không lấy được */
   connect: () => Promise<string | null>;
   connecting: boolean;
   pending: PendingConnect | null;
-  /** Mở lại link TikTok đang chờ ở tab mới */
-  reopen: () => void;
+  /** Mở trang TikTok ở tab mới */
+  openTikTok: () => void;
   cancelPending: () => void;
 }
 
@@ -107,32 +107,30 @@ export function TikTokProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [pending, load]);
 
+  // Bấm Kết nối: chỉ lấy link + hiện khung chờ, KHÔNG tự mở tab (Sếp chốt 22/11) — người dùng tự chọn Mở trang TikTok / Sao chép link
   const connect = useCallback(async () => {
-    // Mở tab ngay lúc bấm (chờ server trả link rồi mới mở thì trình duyệt chặn popup)
-    const tab = window.open('', '_blank');
     setConnecting(true);
     try {
       const { authUrl } = await api<{ authUrl: string }>('/tiktok/connect', { method: 'POST', body: {} });
       setPending({ authUrl, startedAt: Date.now(), prevConnectedAt: status?.connectedAt ?? null, expired: false });
-      if (tab) tab.location.href = authUrl;
-      else window.location.href = authUrl; // trình duyệt chặn tab mới → mở ngay tại tab này
       return null;
     } catch (e) {
-      tab?.close();
       return e instanceof ApiError ? e.message : 'Không mở được đăng nhập TikTok';
     } finally {
       setConnecting(false);
     }
   }, [status?.connectedAt]);
 
-  const reopen = useCallback(() => {
-    if (pending) window.open(pending.authUrl, '_blank');
+  /** Mở trang TikTok ở tab mới (người dùng bấm → trình duyệt không chặn); bị chặn thì mở tại tab này */
+  const openTikTok = useCallback(() => {
+    if (!pending) return;
+    if (!window.open(pending.authUrl, '_blank')) window.location.href = pending.authUrl;
   }, [pending]);
   const cancelPending = useCallback(() => setPending(null), []);
 
   const value = useMemo(
-    () => ({ status, checked, refresh, connect, connecting, pending, reopen, cancelPending }),
-    [status, checked, refresh, connect, connecting, pending, reopen, cancelPending],
+    () => ({ status, checked, refresh, connect, connecting, pending, openTikTok, cancelPending }),
+    [status, checked, refresh, connect, connecting, pending, openTikTok, cancelPending],
   );
   return <TikTokContext.Provider value={value}>{children}</TikTokContext.Provider>;
 }

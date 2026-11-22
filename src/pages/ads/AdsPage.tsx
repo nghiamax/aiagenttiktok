@@ -19,6 +19,7 @@ import ProductTable from './components/ProductTable';
 import SuggestionBanner from './components/SuggestionBanner';
 import AdsRangeControl from './components/AdsRangeControl';
 import VideoTable from './components/VideoTable';
+import { SIGNAL_ANCHOR } from './components/SignalDivider';
 import { useAdsData } from './data';
 import { offsetOf } from '../../../shared/agentMatch';
 import { productKey } from './metrics';
@@ -174,11 +175,17 @@ export default function AdsPage() {
     update({ tab: 'videos', campaign: p.campaignId, product: p.id, action: null });
   const filterProduct = (cId: string, pId: string) => update({ campaign: cId, product: pId });
   // Hộp theo dõi đếm trên toàn bộ dữ liệu → bỏ bộ lọc để danh sách khớp số
-  const openAction = (level: GroupLevel, id: VideoAction) => {
+  const openAction = (level: GroupLevel, id: VideoAction, focus?: 'signals') => {
     update({ tab: TAB_OF_LEVEL[level], action: id, campaign: null, product: null, q: null });
-    // Bảng nằm dưới hộp theo dõi → cuộn xuống để thấy ngay kết quả lọc (đợi bảng vẽ lại xong)
+    // Bảng nằm dưới hộp theo dõi → cuộn xuống để thấy ngay kết quả lọc (đợi bảng vẽ lại xong);
+    // bấm "+N có dấu hiệu" → cuộn tới dải "Dấu hiệu" (trang 1 có dải thì tới đó, không thì tới đầu bảng)
     requestAnimationFrame(() =>
-      document.getElementById(LIST_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      requestAnimationFrame(() =>
+        (document.getElementById(focus === 'signals' ? SIGNAL_ANCHOR : LIST_ANCHOR) ?? document.getElementById(LIST_ANCHOR))?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        }),
+      ),
     );
   };
 

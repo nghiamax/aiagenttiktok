@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Pagination from '../../../components/ui/Pagination';
 import SegmentedControl from '../../../components/ui/SegmentedControl';
 import { formatNumber, formatVnd } from '../../../lib/format';
@@ -8,6 +8,7 @@ import type { AdsProduct, AdsVideo, Campaign, SortState, VideoActionFilter, Vide
 import { groupDescription } from '../groups';
 import { findGroup, useAdsSettings } from '../settings';
 import TrendGroupCell from './TrendGroupCell';
+import SignalDivider from './SignalDivider';
 import EmptyTableState from './EmptyTableState';
 import VideoTitleCell from './VideoTitleCell';
 import SortableHeader from './SortableHeader';
@@ -56,8 +57,6 @@ const PAGE_SIZE = 20;
 const CARD_FILTER = 'product_card';
 /** Giá trị bộ lọc cho video không khả dụng (không xếp nhóm) */
 const UNAVAILABLE_FILTER = 'unavailable';
-/** Nhóm 7 ngày chưa được khung 14 ngày xác nhận */
-export const UNCONFIRMED_FILTER = 'unconfirmed';
 
 interface VideoRow {
   v: AdsVideo;
@@ -103,6 +102,8 @@ export default function VideoTable({
   }));
   const isCardRow = (r: VideoRow) => r.v.contentType === 'product_card';
   const isUnavailableRow = (r: VideoRow) => !isCardRow(r) && effectiveStatus(r.v) === 'unavailable';
+  /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
+  const isSignalRow = (r: VideoRow) => !!r.trend?.unconfirmed && r.trend.g7 === action;
   const filtered =
     action === 'all'
       ? rows
@@ -110,27 +111,34 @@ export default function VideoTable({
         ? rows.filter(isCardRow)
         : action === UNAVAILABLE_FILTER
           ? rows.filter(isUnavailableRow)
-          : action === UNCONFIRMED_FILTER
-            ? rows.filter((r) => r.trend?.unconfirmed)
-            : rows.filter((r) => r.trend?.group === action);
+          : rows.filter((r) => r.trend?.group === action || isSignalRow(r));
 
   // Số video mỗi nhóm (theo bộ lọc chiến dịch/sản phẩm/tìm kiếm hiện tại) hiện ngay trên nút lọc
   const counts = new Map<string, number>();
-  for (const r of rows) if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
-  const unconfirmedCount = rows.filter((r) => r.trend?.unconfirmed).length;
+  const signals = new Map<string, number>();
+  for (const r of rows) {
+    if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
+    else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
+  }
   const cardCount = rows.filter(isCardRow).length;
   const unavailableCount = rows.filter(isUnavailableRow).length;
   const filterOptions: { value: VideoActionFilter; label: string }[] = [
     { value: 'all', label: `Tất cả (${rows.length})` },
-    ...settings.groups.map((g) => ({ value: g.id, label: `${g.name} (${counts.get(g.id) ?? 0})` })),
-    // 7 ngày một nhóm, 14 ngày nhóm khác → chưa chắc chắn, Agent không đề xuất
-    ...(unconfirmedCount > 0 ? [{ value: UNCONFIRMED_FILTER, label: `Chưa xác nhận (${unconfirmedCount})` }] : []),
+    // "Cắt lỗ 1 · 4 dấu hiệu": dấu hiệu nằm trong đúng nhóm của nó (không gộp chung)
+    ...settings.groups.map((g) => ({
+      value: g.id,
+      label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
+    })),
     // Thẻ sản phẩm không phải video, không xếp nhóm → lọc riêng
     ...(cardCount > 0 ? [{ value: CARD_FILTER, label: `Thẻ sản phẩm (${cardCount})` }] : []),
     // Video không khả dụng: chưa có cách xử lý, không xếp nhóm → chỉ lọc riêng ở đây
     ...(unavailableCount > 0 ? [{ value: UNAVAILABLE_FILTER, label: `Không khả dụng (${unavailableCount})` }] : []),
   ];
-  const sorted = sortByValue(filtered, (r) => (sort.key === 'cpa' ? r.cpa : r.v[sort.key]), sort.dir);
+  const sortRows = (list: VideoRow[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.v[sort.key]), sort.dir);
+  // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
+  const signalRows = activeGroup ? filtered.filter(isSignalRow) : [];
+  const sorted = activeGroup ? [...sortRows(filtered.filter((r) => !isSignalRow(r))), ...sortRows(signalRows)] : sortRows(filtered);
+  const firstSignal = signalRows.length > 0 ? sorted[sorted.length - signalRows.length] : null;
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
 
   const header = { sort, onSort: (key: VideoSortKey) => setSort(nextSort(sort, key)) };
@@ -146,9 +154,7 @@ export default function VideoTable({
               ? 'Thẻ sản phẩm do TikTok tự tạo từ trang sản phẩm, không phải video'
               : action === UNAVAILABLE_FILTER
                 ? 'TikTok báo video không khả dụng (đã ngừng chạy) — chưa có cách xử lý, không xếp nhóm, Agent không đề xuất'
-                : action === UNCONFIRMED_FILTER
-                  ? 'Nhóm 7 ngày khác nhóm 14 ngày — chưa chắc chắn, không tính ở Tổng quan, Agent không đề xuất'
-                  : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
+                : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
         </span>
       </div>
 
@@ -169,17 +175,22 @@ export default function VideoTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {pageItems.map(({ v, cpa: cpaValue, trend }) => {
+            {pageItems.map((row) => {
+              const { v, cpa: cpaValue, trend } = row;
+              const signal = isSignalRow(row);
               const product = productByKey.get(productKey(v.campaignId, v.productId));
               const status = STATUS[v.status];
               const cut = trend?.group === 'cut';
               const isCard = v.contentType === 'product_card';
               const videoUrl = isCard ? null : tiktokVideoUrl(v.id, v.authorUsername);
               return (
+                <Fragment key={`${v.campaignId}-${v.productId}-${v.id}`}>
+                {row === firstSignal && activeGroup && (
+                  <SignalDivider colSpan={10} groupName={activeGroup.name} count={signalRows.length} unit="video" />
+                )}
                 <tr
-                  key={`${v.campaignId}-${v.productId}-${v.id}`}
-                  // Thẻ sản phẩm không phải video → nền nhạt để tách khỏi danh sách video
-                  className={`transition-colors hover:bg-canvas ${isCard ? 'bg-canvas/50' : ''}`}
+                  // Thẻ sản phẩm không phải video → nền nhạt; dấu hiệu → mờ hơn
+                  className={`transition-colors hover:bg-canvas ${isCard ? 'bg-canvas/50' : ''} ${signal ? 'opacity-70 hover:opacity-100' : ''}`}
                 >
                   <td className={`${TD} max-w-[320px] ${cut ? 'shadow-[inset_3px_0_0_theme(colors.danger)]' : ''}`}>
                     <VideoTitleCell video={v} product={product} videoUrl={videoUrl} />
@@ -254,6 +265,7 @@ export default function VideoTable({
                     )}
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

@@ -22,7 +22,7 @@ describe('trendOf', () => {
   it('7 ≠ 14 → chưa xác nhận, không thuộc nhóm nào', () => {
     const t = trendOf('video', S, { g7: 'cut', g14: 'stable', g30: 'stable' }, w);
     expect(t).toMatchObject({ group: null, unconfirmed: true });
-    expect(trendLabel(t, (id) => id ?? '--')).toBe('chưa xác nhận · 14 ngày: stable');
+    expect(trendLabel(t, (id) => id ?? '--')).toBe('dấu hiệu · 14 ngày: stable');
   });
 
   it('nhóm Cần ủy quyền (theo trạng thái TikTok) không cần xác nhận', () => {

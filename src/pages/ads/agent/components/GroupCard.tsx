@@ -120,10 +120,10 @@ export default function GroupCard({
           )}
           <span
             className="shrink-0 rounded-full bg-canvas px-2.5 py-1 text-xs font-semibold tabular-nums text-muted"
-            title={unconfirmed ? `+${unconfirmed} chưa xác nhận: 7 ngày thuộc nhóm này nhưng 14 ngày khác` : 'Đã xác nhận theo 7 và 14 ngày'}
+            title={unconfirmed ? `+${unconfirmed} có dấu hiệu: 7 ngày gần nhất thuộc nhóm này, 14 ngày chưa` : 'Tính theo 7 và 14 ngày cùng nhóm'}
           >
             {formatNumber(count)} {LEVEL_UNIT[level]}
-            {!!unconfirmed && <span className="font-normal"> · +{formatNumber(unconfirmed)} chưa xác nhận</span>}
+            {!!unconfirmed && <span className="font-normal"> · {formatNumber(unconfirmed)} dấu hiệu</span>}
           </span>
         </div>
 

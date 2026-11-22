@@ -1,6 +1,9 @@
 import { updateRuntime } from '../store.js';
 import { readToken } from '../tiktok/auth.js';
-import { holdSchedulerLock } from './leaderLock.js';
+import { holdSchedulerLock, releaseSchedulerLock } from './leaderLock.js';
+
+/** Lượt quét bị chặn vì tiến trình khác đang giữ khoá → thử lại sau ngần này (không đợi tới giờ sau) */
+export const LOCK_RETRY_MS = 60_000;
 import { runAgent, type RunSummary } from './engine.js';
 import { verifyPendingActions } from './executor.js';
 import { fillAfterMetrics } from './afterMetrics.js';
@@ -78,6 +81,15 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
 }
 
 export function startScheduler() {
+  // Tắt tiến trình (Restart) → trả khoá để tiến trình mới chạy lịch ngay
+  const release = () => releaseSchedulerLock();
+  process.once('exit', release);
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(sig, () => {
+      release();
+      process.exit(0);
+    });
+  }
   setInterval(verifyTick, VERIFY_EVERY_MS);
   setTimeout(afterTick, AFTER_FIRST_MS);
   setInterval(afterTick, AFTER_EVERY_MS);
@@ -91,8 +103,17 @@ export function startScheduler() {
     nextRunAt = Date.now() + intervalMs;
     // Chưa kết nối TikTok lần nào → bỏ qua lượt, không ghi lỗi (kết nối xong lượt sau tự chạy)
     if (!readToken()?.access_token) return;
-    // Tiến trình khác đang giữ lịch (cPanel có thể chạy nhiều tiến trình) → không quét trùng
-    if (!holdSchedulerLock()) return;
+    tryRun();
+  };
+  /** Tiến trình khác đang giữ lịch (cPanel có thể chạy nhiều tiến trình / vừa Restart) → thử lại sau 1 phút, không quét trùng */
+  const tryRun = () => {
+    if (!holdSchedulerLock()) {
+      setTimeout(() => {
+        // Chỉ thử lại khi lượt kế tiếp còn xa (tránh chồng lên lượt theo lịch)
+        if (nextRunAt && nextRunAt - Date.now() > LOCK_RETRY_MS) tryRun();
+      }, LOCK_RETRY_MS);
+      return;
+    }
     runAgentOnce('schedule').catch(() => undefined);
   };
   nextRunAt = Date.now() + FIRST_RUN_DELAY_MS;

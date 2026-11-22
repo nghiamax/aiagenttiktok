@@ -29,3 +29,15 @@ export function holdSchedulerLock(now = Date.now(), id = INSTANCE_ID): boolean {
     return false;
   }
 }
+
+/** Trả khoá khi tiến trình tắt (Restart trên cPanel) → tiến trình mới chạy lịch ngay, không đợi khoá hết hạn */
+export function releaseSchedulerLock(id = INSTANCE_ID): boolean {
+  try {
+    const cur = JSON.parse(fs.readFileSync(lockFile(), 'utf8')) as { id?: string };
+    if (cur.id !== id) return false;
+    fs.rmSync(lockFile(), { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}

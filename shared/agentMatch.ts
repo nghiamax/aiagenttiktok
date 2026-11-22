@@ -282,4 +282,4 @@ export function confirmRuleTargets(
 }
 
 /** Lý do bỏ qua khi khung 14 ngày không cùng nhóm */
-export const UNCONFIRMED_REASON = 'Chưa xác nhận — 14 ngày không cùng nhóm';
+export const UNCONFIRMED_REASON = 'Mới có dấu hiệu — 14 ngày chưa cùng nhóm';

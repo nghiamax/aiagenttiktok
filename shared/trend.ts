@@ -132,7 +132,7 @@ function classifyAll(level: RuleLevel, s: AdsSnapshot, settings: AdsSettings): M
 
 /** Câu ngắn dưới badge nhóm */
 export function trendLabel(t: TrendInfo, groupName: (id: string | null) => string): string | null {
-  if (t.unconfirmed) return `chưa xác nhận · 14 ngày: ${groupName(t.g14)}`;
+  if (t.unconfirmed) return `dấu hiệu · 14 ngày: ${groupName(t.g14)}`;
   if (!t.group) return null;
   if (t.long) return 'kéo dài 30 ngày';
   return t.g30 == null ? '2 tuần gần đây' : `2 tuần gần đây · 30 ngày: ${groupName(t.g30)}`;

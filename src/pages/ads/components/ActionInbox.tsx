@@ -24,7 +24,7 @@ export interface ActionSummary {
   keepsProfit?: number;
   /** Đã xác nhận và 30 ngày cũng thuộc nhóm ("kéo dài") — đã nằm trong count */
   long?: number;
-  /** 7 ngày thuộc nhóm này nhưng 14 ngày khác nhóm — không tính vào count */
+  /** Dấu hiệu: 7 ngày thuộc nhóm này nhưng 14 ngày khác nhóm — không tính vào count */
   unconfirmed?: number;
 }
 
@@ -35,7 +35,8 @@ interface ActionInboxProps {
   summary: InboxSummary;
   /** Số sản phẩm chưa nhập ROI hoà vốn */
   missingBreakEven: number;
-  onOpenAction: (level: GroupLevel, id: VideoAction) => void;
+  /** focus 'signals' → cuộn tới dải "Dấu hiệu" của nhóm trong bảng */
+  onOpenAction: (level: GroupLevel, id: VideoAction, focus?: 'signals') => void;
   onOpenSettings: () => void;
   agent: {
     paused: boolean;
@@ -190,8 +191,22 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                       </span>
                     )}
                     {!!s.unconfirmed && (
-                      <span className="block text-xs text-muted" title="7 ngày thuộc nhóm này nhưng 14 ngày khác nhóm — chưa chắc chắn, Agent không đề xuất">
-                        +{formatNumber(s.unconfirmed)} chưa xác nhận (không tính)
+                      <span
+                        role="link"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenAction(level, group.id, 'signals');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.stopPropagation();
+                          onOpenAction(level, group.id, 'signals');
+                        }}
+                        className="block text-xs text-muted underline decoration-dotted underline-offset-2 hover:text-primary"
+                        title="7 ngày gần nhất thuộc nhóm này, 14 ngày chưa — Agent chờ thêm, chưa đề xuất. Bấm để xem"
+                      >
+                        +{formatNumber(s.unconfirmed)} có dấu hiệu (chưa tính)
                       </span>
                     )}
                     {needsBreakEven ? (

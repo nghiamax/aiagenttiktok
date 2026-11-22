@@ -23,7 +23,7 @@ const statText = (s: WindowStat | null) =>
 
 /**
  * Ô Nhóm theo 3 khung 7 · 14 · 30 ngày đến hôm qua (Sếp chốt 22/11): badge nhóm đã xác nhận (7 = 14 ngày),
- * 3 chấm màu nhóm từng khung (rê chuột xem số), câu ngắn "kéo dài 30 ngày" / "2 tuần gần đây" / "chưa xác nhận".
+ * 3 chấm màu nhóm từng khung (rê chuột xem số), câu ngắn "kéo dài 30 ngày" / "2 tuần gần đây" / "dấu hiệu".
  */
 export default function TrendGroupCell({ level, trend, extra }: TrendGroupCellProps) {
   const { settings } = useAdsSettings();
@@ -47,7 +47,7 @@ export default function TrendGroupCell({ level, trend, extra }: TrendGroupCellPr
         action={trend.group ?? trend.g7}
         level={level}
         unconfirmed={trend.unconfirmed}
-        reason={trend.unconfirmed ? `7 ngày: ${nameOf(trend.g7)} nhưng 14 ngày: ${nameOf(trend.g14)} — chưa chắc chắn, Agent không đề xuất` : trend.reason}
+        reason={trend.unconfirmed ? `7 ngày gần nhất thuộc ${nameOf(trend.g7)}, nhưng 14 ngày vẫn là ${nameOf(trend.g14)}. Agent chờ thêm, chưa đề xuất.` : trend.reason}
       />
       <span className="flex items-center gap-1.5">
         <span className="flex items-center gap-0.5" aria-label="Nhóm theo 7, 14, 30 ngày">

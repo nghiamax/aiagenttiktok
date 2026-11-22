@@ -9,7 +9,7 @@ interface ActionBadgeProps {
   reason?: string;
   /** Cấp của nhóm (mặc định video) */
   level?: GroupLevel;
-  /** Nhóm 7 ngày chưa được khung 14 ngày xác nhận → badge viền đứt, mờ, có dấu ? */
+  /** Dấu hiệu: 7 ngày thuộc nhóm nhưng 14 ngày chưa → badge viền đứt, mờ, "Dấu hiệu <nhóm>" */
   unconfirmed?: boolean;
 }
 
@@ -40,8 +40,7 @@ export default function ActionBadge({ action, reason, level = 'video', unconfirm
       }`}
     >
       <meta.icon className="size-3.5" />
-      {meta.label}
-      {unconfirmed && '?'}
+      {unconfirmed ? `Dấu hiệu ${meta.label}` : meta.label}
     </span>
   );
 }

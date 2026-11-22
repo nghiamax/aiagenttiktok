@@ -112,7 +112,7 @@ export function recheckProposal(
   const why = ineligibleReason(rule.actionType, rule.params, match);
   if (why) return { ok: false, reason: why };
   const { kept } = confirmRuleTargets(rule, settings, [match], confirm);
-  if (kept.length === 0) return { ok: false, reason: `${UNCONFIRMED_REASON} — chưa chắc chắn, không nên làm lúc này` };
+  if (kept.length === 0) return { ok: false, reason: `${UNCONFIRMED_REASON} — chờ thêm, chưa nên làm lúc này` };
   return { ok: true, match: kept[0] };
 }
 

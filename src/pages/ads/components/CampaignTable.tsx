@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { formatNumber, formatVnd } from '../../../lib/format';
 import { contextForCampaign } from '../classify';
 import { nextSort, sortByValue } from '../metrics';
@@ -6,6 +6,7 @@ import { useAdsData } from '../data';
 import { findGroup, useAdsSettings } from '../settings';
 import type { Campaign, CampaignFilter, SortState } from '../types';
 import TrendGroupCell from './TrendGroupCell';
+import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import CampaignFilterBar from './CampaignFilterBar';
 import EmptyTableState from './EmptyTableState';
@@ -57,9 +58,16 @@ export default function CampaignTable({
 
   const rows = campaigns
     .filter((c) => matchesStatus(c, filter))
-    .map((c) => ({ c, trend: trends.campaign(c), budgetUse: contextForCampaign(c, days).budgetUse }))
-    .filter((r) => !activeGroup || r.trend?.group === activeGroup.id);
-  const sorted = sortByValue(rows, (r) => (sort.key === 'budgetUse' ? r.budgetUse : r.c[sort.key]), sort.dir);
+    .map((c) => ({ c, trend: trends.campaign(c), budgetUse: contextForCampaign(c, days).budgetUse }));
+  type Row = (typeof rows)[number];
+  /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
+  const isSignalRow = (r: Row) => !!activeGroup && !!r.trend?.unconfirmed && r.trend.g7 === activeGroup.id;
+  const shown = activeGroup ? rows.filter((r) => r.trend?.group === activeGroup.id || isSignalRow(r)) : rows;
+  const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'budgetUse' ? r.budgetUse : r.c[sort.key]), sort.dir);
+  // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
+  const signalRows = shown.filter(isSignalRow);
+  const sorted = [...sortRows(shown.filter((r) => !isSignalRow(r))), ...sortRows(signalRows)];
+  const firstSignal = signalRows.length > 0 ? sorted[sorted.length - signalRows.length] : null;
 
   const counts: Record<CampaignFilter, number> = {
     all: campaigns.length,
@@ -97,11 +105,16 @@ export default function CampaignTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {sorted.map(({ c, trend, budgetUse }) => {
+            {sorted.map((row) => {
+              const { c, trend, budgetUse } = row;
               const noSpend = !c.cost && !c.orders && !c.revenue;
               const belowTarget = c.roi != null && c.targetRoi != null && c.roi < c.targetRoi;
               return (
-                <tr key={c.id} className="transition-colors hover:bg-canvas">
+                <Fragment key={c.id}>
+                {row === firstSignal && activeGroup && (
+                  <SignalDivider colSpan={11} groupName={activeGroup.name} count={signalRows.length} unit="chiến dịch" />
+                )}
+                <tr className={`transition-colors hover:bg-canvas ${isSignalRow(row) ? 'opacity-70 hover:opacity-100' : ''}`}>
                   <td className={`${TD} max-w-[300px]`}>
                     <button
                       type="button"
@@ -142,13 +155,14 @@ export default function CampaignTable({
                   </td>
                   <td className={`${TD_NUM} text-muted`}>{formatNumber(c.targetRoi, 2)}</td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
 
-      {rows.length === 0 && (
+      {shown.length === 0 && (
         <EmptyTableState
           title="Không có chiến dịch phù hợp"
           description="Thử bỏ bộ lọc trạng thái hoặc nhóm. Chiến dịch hiển thị tại đây sau khi cập nhật số liệu từ TikTok Ads."

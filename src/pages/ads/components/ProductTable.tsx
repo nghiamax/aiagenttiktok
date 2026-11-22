@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Pagination from '../../../components/ui/Pagination';
@@ -10,6 +10,7 @@ import { cpa, nextSort, sortByValue } from '../metrics';
 import { breakEvenOf, findGroup, type AdsSettings } from '../settings';
 import type { AdsProduct, Campaign, SortState } from '../types';
 import TrendGroupCell from './TrendGroupCell';
+import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import EmptyTableState from './EmptyTableState';
 import MediaThumb from './MediaThumb';
@@ -47,24 +48,31 @@ export default function ProductTable({
   // Nhóm theo 7 · 14 · 30 ngày đến hôm qua (đã xác nhận = 7 và 14 ngày cùng nhóm), không đổi theo ô chọn ngày
   const trends = useTrend();
   const rows = products.map((p) => ({ p, cpa: cpa(p.cost, p.orders), trend: trends.product(p) }));
-  const filtered =
-    filter === 'all'
-      ? rows
-      : filter === 'unconfirmed'
-        ? rows.filter((r) => r.trend?.unconfirmed)
-        : rows.filter((r) => r.trend?.group === filter);
+  type Row = (typeof rows)[number];
+  /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
+  const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter;
+  const filtered = filter === 'all' ? rows : rows.filter((r) => r.trend?.group === filter || isSignalRow(r));
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
   // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
   const counts = new Map<string, number>();
-  for (const r of rows) if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
-  const unconfirmedCount = rows.filter((r) => r.trend?.unconfirmed).length;
+  const signals = new Map<string, number>();
+  for (const r of rows) {
+    if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
+    else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
+  }
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
-    ...settings.productGroups.map((g) => ({ value: g.id, label: `${g.name} (${counts.get(g.id) ?? 0})` })),
-    ...(unconfirmedCount > 0 ? [{ value: 'unconfirmed', label: `Chưa xác nhận (${unconfirmedCount})` }] : []),
+    ...settings.productGroups.map((g) => ({
+      value: g.id,
+      label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
+    })),
   ];
-  const sorted = sortByValue(filtered, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
+  const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
+  // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
+  const signalRows = activeGroup ? filtered.filter(isSignalRow) : [];
+  const sorted = activeGroup ? [...sortRows(filtered.filter((r) => !isSignalRow(r))), ...sortRows(signalRows)] : sortRows(filtered);
+  const firstSignal = signalRows.length > 0 ? sorted[sorted.length - signalRows.length] : null;
   const { page, pageCount, pageItems, setPage } = usePagination(sorted, PAGE_SIZE);
 
   const header = { sort, onSort: (key: ProductSortKey) => setSort(nextSort(sort, key)) };
@@ -107,10 +115,15 @@ export default function ProductTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {pageItems.map(({ p, cpa: cpaValue, trend }) => {
+            {pageItems.map((row) => {
+              const { p, cpa: cpaValue, trend } = row;
               const campaign = campaignById.get(p.campaignId);
               return (
-                <tr key={`${p.campaignId}-${p.id}`} className="transition-colors hover:bg-canvas">
+                <Fragment key={`${p.campaignId}-${p.id}`}>
+                {row === firstSignal && activeGroup && (
+                  <SignalDivider colSpan={10} groupName={activeGroup.name} count={signalRows.length} unit="sản phẩm" />
+                )}
+                <tr className={`transition-colors hover:bg-canvas ${isSignalRow(row) ? 'opacity-70 hover:opacity-100' : ''}`}>
                   <td className={`${TD} max-w-[320px]`}>
                     <div className="flex items-center gap-3">
                       <MediaThumb src={p.imageUrl} icon={Package} shape="square" />
@@ -172,6 +185,7 @@ export default function ProductTable({
                     <TrendGroupCell level="product" trend={trend} />
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

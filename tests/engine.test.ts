@@ -223,7 +223,7 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
       const s = await runAgent();
       const ids = mock.runtime.proposals.map((p) => p.target.videoId).sort();
       expect(ids).toEqual(['v1', 'v3']);
-      expect(s.skippedTargets['Chưa xác nhận — 14 ngày không cùng nhóm']).toBe(1);
+      expect(s.skippedTargets['Mới có dấu hiệu — 14 ngày chưa cùng nhóm']).toBe(1);
       const p1 = mock.runtime.proposals.find((p) => p.target.videoId === 'v1')!;
       expect(p1.windows?.d14).toMatchObject({ cost: 400_000, orders: 0 });
       expect(p1.long).toBe(true); // 30 ngày cũng Cắt lỗ
@@ -244,7 +244,7 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
       const s = await runAgent();
       const v2 = mock.runtime.proposals.find((p) => p.target.videoId === 'v2')!;
       expect(v2.status).toBe('outdated');
-      expect(v2.note).toMatch(/Chưa xác nhận/);
+      expect(v2.note).toMatch(/Mới có dấu hiệu/);
       expect(s.outdated).toBe(1);
     });
   });

@@ -13,7 +13,7 @@ vi.mock('../server/config', async (orig) => {
 });
 
 const { unsafeDirReason } = await import('../server/config');
-const { holdSchedulerLock, LOCK_TTL_MS } = await import('../server/agent/leaderLock');
+const { holdSchedulerLock, releaseSchedulerLock, LOCK_TTL_MS } = await import('../server/agent/leaderLock');
 afterAll(() => fs.rmSync(dir.path, { recursive: true, force: true }));
 
 describe('Hàng rào thư mục web công khai (sự cố 21/11)', () => {
@@ -39,5 +39,14 @@ describe('Khoá chạy lịch Agent (nhiều tiến trình trên cPanel)', () =>
     expect(holdSchedulerLock(t + 60_000 + LOCK_TTL_MS - 1, 'B')).toBe(false);
     expect(holdSchedulerLock(t + 60_000 + LOCK_TTL_MS, 'B')).toBe(true); // A đã tắt
     expect(holdSchedulerLock(t + 60_000 + LOCK_TTL_MS + 1, 'A')).toBe(false);
+  });
+
+  it('tiến trình cũ trả khoá khi tắt (Restart) → tiến trình mới chạy lịch ngay; không xoá khoá của người khác', () => {
+    const t = 5_000_000;
+    expect(holdSchedulerLock(t, 'cu')).toBe(true);
+    expect(holdSchedulerLock(t + 30_000, 'moi')).toBe(false); // khoá còn hạn
+    expect(releaseSchedulerLock('nguoi-khac')).toBe(false);
+    expect(releaseSchedulerLock('cu')).toBe(true);
+    expect(holdSchedulerLock(t + 31_000, 'moi')).toBe(true);
   });
 });

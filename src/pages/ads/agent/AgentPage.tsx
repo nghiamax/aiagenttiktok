@@ -22,6 +22,7 @@ import BreakEvenModal from '../components/BreakEvenModal';
 import type { AgentView } from './types';
 import { useAgentStore } from './agentStore';
 import { activeRuleCount, pendingProposals, useAgentConfig } from './useAgentConfig';
+import { useSignals } from './useSignals';
 import { useSuggestions } from './useSuggestions';
 
 const VIEWS: readonly AgentView[] = ['suggest', 'pending', 'log', 'impact', 'rules', 'groups'];
@@ -72,6 +73,8 @@ export default function AgentPage() {
   const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide, undo, verify } =
     useAgentStore();
   const pending = pendingProposals(agentState.proposals);
+  // Dấu hiệu (7 ngày thuộc nhóm, 14 ngày chưa) — chỉ báo, không có nút Duyệt
+  const signals = useSignals();
   const active = activeRuleCount(config.rules);
   // Không có ?view: chưa bật quy tắc nào → mở Gợi ý (người mới), có rồi → Chờ duyệt
   const view = VIEWS.find((v) => v === rawView) ?? (active === 0 ? 'suggest' : 'pending');
@@ -111,7 +114,7 @@ export default function AgentPage() {
               onChange={setView}
               counts={{
                 suggest: suggestCount ? String(suggestCount) : '',
-                pending: String(pending.length),
+                pending: `${pending.length}${signals.length ? ` · ${signals.length} dấu hiệu` : ''}`,
                 log: String(agentState.actions.length),
                 rules: `${active}/${config.rules.length}`,
                 groups: String(settings.groups.length + settings.productGroups.length + settings.campaignGroups.length),
@@ -122,7 +125,9 @@ export default function AgentPage() {
 
           <div className="rounded-b-2xl">
             {view === 'suggest' && <SuggestionList onOpenBreakEven={() => setBreakEvenOpen(true)} />}
-            {view === 'pending' && <ProposalList proposals={agentState.proposals} rules={config.rules} onDecide={decide} onOpenLog={() => setView('log')} />}
+            {view === 'pending' && (
+              <ProposalList proposals={agentState.proposals} rules={config.rules} signals={signals} onDecide={decide} onOpenLog={() => setView('log')} />
+            )}
             {view === 'impact' && (
               <ImpactView
                 actions={agentState.actions}

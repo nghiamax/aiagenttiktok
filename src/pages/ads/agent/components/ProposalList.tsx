@@ -10,6 +10,8 @@ import type { AgentProposal, AgentRule } from '../types';
 import ClosedProposalRow, { CLOSED_META, isClosed, type ClosedStatus } from './ClosedProposalRow';
 import ConfirmExecuteModal from './ConfirmExecuteModal';
 import ProposalItem from './ProposalItem';
+import SignalList from './SignalList';
+import type { SignalItem } from '../useSignals';
 
 interface ProposalListProps {
   /** Toàn bộ đề xuất (mọi trạng thái) */
@@ -19,6 +21,8 @@ interface ProposalListProps {
   onDecide: (id: string, decision: 'approve' | 'reject') => Promise<ExecOutcome>;
   /** Mở tab Nhật ký (xem kết quả đã chạy) */
   onOpenLog: () => void;
+  /** Dấu hiệu (7 ngày thuộc nhóm, 14 ngày chưa) — chỉ báo, không duyệt */
+  signals: SignalItem[];
 }
 
 /** Kết quả sau khi duyệt / bỏ qua */
@@ -40,7 +44,7 @@ const isOpen = (p: AgentProposal) => p.status === 'pending' || (p.status === 'ap
  * Tab Chờ duyệt: chỉ việc cần Sếp quyết. Duyệt → hộp xác nhận → chạy thật trên TikTok → kết quả ở Nhật ký.
  * Đề xuất bỏ qua / hết hạn / không còn khớp gộp trong khối "Đề xuất đã đóng".
  */
-export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: ProposalListProps) {
+export default function ProposalList({ proposals, rules, signals, onDecide, onOpenLog }: ProposalListProps) {
   const { snapshot } = useAdsData();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -170,9 +174,15 @@ export default function ProposalList({ proposals, rules, onDecide, onOpenLog }: 
       ) : (
         <EmptyTableState
           title="Không có đề xuất nào đang chờ"
-          description="Khi quy tắc ở chế độ Cần duyệt, các việc Agent muốn làm sẽ hiện ở đây. Sếp duyệt + xác nhận thì Agent chạy thật trên TikTok, kết quả xem ở Nhật ký."
+          description={
+            signals.length > 0
+              ? 'Chưa có việc nào đủ chắc chắn để duyệt. Các dấu hiệu bên dưới Agent đang theo dõi — đủ 14 ngày cùng nhóm sẽ đưa lên đây.'
+              : 'Khi quy tắc ở chế độ Cần duyệt, các việc Agent muốn làm sẽ hiện ở đây. Sếp duyệt + xác nhận thì Agent chạy thật trên TikTok, kết quả xem ở Nhật ký.'
+          }
         />
       )}
+
+      <SignalList items={signals} />
 
       {closed.length > 0 && (
         <div className="border-t border-line">

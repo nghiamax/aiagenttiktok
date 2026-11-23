@@ -38,9 +38,9 @@ export function findShop(shopId: string): ShopInfo | null {
   return r ? toShop(r) : null;
 }
 
-/** Shop có kết nối TikTok (lịch Agent chạy lần lượt các shop này) */
+/** Shop đã kết nối TikTok + đã chọn tài khoản quảng cáo (lịch Agent chạy lần lượt các shop này) */
 export function shopsWithTikTok(): string[] {
-  return (getDb().prepare('SELECT shop_id FROM tiktok_links WHERE token_enc IS NOT NULL ORDER BY shop_id').all() as { shop_id: string }[]).map(
+  return (getDb().prepare('SELECT shop_id FROM tiktok_links WHERE token_enc IS NOT NULL AND advertiser_id IS NOT NULL AND store_id IS NOT NULL ORDER BY shop_id').all() as { shop_id: string }[]).map(
     (r) => r.shop_id,
   );
 }

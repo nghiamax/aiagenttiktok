@@ -8,6 +8,8 @@ import crypto from 'node:crypto';
 import type { ActorRef } from '../../shared/permissions.js';
 import { config } from '../config.js';
 import { deleteToken, oauthMeta, readToken, saveToken, tokenRequest } from './auth.js';
+import { applyAccount, autoSelectAccount } from './accounts.js';
+import { currentShopId, withShop } from '../shopContext.js';
 
 export const SCOPE = 'mcp:tt4b';
 /** Phiên đăng nhập web chờ TikTok trả về tối đa 10 phút */
@@ -88,6 +90,8 @@ export async function exchangeAndSave(req: Pick<AuthRequest, 'clientId' | 'redir
 
 interface Pending extends AuthRequest {
   userId: string;
+  /** Shop đang mở lúc bấm Kết nối — token lưu vào đúng shop này */
+  shopId: string;
   by: ActorRef;
   expires: number;
 }
@@ -106,11 +110,12 @@ function sweep(now: number) {
   for (const [k, p] of pending) if (p.expires <= now) pending.delete(k);
 }
 
-/** Bước 1 (web): tạo link đăng nhập TikTok cho người đang bấm */
+/** Bước 1 (web): tạo link đăng nhập TikTok cho người đang bấm, cho shop đang mở */
 export async function startConnect(redirect: string, user: ActorRef, now = Date.now()): Promise<string> {
   sweep(now);
+  const shopId = currentShopId();
   const req = await createAuthRequest(redirect);
-  pending.set(req.state, { ...req, userId: user.id, by: user, expires: now + PENDING_TTL_MS });
+  pending.set(req.state, { ...req, userId: user.id, shopId, by: user, expires: now + PENDING_TTL_MS });
   return req.authUrl;
 }
 
@@ -128,11 +133,16 @@ export async function finishConnect(
   if (userId !== null && p.userId !== userId) throw new ConnectError('WRONG_USER', 'Phiên kết nối không phải của tài khoản này');
   if (q.error) throw new ConnectError('DENIED', `TikTok từ chối: ${q.error_description || q.error}`);
   if (!q.code) throw new ConnectError('NO_CODE', 'TikTok không trả mã đăng nhập');
-  try {
-    await exchangeAndSave(p, q.code, p.by);
-  } catch (e) {
-    throw new ConnectError('TOKEN_FAILED', `Không lấy được quyền từ TikTok: ${(e as Error).message.slice(0, 200)}`);
-  }
+  await withShop(p.shopId, async () => {
+    try {
+      await exchangeAndSave(p, q.code!, p.by);
+    } catch (e) {
+      throw new ConnectError('TOKEN_FAILED', `Không lấy được quyền từ TikTok: ${(e as Error).message.slice(0, 200)}`);
+    }
+    // Tự chọn tài khoản quảng cáo (1 tài khoản / 1 shop TikTok); nhiều → chủ shop chọn trên web
+    await autoSelectAccount();
+  });
+  return { shopId: p.shopId };
 }
 
 /* ───────── Ngắt kết nối: thu hồi token phía TikTok (RFC 7009) rồi xoá token trên máy ───────── */
@@ -167,6 +177,7 @@ export async function disconnect(by?: ActorRef): Promise<{ revoked: boolean }> {
   } catch {
     revoked = false;
   } finally {
+    applyAccount(null); // đóng đề xuất chờ + tạm dừng Agent của shop
     deleteToken();
   }
   console.log(`[tiktok] Đã ngắt kết nối TikTok${by ? ` — bởi ${by.name}` : ''} lúc ${new Date().toISOString()} (TikTok thu hồi: ${revoked ? 'có' : 'chưa xác nhận'})`);

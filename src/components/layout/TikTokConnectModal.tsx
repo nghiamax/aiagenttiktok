@@ -71,7 +71,7 @@ export default function TikTokConnectModal({ onClose }: { onClose: () => void })
         ) : (
           <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate font-semibold">{status.state === 'never' ? 'TikTok for Business' : status.advertiser.name}</p>
+              <p className="truncate font-semibold">{status.state === 'never' ? 'TikTok for Business' : (status.advertiser?.name ?? 'Chưa chọn tài khoản quảng cáo')}</p>
               <p className="text-sm text-muted">Tài khoản quảng cáo</p>
             </div>
             {ok ? (

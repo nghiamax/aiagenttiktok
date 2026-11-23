@@ -18,6 +18,16 @@ import { encrypt } from './secret.js';
 export const LEGACY_FLAG = 'legacy_import';
 const SESSION_TTL_MS = 30 * 24 * 3_600_000;
 
+/**
+ * Bản cũ (1 shop) gọi TikTok bằng ID cố định này (hoặc biến môi trường) — chỉ dùng 1 lần khi chép,
+ * để shop đang chạy giữ đúng tài khoản quảng cáo. Shop mới chọn tài khoản sau khi Kết nối TikTok.
+ */
+const LEGACY = {
+  advertiserId: process.env.TIKTOK_ADVERTISER_ID ?? '7579465349544869906',
+  storeId: process.env.TIKTOK_STORE_ID ?? '7496093946365052968',
+  name: process.env.TIKTOK_ADVERTISER_NAME ?? 'Phụ Kiện NECOTECH',
+};
+
 interface LegacyUser {
   id: string;
   username: string;
@@ -97,7 +107,7 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
 
     // Tài khoản chính = shop đang chạy (NECOTECH) — chủ là các Quản trị viên cũ
     const mainAccount = id();
-    const mainName = config.tiktok.advertiserName || 'Shop chính';
+    const mainName = LEGACY.name || 'Shop chính';
     insAccount.run(mainAccount, mainName, 'free', null, iso); // Quản trị viên luôn dùng như Pro (effectivePlan)
     r.accounts++;
     const mainShop = id();
@@ -162,11 +172,11 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
         token.connectedBy ? JSON.stringify(token.connectedBy) : null,
         token.savedAt ?? null,
         token.refreshFailedAt ?? null,
-        config.tiktok.advertiserId,
-        config.tiktok.advertiserName,
-        config.tiktok.storeId,
+        LEGACY.advertiserId,
+        LEGACY.name,
+        LEGACY.storeId,
         null,
-        config.tiktok.currency,
+        'VND',
       );
       r.token = true;
     }

@@ -45,9 +45,6 @@ export const config = {
   trustProxy: process.env.TRUST_PROXY === '1',
   tiktok: {
     mcpUrl: process.env.TIKTOK_MCP_URL ?? 'https://business-api.tiktok.com/open_mcp/tt-ads-mcp-flat',
-    advertiserId: process.env.TIKTOK_ADVERTISER_ID ?? '7579465349544869906',
-    storeId: process.env.TIKTOK_STORE_ID ?? '7496093946365052968',
-    advertiserName: process.env.TIKTOK_ADVERTISER_NAME ?? 'Phụ Kiện NECOTECH',
-    currency: 'VND',
+    // Tài khoản quảng cáo / shop TikTok: theo từng shop trong database (Kết nối TikTok → chọn tài khoản), không cấu hình ở đây
   },
 };

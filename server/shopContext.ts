@@ -20,11 +20,19 @@ export function withShop<T>(shopId: string, fn: () => T): T {
   return als.run({ shopId }, fn);
 }
 
+/** Chỉ cho test (VITEST): shop mặc định khi test gọi thẳng hàm, không qua withShop */
+let testShop: string | null = null;
+export function setTestShop(id: string | null) {
+  if (!process.env.VITEST) throw new Error('setTestShop chỉ dùng trong test');
+  testShop = id;
+}
+
 export function currentShopId(): string {
   const s = als.getStore();
-  if (!s) throw new NoShopError();
-  return s.shopId;
+  if (s) return s.shopId;
+  if (testShop && process.env.VITEST) return testShop;
+  throw new NoShopError();
 }
 
 /** null khi không ở trong shop nào (vd việc chung của hệ thống) */
-export const maybeShopId = (): string | null => als.getStore()?.shopId ?? null;
+export const maybeShopId = (): string | null => als.getStore()?.shopId ?? (process.env.VITEST ? testShop : null);

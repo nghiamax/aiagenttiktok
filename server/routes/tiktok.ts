@@ -5,6 +5,8 @@ import { actorOf, requirePermission } from '../auth/middleware.js';
 import { readCookie, resolveSession } from '../auth/sessions.js';
 import { findUserById } from '../auth/users.js';
 import { ConnectError, disconnect, finishConnect, startConnect } from '../tiktok/oauthFlow.js';
+import { chooseAccount, listAccounts } from '../tiktok/accounts.js';
+import { readToken, TikTokLoginRequired } from '../tiktok/auth.js';
 
 /* Nút "Kết nối TikTok" trên web: thay cho npm run login khi server chạy trên VPS (không có trình duyệt) */
 
@@ -44,6 +46,43 @@ tiktokRouter.post('/disconnect', requirePermission('configure'), async (req, res
   }
   const { revoked } = await disconnect(actorOf(req));
   res.json({ ok: true, revoked });
+});
+
+/** Tài khoản quảng cáo + shop TikTok mà token của shop được quyền (CHỈ ĐỌC TikTok) — để chọn trên web */
+tiktokRouter.get('/accounts', requirePermission('configure'), async (_req, res) => {
+  if (!readToken()?.access_token) {
+    res.status(409).json({ code: 'TIKTOK_LOGIN_REQUIRED', error: 'Shop chưa kết nối TikTok' });
+    return;
+  }
+  try {
+    res.json({ advertisers: await listAccounts() });
+  } catch (e) {
+    if (e instanceof TikTokLoginRequired) {
+      res.status(401).json({ code: 'TIKTOK_LOGIN_REQUIRED', error: e.message });
+      return;
+    }
+    res.status(502).json({ code: 'TIKTOK_ERROR', error: `Không đọc được danh sách tài khoản: ${(e as Error).message.slice(0, 200)}` });
+  }
+});
+
+/** Chọn tài khoản quảng cáo + shop TikTok cho shop — chỉ nhận cặp có trong danh sách TikTok trả về */
+tiktokRouter.post('/account', requirePermission('configure'), async (req, res) => {
+  const advertiserId = String(req.body?.advertiserId ?? '');
+  const storeId = String(req.body?.storeId ?? '');
+  if (!advertiserId || !storeId) {
+    res.status(400).json({ code: 'BAD_REQUEST', error: 'Chọn tài khoản quảng cáo và shop' });
+    return;
+  }
+  try {
+    const account = await chooseAccount(advertiserId, storeId);
+    if (!account) {
+      res.status(400).json({ code: 'NOT_ALLOWED', error: 'Tài khoản / shop này không nằm trong quyền đã cấp cho TikTok' });
+      return;
+    }
+    res.json({ account });
+  } catch (e) {
+    res.status(502).json({ code: 'TIKTOK_ERROR', error: `Không kiểm tra được với TikTok: ${(e as Error).message.slice(0, 200)}` });
+  }
 });
 
 /**

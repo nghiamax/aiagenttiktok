@@ -15,7 +15,8 @@ export interface TikTokStatus {
   connectedBy: string | null;
   refreshedAt: string | null;
   refreshFailedAt: string | null;
-  advertiser: { id: string; name: string };
+  /** null = đã kết nối nhưng chưa chọn tài khoản quảng cáo */
+  advertiser: { id: string; name: string } | null;
 }
 
 /** Đang chờ người dùng cho phép trên TikTok (tab mới / trình duyệt khác) */

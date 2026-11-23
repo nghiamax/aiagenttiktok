@@ -20,7 +20,7 @@ export default function Header({ onOpenMobileMenu, onOpenTikTok }: HeaderProps) 
         ? { className: 'bg-accent-green', label: 'Đang kết nối TikTok' }
         : { className: 'bg-danger', label: 'Mất kết nối TikTok — bấm để kết nối lại' };
   const shopName =
-    status?.state === 'never' ? 'Chưa kết nối TikTok' : (status?.advertiser.name ?? 'Tài khoản TikTok Shop');
+    status?.state === 'never' ? 'Chưa kết nối TikTok' : (status?.advertiser?.name ?? 'Tài khoản TikTok Shop');
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-white/90 px-4 backdrop-blur md:px-8">
       <button type="button" onClick={onOpenMobileMenu} className={`${iconButton} lg:hidden`} aria-label="Mở menu">

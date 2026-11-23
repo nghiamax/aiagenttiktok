@@ -3,7 +3,13 @@ import path from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 /* Chép dữ liệu JSON cũ (1 shop NECOTECH) sang database nhiều shop — thư mục tạm, dữ liệu mẫu */
-const dir = vi.hoisted(() => ({ path: '' }));
+const dir = vi.hoisted(() => {
+  // Tài khoản quảng cáo bản cũ dùng (biến môi trường) — chép sang shop chính
+  process.env.TIKTOK_ADVERTISER_ID = 'ADV1';
+  process.env.TIKTOK_STORE_ID = 'STORE1';
+  process.env.TIKTOK_ADVERTISER_NAME = 'Shop Mẫu';
+  return { path: '' };
+});
 vi.mock('../server/config', async () => {
   const fsMod = await import('node:fs');
   const osMod = await import('node:os');
@@ -13,7 +19,6 @@ vi.mock('../server/config', async () => {
     config: {
       dataDir: pathMod.join(dir.path, 'data'),
       secretsDir: pathMod.join(dir.path, 'secrets'),
-      tiktok: { advertiserId: 'ADV1', storeId: 'STORE1', advertiserName: 'Shop Mẫu', currency: 'VND' },
     },
   };
 });

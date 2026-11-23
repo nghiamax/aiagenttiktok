@@ -1,9 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { ActorRef } from '../../shared/permissions.js';
 import { config } from '../config.js';
+import { currentShopId } from '../shopContext.js';
+import { clearLink, readTokenJson, writeTokenJson } from './link.js';
 
-/** File token, cùng định dạng với scripts/mcp-probe.mjs */
+/** Token TikTok của 1 shop — lưu mã hoá trong database (tiktok_links), theo shop đang xử lý */
 export interface StoredToken {
   client_id: string;
   redirect_uri?: string;
@@ -29,7 +29,6 @@ export class TikTokLoginRequired extends Error {
   }
 }
 
-const TOKEN_FILE = path.join(config.secretsDir, 'tiktok-mcp.json');
 const AUTH_BASE = `${config.tiktok.mcpUrl}/oauth`;
 /** Gia hạn khi còn dưới 5 phút */
 const REFRESH_MARGIN_MS = 5 * 60_000;
@@ -52,24 +51,18 @@ export async function oauthMeta(): Promise<OAuthMeta> {
   return metaCache;
 }
 
+/** Token của shop đang xử lý */
 export function readToken(): StoredToken | null {
-  try {
-    return JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')) as StoredToken;
-  } catch {
-    return null;
-  }
+  return readTokenJson() as StoredToken | null;
 }
 
-/** Xoá token trên máy (Ngắt kết nối) */
+/** Xoá kết nối của shop (Ngắt kết nối): token + tài khoản đang chọn */
 export function deleteToken() {
-  fs.rmSync(TOKEN_FILE, { force: true });
+  clearLink();
 }
 
 export function saveToken(token: Omit<StoredToken, 'savedAt'>) {
-  fs.mkdirSync(config.secretsDir, { recursive: true });
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ ...token, savedAt: new Date().toISOString() }, null, 2), {
-    mode: 0o600,
-  });
+  writeTokenJson({ ...token, savedAt: new Date().toISOString() });
 }
 
 /** Thời điểm token hết hạn (ms), null nếu không rõ */
@@ -96,10 +89,11 @@ const REFRESH_FAILED_TEXT = 'TikTok không cho gia hạn nữa — bấm Kết n
 function markRefreshFailed(token: StoredToken) {
   if (token.refreshFailedAt) return;
   console.warn('[tiktok] Gia hạn thất bại — cần Kết nối TikTok lại');
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ ...token, refreshFailedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  writeTokenJson({ ...token, refreshFailedAt: new Date().toISOString() });
 }
 
-let refreshing: Promise<StoredToken> | null = null;
+/** Đang gia hạn theo shop (nhiều lời gọi cùng lúc dùng chung 1 lần gia hạn) */
+const refreshing = new Map<string, Promise<StoredToken>>();
 
 async function refresh(token: StoredToken): Promise<StoredToken> {
   if (!token.refresh_token) throw new TikTokLoginRequired();
@@ -128,8 +122,11 @@ export async function getAccessToken(force = false): Promise<string> {
   if (token.refreshFailedAt) throw new TikTokLoginRequired(REFRESH_FAILED_TEXT);
   const exp = expiresAt(token);
   if (!force && (exp === null || exp - Date.now() > REFRESH_MARGIN_MS)) return token.access_token;
-  refreshing ??= refresh(token).finally(() => {
-    refreshing = null;
-  });
-  return (await refreshing).access_token;
+  const shop = currentShopId();
+  let job = refreshing.get(shop);
+  if (!job) {
+    job = refresh(token).finally(() => refreshing.delete(shop));
+    refreshing.set(shop, job);
+  }
+  return (await job).access_token;
 }

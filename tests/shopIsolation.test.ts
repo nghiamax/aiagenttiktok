@@ -111,3 +111,28 @@ describe('requireShop', () => {
     expect(runShop(a.token, users.publicUser(a.user)).inside).toBeNull();
   });
 });
+
+describe('Thêm tài khoản quảng cáo (POST /api/shops)', () => {
+  async function post(token: string, user: ReturnType<typeof users.publicUser>) {
+    const { shopsRouter } = await import('../server/routes/shops');
+    const layer = (shopsRouter.stack as { route?: { path: string; methods: Record<string, boolean>; stack: { handle: (...a: unknown[]) => unknown }[] } }[]).find(
+      (l) => l.route?.path === '/' && l.route.methods.post,
+    )!;
+    const handler = layer.route!.stack[layer.route!.stack.length - 1].handle;
+    const res = { statusCode: 200, body: null as unknown, status(c: number) { res.statusCode = c; return res; }, json(b: unknown) { res.body = b; return res; } };
+    handler({ body: {}, user, get: (h: string) => (h.toLowerCase() === 'cookie' ? `sid=${token}` : undefined) }, res, () => {});
+    return res.body as { currentShopId: string; shops: { id: string; name: string }[] };
+  }
+
+  it('không cần tên (tên tạm), mở luôn shop mới; bấm lại khi shop đó chưa kết nối → dùng lại, không tạo thêm', async () => {
+    const lone = users.createUser({ username: 'khachmoi', role: 'user', password: 'matkhau123' });
+    const t = sessions.createSession(lone.id);
+    const first = await post(t, users.publicUser(lone));
+    expect(first.shops).toHaveLength(1);
+    expect(first.shops[0].name).toBe('Tài khoản quảng cáo mới');
+    expect(sessions.sessionShopId(t)).toBe(first.currentShopId);
+    const again = await post(t, users.publicUser(lone));
+    expect(again.shops).toHaveLength(1);
+    expect(again.currentShopId).toBe(first.currentShopId);
+  });
+});

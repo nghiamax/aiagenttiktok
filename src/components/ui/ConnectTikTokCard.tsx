@@ -19,7 +19,7 @@ export default function ConnectTikTokCard() {
         <PlugZap className="size-7" strokeWidth={1.75} />
       </div>
       <h2 className="text-lg font-semibold">Kết nối TikTok để bắt đầu</h2>
-      {shop && (
+      {shop && shop.name !== 'Tài khoản quảng cáo mới' && (
         <p className="mt-1 text-sm text-muted">
           Shop <span className="font-semibold text-ink">{shop.name}</span> chưa kết nối TikTok
         </p>

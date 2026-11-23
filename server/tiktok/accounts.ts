@@ -1,4 +1,6 @@
 import { getAgentConfig, saveAgentConfig, updateRuntime } from '../store.js';
+import { getDb } from '../db/index.js';
+import { currentShopId } from '../shopContext.js';
 import { callReadTool } from './mcpClient.js';
 import { getAccount, setAccount, type TikTokAccount } from './link.js';
 
@@ -148,6 +150,9 @@ export async function chooseAccount(advertiserId: string, storeId: string): Prom
 export function applyAccount(next: TikTokAccount | null) {
   const prev = getAccount();
   setAccount(next);
+  // Tên shop trên web = tên shop TikTok (hoặc tài khoản quảng cáo) đang chạy — không bắt nhập tên
+  const label = next?.storeName ?? next?.advertiserName;
+  if (label) getDb().prepare('UPDATE shops SET name = ? WHERE id = ?').run(label.slice(0, 60), currentShopId());
   const changed = !!prev && (!next || prev.advertiserId !== next.advertiserId || prev.storeId !== next.storeId);
   if (!changed) return;
   const now = new Date().toISOString();

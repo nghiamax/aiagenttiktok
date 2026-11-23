@@ -16,8 +16,8 @@ interface ShopValue {
   loaded: boolean;
   /** Đổi shop đang mở → tải lại trang (mọi số liệu / Agent theo shop mới) */
   switchShop: (id: string) => Promise<string | null>;
-  /** Tạo shop mới rồi mở luôn; trả lỗi (null = xong) */
-  createShop: (name: string) => Promise<string | null>;
+  /** Thêm tài khoản quảng cáo: tạo shop mới (tên tự lấy khi chọn tài khoản) rồi mở luôn để Kết nối; trả lỗi (null = xong) */
+  createShop: () => Promise<string | null>;
 }
 
 const ShopContext = createContext<ShopValue | null>(null);
@@ -52,9 +52,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const createShop = useCallback(async (name: string) => {
+  const createShop = useCallback(async () => {
     try {
-      await api('/shops', { method: 'POST', body: { name } });
+      await api('/shops', { method: 'POST', body: {} });
       window.location.reload();
       return null;
     } catch (e) {

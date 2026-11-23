@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Link2, Loader2, Plus, Store } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useShop } from '../../shop/ShopProvider';
@@ -18,8 +18,6 @@ export default function ShopMenu({ onOpenTikTok }: ShopMenuProps) {
   const { status } = useTikTok();
   const canCreate = useAuth().can('configure');
   const [open, setOpen] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,11 +44,9 @@ export default function ShopMenu({ onOpenTikTok }: ShopMenuProps) {
           ? { className: 'bg-amber-500', label: 'Chưa chọn tài khoản quảng cáo' }
           : { className: 'bg-accent-green', label: 'Đang kết nối TikTok' };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
+  async function add() {
     setBusy(true);
-    const err = await createShop(name.trim());
+    const err = await createShop();
     if (err) {
       setError(err);
       setBusy(false);
@@ -76,7 +72,7 @@ export default function ShopMenu({ onOpenTikTok }: ShopMenuProps) {
         <div className="absolute left-0 top-full z-40 mt-2 w-72 rounded-2xl border border-line bg-white p-2 shadow-lg">
           {shops.length > 0 && (
             <>
-              <p className="px-3 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Shop của bạn</p>
+              <p className="px-3 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Tài khoản quảng cáo</p>
               <ul className="max-h-64 overflow-y-auto">
                 {shops.map((s) => (
                   <li key={s.id}>
@@ -113,40 +109,16 @@ export default function ShopMenu({ onOpenTikTok }: ShopMenuProps) {
             </button>
           )}
 
-          {canCreate &&
-            (adding ? (
-              <form onSubmit={submit} className="space-y-2 px-1 py-1.5">
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={60}
-                  placeholder="Tên shop mới"
-                  autoFocus
-                  className="w-full rounded-xl border border-line px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setAdding(false)} className="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-canvas">
-                    Huỷ
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={busy || !name.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-50"
-                  >
-                    {busy && <Loader2 className="size-3.5 animate-spin" />}
-                    Tạo shop
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAdding(true)}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-muted transition hover:bg-canvas hover:text-ink"
-              >
-                <Plus className="size-4 shrink-0" /> Thêm shop
-              </button>
-            ))}
+          {canCreate && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={add}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-muted transition hover:bg-canvas hover:text-ink disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <Plus className="size-4 shrink-0" />} Thêm tài khoản quảng cáo
+            </button>
+          )}
           {error && <p className="mx-1 mt-1 rounded-lg bg-rose-50 px-3 py-2 text-xs text-danger">{error}</p>}
         </div>
       )}

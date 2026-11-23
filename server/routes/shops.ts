@@ -28,14 +28,26 @@ shopsRouter.post('/current', requirePermission('view'), (req, res) => {
   res.json({ currentShopId: shopId });
 });
 
-/** Tạo shop mới trong tài khoản (chưa kết nối TikTok) rồi mở luôn shop đó */
+/** Tên tạm của shop mới — đổi thành tên shop / tài khoản quảng cáo khi chọn tài khoản (applyAccount) */
+export const NEW_SHOP_NAME = 'Tài khoản quảng cáo mới';
+
+/**
+ * "Thêm tài khoản quảng cáo": tạo shop mới (chưa kết nối TikTok) rồi mở luôn để Kết nối. Không bắt nhập tên.
+ * Tài khoản đã có shop chưa kết nối (bấm thêm rồi bỏ dở) → mở lại shop đó, không tạo thêm shop trống.
+ */
 shopsRouter.post('/', requirePermission('configure'), (req, res) => {
-  const name = String(req.body?.name ?? '').trim().slice(0, MAX_NAME);
-  if (!name) return res.status(400).json({ code: 'BAD_REQUEST', error: 'Nhập tên shop' });
+  const name = String(req.body?.name ?? '').trim().slice(0, MAX_NAME) || NEW_SHOP_NAME;
   const user = findUserById(req.user!.id);
   if (!user?.accountId) return res.status(400).json({ code: 'NO_ACCOUNT', error: 'Tài khoản chưa gắn với khách nào' });
-  const id = crypto.randomUUID();
-  getDb().prepare('INSERT INTO shops (id, account_id, name, created_at) VALUES (?, ?, ?, ?)').run(id, user.accountId, name, new Date().toISOString());
+  const db = getDb();
+  const empty = db
+    .prepare(
+      `SELECT s.id FROM shops s LEFT JOIN tiktok_links l ON l.shop_id = s.id
+       WHERE s.account_id = ? AND l.token_enc IS NULL ORDER BY s.created_at LIMIT 1`,
+    )
+    .get(user.accountId) as { id: string } | undefined;
+  const id = empty?.id ?? crypto.randomUUID();
+  if (!empty) db.prepare('INSERT INTO shops (id, account_id, name, created_at) VALUES (?, ?, ?, ?)').run(id, user.accountId, name, new Date().toISOString());
   const token = readCookie(req.get('cookie'));
   if (token) setSessionShop(token, id);
   res.json({ shops: listShopsOf(req.user!.id), currentShopId: id });

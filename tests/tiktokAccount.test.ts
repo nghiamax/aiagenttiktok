@@ -86,6 +86,13 @@ describe('tự chọn tài khoản sau khi kết nối', () => {
     });
   });
 
+  it('chọn tài khoản → tên shop trên web tự đổi thành tên shop TikTok', async () => {
+    await withShop(makeShop('s1'), async () => {
+      await accounts.chooseAccount('A1', 'S1');
+      expect(db.getDb().prepare("SELECT name FROM shops WHERE id = 's1'").get()).toMatchObject({ name: 'Shop 1' });
+    });
+  });
+
   it('chủ shop chọn: chỉ nhận cặp (tài khoản, shop) TikTok cho phép', async () => {
     await withShop(makeShop('s1'), async () => {
       expect(await accounts.chooseAccount('A1', 'S9')).toBeNull();

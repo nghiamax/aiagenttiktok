@@ -100,17 +100,17 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            to={`/ads/agent?view=groups${level === 'video' ? '' : `&level=${level}`}`}
+            to={`/care-ads/product?view=groups${level === 'video' ? '' : `&level=${level}`}`}
             className="flex w-fit items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium transition-colors hover:bg-canvas"
           >
             <SlidersHorizontal className="size-4 text-muted" />
             Sửa định nghĩa nhóm
           </Link>
           <Link
-            to="/ads/agent"
+            to="/care-ads/product"
             className="flex w-fit items-center gap-2 rounded-xl bg-primary-soft px-3.5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
           >
-            Mở BOT AI
+            Mở Care Ads
             {agent.pendingCount > 0 && (
               <span className="rounded-full bg-danger px-1.5 py-0.5 text-xs leading-none text-white">
                 {agent.pendingCount} chờ duyệt
@@ -140,7 +140,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
 
       {tiles.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted">
-          Chưa có nhóm {unit} nào bật “Hiện ở Tổng quan”. Bật trong BOT AI → Nhóm.
+          Chưa có nhóm {unit} nào bật “Hiện ở Tổng quan”. Bật trong Care Ads → Nhóm.
         </p>
       ) : (
         /* gap-px + nền line = đường kẻ giữa các ô, đúng với mọi số lượng nhóm */
@@ -215,8 +215,8 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                 <div className="ml-[52px] mt-2">
                   {rule ? (
                     <Link
-                      to="/ads/agent?view=rules"
-                      title="Xem / sửa quy tắc ở BOT AI"
+                      to="/care-ads/product?view=rules"
+                      title="Xem / sửa quy tắc ở Care Ads"
                       className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition hover:ring-1 hover:ring-current ${
                         rule.mode !== 'off' ? 'bg-violet-50 text-accent-violet' : 'bg-canvas text-muted hover:text-ink'
                       }`}
@@ -226,7 +226,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                     </Link>
                   ) : (
                     <Link
-                      to={`/ads/agent?view=rules&add=${level}:${encodeURIComponent(group.id)}`}
+                      to={`/care-ads/product?view=rules&add=${level}:${encodeURIComponent(group.id)}`}
                       title={`Tạo quy tắc cho nhóm ${meta.label}`}
                       className="inline-flex items-center gap-1 rounded-md border border-dashed border-primary/40 px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary-soft"
                     >

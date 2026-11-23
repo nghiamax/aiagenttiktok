@@ -96,7 +96,7 @@ export default function ProductTable({
             <>
               {filtered.length} sản phẩm ·{' '}
               <Link
-                to="/ads/agent?view=groups&level=product"
+                to="/care-ads/product?view=groups&level=product"
                 className="font-medium text-primary transition-colors hover:text-primary-hover"
               >
                 Sửa nhóm sản phẩm

@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Megaphone, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Card from '../../../components/ui/Card';
-import PageHeader from '../../../components/ui/PageHeader';
-import AdsSubNav from '../components/AdsSubNav';
-import AdsRangeControl from '../components/AdsRangeControl';
 import { useAdsData } from '../data';
 import type { GroupLevel } from '../groups';
 import { findGroupAnyLevel, useAdsSettings } from '../settings';
@@ -82,14 +79,6 @@ export default function AgentPage() {
 
   return (
     <>
-      <PageHeader
-        icon={Megaphone}
-        title="Quản lí chiến dịch"
-        description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
-        actions={<AdsRangeControl />}
-      />
-      <AdsSubNav pendingCount={pending.length} />
-
       <div className="space-y-6">
         <AgentStatusBar
           paused={agentState.paused}

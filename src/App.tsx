@@ -9,6 +9,9 @@ import KocBookingPage from './pages/koc-booking/KocBookingPage';
 import FinancePage from './pages/finance/FinancePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import CareAdsLayout from './pages/care-ads/CareAdsLayout';
+import LivestreamPage from './pages/care-ads/LivestreamPage';
+import LegacyAgentRedirect from './pages/care-ads/LegacyAgentRedirect';
 import TikTokDonePage from './pages/TikTokDonePage';
 
 export default function App() {
@@ -25,9 +28,16 @@ export default function App() {
         }
       >
         <Route index element={<Navigate to="/ads" replace />} />
-        <Route path="ads" element={<AdsLayout />}>
-          <Route index element={<AdsPage />} />
-          <Route path="agent" element={<AgentPage />} />
+        {/* Quản lí chiến dịch + Care Ads 24/7 dùng chung AdsLayout (số liệu, thiết lập, dữ liệu Agent) */}
+        <Route element={<AdsLayout />}>
+          <Route path="ads" element={<AdsPage />} />
+          {/* Link cũ AI Agent → Care Ads 24/7 / GMV Max sản phẩm (giữ ?view=) */}
+          <Route path="ads/agent" element={<LegacyAgentRedirect />} />
+          <Route path="care-ads" element={<CareAdsLayout />}>
+            <Route index element={<Navigate to="product" replace />} />
+            <Route path="product" element={<AgentPage />} />
+            <Route path="live" element={<LivestreamPage />} />
+          </Route>
         </Route>
         <Route path="orders" element={<OrdersPage />} />
         <Route path="koc-booking" element={<KocBookingPage />} />

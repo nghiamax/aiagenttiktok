@@ -11,7 +11,6 @@ import { useTrend } from './trend';
 import type { TrendInfo } from '../../../shared/trend';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
-import AdsSubNav from './components/AdsSubNav';
 import BreakEvenModal from './components/BreakEvenModal';
 import CampaignTable from './components/CampaignTable';
 import GmvMaxListCard, { LIST_ANCHOR } from './components/GmvMaxListCard';
@@ -244,7 +243,6 @@ export default function AdsPage() {
         description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
         actions={<AdsRangeControl />}
       />
-      <AdsSubNav pendingCount={pendingCount} />
 
       <div className="space-y-6">
         <AdsStatsGrid summary={snapshot.summary} previous={snapshot.previousSummary} />

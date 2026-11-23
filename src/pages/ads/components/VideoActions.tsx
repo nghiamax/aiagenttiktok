@@ -151,7 +151,7 @@ export default function VideoActions({ video: v, campaignRunning, videoUrl }: Vi
       {result && (
         <span className={`max-w-[220px] text-right text-xs ${result.ok ? 'text-accent-green' : 'text-danger'}`}>
           {result.ok ? 'Đã gửi lên TikTok · ' : `${result.message} · `}
-          <Link to="/ads/agent?view=log" className="font-semibold underline underline-offset-2 hover:text-ink">
+          <Link to="/care-ads/product?view=log" className="font-semibold underline underline-offset-2 hover:text-ink">
             Nhật ký
           </Link>
         </span>

@@ -175,7 +175,7 @@ export default function RuleFormModal({
           <p className="mt-2 text-xs text-muted">
             {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
             <Link
-              to={`/ads/agent?view=groups&level=${level}`}
+              to={`/care-ads/product?view=groups&level=${level}`}
               onClick={onClose}
               className="font-medium text-primary hover:text-primary-hover"
             >

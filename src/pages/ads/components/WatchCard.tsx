@@ -173,7 +173,7 @@ function RecentRow({ item, evaluateAfterHours }: { item: AgentActionLog; evaluat
       <div className="flex flex-col items-start gap-1 lg:items-end lg:text-right">
         <VerdictBadge ev={ev} />
         {summary && <p className={`text-xs ${tone[summary.tone]}`}>{summary.text}</p>}
-        <Link to="/ads/agent?view=log" className="text-xs font-medium text-primary hover:text-primary-hover">
+        <Link to="/care-ads/product?view=log" className="text-xs font-medium text-primary hover:text-primary-hover">
           Xem ở Nhật ký
         </Link>
       </div>

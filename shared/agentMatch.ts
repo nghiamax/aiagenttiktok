@@ -2,7 +2,9 @@ import type { AdsSnapshot, AdsVideo, VideoStatus } from './adsSnapshot.js';
 import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
 import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
-import type { WindowStat } from './trend.js';
+import { isSpendGated, matchesIgnoringSpend, type WindowStat } from './trend.js';
+import type { EvalContext } from './groups.js';
+import { shortVnd } from './format.js';
 import { effectiveStatus } from './videoStatus.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
@@ -227,6 +229,8 @@ export interface ConfirmedTarget extends RuleTarget {
   windows?: { d14: WindowStat | null; d30: WindowStat | null };
   /** 30 ngày cũng thuộc nhóm này ("kéo dài") */
   long?: boolean;
+  /** Vào từ cửa 14 + 30 ngày: 7 ngày chi ít chưa tới ngưỡng nhưng vẫn lỗ */
+  slowLoss?: boolean;
 }
 
 /** Khoá đối tượng của quy tắc: video gộp theo (chiến dịch, video) như findRuleTargets */
@@ -283,3 +287,87 @@ export function confirmRuleTargets(
 
 /** Lý do bỏ qua khi khung 14 ngày không cùng nhóm */
 export const UNCONFIRMED_REASON = 'Mới có dấu hiệu — 14 ngày chưa cùng nhóm';
+
+/* ───────── Cửa vào thứ 2: "lỗ âm thầm" (Sếp chốt 22/11) ─────────
+ * 14 + 30 ngày cùng nhóm có ngưỡng chi (vd Cắt lỗ) mà 7 ngày không thuộc nhóm vì chi ít chưa tới ngưỡng.
+ * 7 ngày vẫn khớp nhóm khi bỏ ngưỡng chi (0 đơn / ROI < hoà vốn) → lỗ âm thầm (đề xuất như thường);
+ * 7 ngày đã không còn khớp → đang hồi phục (chỉ báo, không đề xuất). */
+
+/** Bối cảnh 7 ngày gộp của đối tượng (video = mọi dòng sản phẩm trong chiến dịch) */
+function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: AdsSettings): EvalContext | null {
+  const m = metricsOf(t, d7);
+  if (!m) return null;
+  const campaign = d7.campaigns.find((c) => c.id === t.campaignId);
+  const cost = m.cost ?? 0;
+  const orders = m.orders ?? 0;
+  return {
+    cost,
+    revenue: m.revenue ?? 0,
+    orders,
+    roi: m.roi,
+    cpa: orders > 0 ? cost / orders : null,
+    breakEven: level === 'campaign' ? null : breakEvenOf(settings, t.productId),
+    target: campaign?.targetRoi ?? null,
+    budgetUse: level === 'campaign' && campaign?.budget && campaign.cost != null ? (cost / snapshotDays(d7) / campaign.budget) * 100 : null,
+  };
+}
+
+export const RECOVERING_REASON = 'Đang hồi phục — 7 ngày gần nhất đã tốt lên';
+
+/**
+ * Đối tượng của quy tắc theo đủ 3 khung — dùng chung Agent (quét + xét lại lúc duyệt), thẻ quy tắc, phần Dấu hiệu:
+ * kept = đã xác nhận (7 = 14 ngày) + lỗ âm thầm; unconfirmed = dấu hiệu (7 ngày thuộc nhóm, 14 chưa); recovering = đang hồi phục.
+ */
+export function matchRuleTrend(
+  rule: AgentRule,
+  settings: AdsSettings,
+  d7: AdsSnapshot,
+  snaps: ConfirmSnaps,
+): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
+  const primary = findRuleTargets(rule, settings, d7);
+  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, primary, snaps);
+  const recovering: RuleTarget[] = [];
+  const level = ruleLevel(rule);
+  const G = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
+  if (!snaps.d14 || !snaps.d30 || !isSpendGated(G)) return { kept, unconfirmed, recovering };
+
+  const in7 = new Set(primary.map((t) => targetKey(level, t.target)));
+  const in30 = new Set(findRuleTargets(rule, settings, snaps.d30).map((t) => targetKey(level, t.target)));
+  const campaign7 = new Map(d7.campaigns.map((c) => [c.id, c]));
+  for (const t14 of findRuleTargets(rule, settings, snaps.d14)) {
+    const k = targetKey(level, t14.target);
+    if (in7.has(k) || !in30.has(k)) continue;
+    const ctx = context7(level, t14.target, d7, settings);
+    if (!ctx || ctx.cost <= 0) continue; // 7 ngày không còn chi → không cần làm gì
+    const main = t14.target.videoId
+      ? d7.videos.find((v) => v.campaignId === t14.target.campaignId && v.id === t14.target.videoId && v.productId === t14.target.productId) ??
+        d7.videos.find((v) => v.campaignId === t14.target.campaignId && v.id === t14.target.videoId)
+      : undefined;
+    const t: RuleTarget = {
+      target: main ? { ...t14.target, productId: main.productId } : t14.target,
+      name: t14.name,
+      reason: '',
+      cost: ctx.cost,
+      revenue: ctx.revenue,
+      orders: ctx.orders,
+      roi: ctx.roi,
+      breakEven: ctx.breakEven,
+      ...(main && { videoStatus: effectiveStatus(main) }),
+      campaignRunning: campaign7.get(t14.target.campaignId)?.status === 'running',
+    };
+    if (matchesIgnoringSpend(G!, ctx)) {
+      const roi = ctx.roi == null ? '--' : ctx.roi.toFixed(2).replace('.', ',');
+      t.reason = `Lỗ âm thầm: 7 ngày chi ${shortVnd(ctx.cost)} (chưa tới ngưỡng) · ${ctx.orders} đơn · ROI ${roi} — 14 và 30 ngày đều ${G!.name}`;
+      kept.push({
+        ...t,
+        windows: { d14: metricsOf(t.target, snaps.d14), d30: metricsOf(t.target, snaps.d30) },
+        long: true,
+        slowLoss: true,
+      });
+    } else {
+      t.reason = `${RECOVERING_REASON} (14 và 30 ngày ${G!.name})`;
+      recovering.push(t);
+    }
+  }
+  return { kept, unconfirmed, recovering };
+}

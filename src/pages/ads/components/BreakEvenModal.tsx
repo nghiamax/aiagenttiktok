@@ -64,7 +64,7 @@ export default function BreakEvenModal({
   return (
     <Modal
       title="ROI hoà vốn theo sản phẩm"
-      description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo. Video có ROI thấp hơn mức này là đang lỗ. Ngưỡng chi phí, số đơn… sửa ở AI Agent → Nhóm video."
+      description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo. Video có ROI thấp hơn mức này là đang lỗ. Ngưỡng chi phí, số đơn… sửa ở Care Ads → Nhóm video."
       onClose={onClose}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">

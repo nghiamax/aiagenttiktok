@@ -231,6 +231,22 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
       expect(s.reminders).toBe(1);
     });
 
+    it('lỗ âm thầm: 7 ngày chi 42k 0 đơn (chưa tới ngưỡng), 14 + 30 ngày Cắt lỗ → vẫn đề xuất gỡ; 7 ngày có lời → đang hồi phục', async () => {
+      const add = (snap: AdsSnapshot, v: ReturnType<typeof video>) => ({ ...snap, videos: [...snap.videos, v] });
+      mock.snapshot = add(add(shop(), video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost: 42_000 })), video({ id: 'v8', campaignId: 'c1', productId: 'p1', cost: 40_000, revenue: 600_000, orders: 3 }));
+      const long = (from: string, cost: number) =>
+        add(add({ ...d14(), range: { from, to: '2026-11-17' } }, video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost })), video({ id: 'v8', campaignId: 'c1', productId: 'p1', cost }));
+      mock.byFrom['2026-11-04'] = long('2026-11-04', 120_000);
+      mock.byFrom['2026-10-19'] = long('2026-10-19', 260_000);
+      const s = await runAgent();
+      const p9 = mock.runtime.proposals.find((p) => p.target.videoId === 'v9');
+      expect(p9).toMatchObject({ actionType: 'remove_creative', slowLoss: true, long: true });
+      expect(p9?.before.cost).toBe(42_000); // số 7 ngày
+      expect(p9?.reason).toMatch(/Lỗ âm thầm/);
+      expect(mock.runtime.proposals.some((p) => p.target.videoId === 'v8')).toBe(false);
+      expect(s.skippedTargets['Đang hồi phục — 7 ngày gần nhất đã tốt lên']).toBe(1);
+    });
+
     it('Sếp tắt xác nhận → chỉ xét 7 ngày như cũ', async () => {
       mock.byFrom['2026-11-04'] = d14();
       mock.config.guardrails = { ...mock.config.guardrails, confirmWindow: false };

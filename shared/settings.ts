@@ -31,12 +31,17 @@ export function groupsOf(settings: AdsSettings, level: GroupLevel): GroupDef[] {
   return settings[GROUP_KEY[level]];
 }
 
+/** Nhóm mẫu đã bỏ khỏi bộ mặc định — bản lưu cũ còn thì lọc đi */
+const REMOVED_VIDEO_GROUP = 'watch';
+
 /** Ghép bản lưu (có thể cũ / thiếu cấp) với mặc định → bản đầy đủ, nhóm fallback ở cuối */
 export function normalizeSettings(saved: Partial<AdsSettings> | null | undefined, defaults: AdsSettings): AdsSettings {
   const groupsFor = (level: GroupLevel) => {
     const list = saved?.[GROUP_KEY[level]];
     // Bản lưu cũ (chưa có nhóm cấp này) → dùng nhóm mặc định
-    return normalizeGroups(Array.isArray(list) && list.length > 0 ? list : groupsOf(defaults, level));
+    const groups = Array.isArray(list) && list.length > 0 ? list : groupsOf(defaults, level);
+    // Sếp bỏ nhóm mẫu "Theo dõi" (22/11/2026) — shop cần thì tự thêm nhóm mới (id khác, không bị bỏ)
+    return normalizeGroups(level === 'video' ? groups.filter((g) => !(g.id === REMOVED_VIDEO_GROUP && g.builtin)) : groups);
   };
   return {
     breakEvenRoi: { ...defaults.breakEvenRoi, ...saved?.breakEvenRoi },

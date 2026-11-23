@@ -54,6 +54,22 @@ export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined,
   };
 }
 
+/** Bối cảnh so điều kiện cho một dòng video (chiến dịch + sản phẩm) */
+export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined, settings: AdsSettings): EvalContext {
+  const cost = video.cost ?? 0;
+  const orders = video.orders ?? 0;
+  return {
+    cost,
+    revenue: video.revenue ?? 0,
+    orders,
+    roi: video.roi,
+    cpa: orders > 0 ? cost / orders : null,
+    breakEven: breakEvenOf(settings, video.productId),
+    target: campaign?.targetRoi ?? null,
+    budgetUse: null,
+  };
+}
+
 const hasActivity = (ctx: EvalContext) => ctx.cost > 0 || ctx.orders > 0 || ctx.revenue > 0;
 
 /** Xét các nhóm custom từ trên xuống; không khớp nhóm nào → nhóm fallback */
@@ -88,19 +104,8 @@ export function classifyVideo(
   // Video không khả dụng (TikTok ngừng chạy): chưa có cách xử lý → không xếp nhóm, chỉ lọc riêng ở bảng Video
   if (effectiveStatus(video) === 'unavailable') return null;
 
-  const cost = video.cost ?? 0;
-  const orders = video.orders ?? 0;
-  const revenue = video.revenue ?? 0;
-  const ctx: EvalContext = {
-    cost,
-    revenue,
-    orders,
-    roi: video.roi,
-    cpa: orders > 0 ? cost / orders : null,
-    breakEven: breakEvenOf(settings, video.productId),
-    target: campaign?.targetRoi ?? null,
-    budgetUse: null,
-  };
+  const ctx = contextForVideo(video, campaign, settings);
+  const { cost, orders, revenue } = ctx;
   if (!hasActivity(ctx)) return null;
 
   for (const group of settings.groups) {

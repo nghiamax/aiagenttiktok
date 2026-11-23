@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { confirmRuleTargets, findRuleTargets, ineligibleReason, metricsOf, ruleLevel, type RuleTarget } from '../../../../shared/agentMatch';
+import { ineligibleReason, matchRuleTrend, metricsOf, ruleLevel, type RuleTarget } from '../../../../shared/agentMatch';
 import type { WindowStat } from '../../../../shared/trend';
 import { findGroup, useAdsSettings } from '../settings';
 import { useTrend } from '../trend';
@@ -17,6 +17,8 @@ export interface SignalItem {
   /** Tên nhóm của quy tắc / nhóm ở khung 14 ngày (để giải thích) */
   groupName: string;
   group14Name: string;
+  /** dấu hiệu (7 ngày thuộc nhóm, 14 chưa) / đang hồi phục (14 + 30 ngày thuộc nhóm, 7 ngày đã tốt lên) */
+  kind: 'signal' | 'recovering';
 }
 
 /**
@@ -40,8 +42,9 @@ export function useSignals(): SignalItem[] {
     for (const rule of state.rules) {
       if (rule.mode === 'off' || !rule.trigger || rule.actionType === 'remind') continue;
       const level = ruleLevel(rule);
-      const { unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, d7), trends.confirm);
-      for (const t of unconfirmed) {
+      const { unconfirmed, recovering } = matchRuleTrend(rule, settings, d7, trends.confirm);
+      const list = [...unconfirmed.map((t) => ({ t, kind: 'signal' as const })), ...recovering.map((t) => ({ t, kind: 'recovering' as const }))];
+      for (const { t, kind } of list) {
         if (ineligibleReason(rule.actionType, rule.params, t)) continue;
         const key = `${rule.actionType}|${t.target.campaignId}|${t.target.productId}|${t.target.videoId}`;
         // Đề xuất cũ cùng đối tượng còn chờ (sẽ tự đóng ở lượt quét tới) → không hiện trùng
@@ -73,6 +76,7 @@ export function useSignals(): SignalItem[] {
           },
           groupName: nameOf(rule.trigger),
           group14Name: nameOf(info?.g14),
+          kind,
         });
       }
     }

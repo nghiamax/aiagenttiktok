@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import {
-  confirmRuleTargets,
-  findRuleTargets,
   ineligibleReason,
+  matchRuleTrend,
+  RECOVERING_REASON,
   UNCONFIRMED_REASON,
   type ConfirmedTarget,
   type ConfirmSnaps,
@@ -106,14 +106,19 @@ export function recheckProposal(
   if (rule.mode === 'off') return { ok: false, reason: 'Quy tắc đã tắt' };
   if (!rule.trigger) return { ok: false, reason: 'Quy tắc chưa chọn nhóm' };
   const k = keyOf(p.actionType, p.target);
-  const match = findRuleTargets(rule, settings, snapshot).find((t) => keyOf(rule.actionType, t.target) === k);
-  const range = snapshot.range ? `Số liệu ${ddmm(snapshot.range.from)}–${ddmm(snapshot.range.to)}` : 'Số liệu mới';
-  if (!match) return { ok: false, reason: `${range}:${currentText(p.target, snapshot)} — không còn khớp quy tắc «${rule.name}»` };
+  // Đủ 3 khung: đã xác nhận (7 = 14) + lỗ âm thầm (14 + 30, 7 ngày chi ít); dấu hiệu / đang hồi phục → không làm
+  const sameTarget = (t: RuleTarget) => keyOf(rule.actionType, t.target) === k;
+  const r = matchRuleTrend(rule, settings, snapshot, confirm);
+  const match = r.kept.find(sameTarget);
+  if (!match) {
+    if (r.unconfirmed.some(sameTarget)) return { ok: false, reason: `${UNCONFIRMED_REASON} — chờ thêm, chưa nên làm lúc này` };
+    if (r.recovering.some(sameTarget)) return { ok: false, reason: RECOVERING_REASON };
+    const range = snapshot.range ? `Số liệu ${ddmm(snapshot.range.from)}–${ddmm(snapshot.range.to)}` : 'Số liệu mới';
+    return { ok: false, reason: `${range}:${currentText(p.target, snapshot)} — không còn khớp quy tắc «${rule.name}»` };
+  }
   const why = ineligibleReason(rule.actionType, rule.params, match);
   if (why) return { ok: false, reason: why };
-  const { kept } = confirmRuleTargets(rule, settings, [match], confirm);
-  if (kept.length === 0) return { ok: false, reason: `${UNCONFIRMED_REASON} — chờ thêm, chưa nên làm lúc này` };
-  return { ok: true, match: kept[0] };
+  return { ok: true, match };
 }
 
 /**
@@ -136,6 +141,8 @@ function applyWindows(p: AgentProposal, t: ConfirmedTarget) {
   else delete p.windows;
   if (t.long !== undefined) p.long = t.long;
   else delete p.long;
+  if (t.slowLoss) p.slowLoss = true;
+  else delete p.slowLoss;
 }
 
 /** fresh = lấy số liệu mới từ TikTok (bỏ qua cache) — dùng cho "Quét ngay" */
@@ -215,8 +222,9 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       const cooldownMs = (rule.cooldownHours ?? guardrails.cooldownHours) * HOUR;
 
       // Chỉ đối tượng đã xác nhận bằng khung 14 ngày (Sếp chốt 22/11); còn lại ghi "bỏ qua"
-      const { kept, unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, snapshot), confirm);
+      const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm);
       unconfirmed.forEach(() => skip(UNCONFIRMED_REASON));
+      recovering.forEach(() => skip(RECOVERING_REASON));
       for (const t of kept) {
         const k = keyOf(rule.actionType, t.target);
         if (pendingKeys.has(k)) {
@@ -287,6 +295,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           ...(t.offset && { offset: t.offset }),
           ...(t.windows && { windows: t.windows }),
           ...(t.long !== undefined && { long: t.long }),
+          ...(t.slowLoss && { slowLoss: true }),
           status: 'pending',
           ruleMode: rule.mode,
           ...(rule.mode === 'auto' && {

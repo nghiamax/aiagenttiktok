@@ -75,7 +75,7 @@ export default function ProposalItem({ item, ruleName, selected, busy, onToggle,
         {item.windows ? (
           // Đề xuất có số 14 / 30 ngày (sau khi bật xác nhận 22/11) → bảng 3 khung
           <>
-            <WindowsTable before={item.before} windows={item.windows} long={item.long} />
+            <WindowsTable before={item.before} windows={item.windows} long={item.long} slowLoss={item.slowLoss} />
             {offset && (
               <p className="text-xs tabular-nums text-muted">
                 Tổng video (gồm đơn bù, 7 ngày): {offsetTotal(offset)} · {formatNumber(offset.total.orders)} đơn

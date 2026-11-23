@@ -27,7 +27,7 @@ export default function SignalList({ items }: { items: SignalItem[] }) {
         <ChevronRight className={`size-4 text-muted transition-transform ${open ? 'rotate-90' : ''}`} />
         <Eye className="size-4 text-amber-600" />
         <span className="font-semibold">Đang có dấu hiệu — Agent theo dõi ({items.length})</span>
-        <span className="text-xs text-muted">7 ngày gần nhất đã thuộc nhóm, 14 ngày chưa · chưa cần làm gì</span>
+        <span className="text-xs text-muted">dấu hiệu mới chớm hoặc đang hồi phục · chưa cần làm gì</span>
       </button>
       {open && (
         <ul className="divide-y divide-line border-t border-line bg-amber-50/30">
@@ -36,17 +36,25 @@ export default function SignalList({ items }: { items: SignalItem[] }) {
             return (
               <li key={s.key} className={ITEM_GRID}>
                 <div className="text-xs text-muted">
-                  <p className="font-semibold text-amber-700">Dấu hiệu {s.groupName}</p>
+                  <p className={`font-semibold ${s.kind === 'recovering' ? 'text-accent-green' : 'text-amber-700'}`}>
+                    {s.kind === 'recovering' ? 'Đang hồi phục' : `Dấu hiệu ${s.groupName}`}
+                  </p>
                   <p className="mt-0.5">Chưa đề xuất</p>
                 </div>
                 <ActionCell actionType={s.rule.actionType} ruleName={s.rule.name} params={s.rule.params} />
                 <TargetCell target={s.target.target} />
                 <div className="space-y-2">
                   <WindowsTable before={s.before} windows={s.windows} />
-                  <p className="text-sm text-muted">
-                    7 ngày gần nhất thuộc <b className="text-ink">{s.groupName}</b>, 14 ngày vẫn là {s.group14Name} — Agent chờ thêm. Nếu 14 ngày
-                    cũng {s.groupName.toLowerCase()} sẽ chuyển lên Cần duyệt.
-                  </p>
+                  {s.kind === 'recovering' ? (
+                    <p className="text-sm text-muted">
+                      14 và 30 ngày thuộc <b className="text-ink">{s.groupName}</b>, nhưng 7 ngày gần nhất đã tốt lên — Agent không làm gì, tiếp tục theo dõi.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted">
+                      7 ngày gần nhất thuộc <b className="text-ink">{s.groupName}</b>, 14 ngày vẫn là {s.group14Name} — Agent chờ thêm. Nếu 14 ngày
+                      cũng {s.groupName.toLowerCase()} sẽ chuyển lên Cần duyệt.
+                    </p>
+                  )}
                 </div>
                 <div className="lg:text-right">
                   <Link

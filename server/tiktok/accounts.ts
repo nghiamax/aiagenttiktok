@@ -36,6 +36,29 @@ interface StoreListData {
   }[];
 }
 
+/**
+ * TikTok có thể trả cùng 1 shop nhiều lần cho 1 tài khoản (shop có nhiều vai trò trong Business Center — thấy 23/11)
+ * → gộp theo store_id, giữ thông tin quyền độc quyền nếu dòng nào có.
+ */
+export function dedupeStores(list: StoreOption[]): StoreOption[] {
+  const by = new Map<string, StoreOption>();
+  for (const s of list) {
+    const prev = by.get(s.storeId);
+    by.set(
+      s.storeId,
+      prev
+        ? {
+            storeId: s.storeId,
+            storeName: prev.storeName ?? s.storeName,
+            exclusive: prev.exclusive || s.exclusive,
+            exclusiveAdvertiserId: prev.exclusiveAdvertiserId ?? s.exclusiveAdvertiserId,
+          }
+        : s,
+    );
+  }
+  return [...by.values()];
+}
+
 /** Đọc các tài khoản quảng cáo token được quyền + shop GMV Max của từng tài khoản */
 export async function listAccounts(): Promise<AdvertiserOption[]> {
   const data = await callReadTool<AdvertiserListData>('auth_advertiser_get', {});
@@ -48,14 +71,16 @@ export async function listAccounts(): Promise<AdvertiserOption[]> {
       const s = await callReadTool<StoreListData>('gmv_max_store_list_get', { advertiser_id: a.advertiserId });
       out.push({
         ...a,
-        stores: (s.store_list ?? [])
-          .filter((x) => x.store_id)
-          .map((x) => ({
-            storeId: String(x.store_id),
-            storeName: x.store_name ?? null,
-            exclusive: x.exclusive_authorized_advertiser_info?.advertiser_id === a.advertiserId,
-            exclusiveAdvertiserId: x.exclusive_authorized_advertiser_info?.advertiser_id ?? null,
-          })),
+        stores: dedupeStores(
+          (s.store_list ?? [])
+            .filter((x) => x.store_id)
+            .map((x) => ({
+              storeId: String(x.store_id),
+              storeName: x.store_name ?? null,
+              exclusive: x.exclusive_authorized_advertiser_info?.advertiser_id === a.advertiserId,
+              exclusiveAdvertiserId: x.exclusive_authorized_advertiser_info?.advertiser_id ?? null,
+            })),
+        ),
       });
     } catch (e) {
       out.push({ ...a, stores: [], error: (e as Error).message.slice(0, 200) });

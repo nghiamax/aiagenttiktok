@@ -76,6 +76,16 @@ describe('tự chọn tài khoản sau khi kết nối', () => {
     });
   });
 
+  it('TikTok trả cùng 1 shop 2 lần cho 1 tài khoản → gộp thành 1 (vẫn tự chọn được)', async () => {
+    tt.stores.A1.push({ store_id: 'S1', store_name: 'Shop 1' });
+    await withShop(makeShop('s1'), async () => {
+      const list = await accounts.listAccounts();
+      expect(list[0].stores).toHaveLength(1);
+      expect(list[0].stores[0]).toMatchObject({ storeId: 'S1', exclusive: true });
+      expect(await accounts.autoSelectAccount()).toMatchObject({ advertiserId: 'A1', storeId: 'S1' });
+    });
+  });
+
   it('chủ shop chọn: chỉ nhận cặp (tài khoản, shop) TikTok cho phép', async () => {
     await withShop(makeShop('s1'), async () => {
       expect(await accounts.chooseAccount('A1', 'S9')).toBeNull();

@@ -2,7 +2,8 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { buildTrendIndex, productKey, videoKey, type TrendInfo, type TrendSnaps } from '../../../shared/trend';
 import type { ConfirmSnaps } from '../../../shared/agentMatch';
 import { useAgentStore } from './agent/agentStore';
-import { useAdsData } from './data';
+import { formatDm } from '../../lib/dates';
+import { lastDays, useAdsData } from './data';
 import { useAdsSettings } from './settings';
 import type { AdsProduct, AdsVideo, Campaign } from './types';
 
@@ -22,12 +23,25 @@ interface TrendValue {
   campaign: (c: Pick<Campaign, 'id'>) => TrendInfo | undefined;
   /** Đã có khung 14 ngày (chưa có → nhóm chỉ theo 7 ngày, chưa xác nhận được) */
   ready: boolean;
+  /**
+   * Khoảng ngày bảng đang hiện so với 3 khung: trùng khung nào → `ring` (chấm khung đó có viền);
+   * khác cả 3 → `ring: null`, ô Nhóm thêm dòng "Khoảng chọn: …" xếp nhóm theo số đang hiện.
+   */
+  viewing: ViewingRange;
+}
+
+export interface ViewingRange {
+  ring: 'g7' | 'g14' | 'g30' | null;
+  /** dd/MM–dd/MM */
+  label: string;
 }
 
 const TrendContext = createContext<TrendValue | null>(null);
 
 export function TrendProvider({ children }: { children: ReactNode }) {
-  const { trendSnaps } = useAdsData();
+  const { trendSnaps, snapshot } = useAdsData();
+  const from = snapshot.range?.from;
+  const to = snapshot.range?.to;
   const { settings } = useAdsSettings();
   const { state } = useAgentStore();
   const confirmOn = state.guardrails.confirmWindow !== false;
@@ -46,10 +60,21 @@ export function TrendProvider({ children }: { children: ReactNode }) {
       product: (p) => idx.product.get(productKey(p.campaignId, p.id)),
       campaign: (c) => idx.campaign.get(c.id),
       ready: !!trendSnaps.d14,
+      viewing: viewingOf(from, to),
     };
-  }, [trendSnaps, settings, confirmOn]);
+  }, [trendSnaps, settings, confirmOn, from, to]);
 
   return <TrendContext.Provider value={value}>{children}</TrendContext.Provider>;
+}
+
+function viewingOf(from: string | undefined, to: string | undefined): ViewingRange {
+  if (!from || !to) return { ring: 'g7', label: '' };
+  const same = (n: number) => {
+    const r = lastDays(n);
+    return r.from === from && r.to === to;
+  };
+  const ring = same(7) ? 'g7' : same(14) ? 'g14' : same(30) ? 'g30' : null;
+  return { ring, label: from === to ? formatDm(from) : `${formatDm(from)}–${formatDm(to)}` };
 }
 
 export function useTrend(): TrendValue {

@@ -12,6 +12,7 @@ import type { AdsProduct, Campaign, SortState } from '../types';
 import TrendGroupCell from './TrendGroupCell';
 import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
+import { classifyProduct } from '../classify';
 import EmptyTableState from './EmptyTableState';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
@@ -118,7 +119,7 @@ export default function ProductTable({
               <SortableHeader label="CPA" sortKey="cpa" {...header} />
               <SortableHeader label="ROI" sortKey="roi" {...header} />
               <th className={`${TH} text-right`}>ROI hoà vốn</th>
-              <th className={`${TH} text-left`}>Nhóm</th>
+              <th className={`${TH} text-left`} title="Nhóm Agent xét theo 7 · 14 · 30 ngày đến hôm qua, không đổi theo ô chọn ngày">Nhóm</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -194,7 +195,7 @@ export default function ProductTable({
                     })()}
                   </td>
                   <td className={TD}>
-                    <TrendGroupCell level="product" trend={trend} />
+                    <TrendGroupCell level="product" trend={trend} current={classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null} />
                   </td>
                 </tr>
                 </Fragment>

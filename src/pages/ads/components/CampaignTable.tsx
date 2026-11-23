@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { formatNumber, formatVnd } from '../../../lib/format';
-import { contextForCampaign } from '../classify';
+import { classifyCampaign, contextForCampaign } from '../classify';
 import { nextSort, sortByValue } from '../metrics';
 import { useAdsData } from '../data';
 import { findGroup, useAdsSettings } from '../settings';
@@ -99,7 +99,7 @@ export default function CampaignTable({
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Chiến dịch</th>
               <th className={`${TH} text-left`}>Trạng thái</th>
-              <th className={`${TH} text-left`}>Nhóm</th>
+              <th className={`${TH} text-left`} title="Nhóm Agent xét theo 7 · 14 · 30 ngày đến hôm qua, không đổi theo ô chọn ngày">Nhóm</th>
               <th className={`${TH} text-right`}>Video</th>
               <SortableHeader label="Ngân sách/ngày" sortKey="budget" {...header} />
               <SortableHeader label="Tiêu NS" sortKey="budgetUse" {...header} />
@@ -142,7 +142,7 @@ export default function CampaignTable({
                     {noSpend ? (
                       <span className="whitespace-nowrap text-xs text-muted">Chưa chi tiêu</span>
                     ) : (
-                      <TrendGroupCell level="campaign" trend={trend} />
+                      <TrendGroupCell level="campaign" trend={trend} current={classifyCampaign(c, settings, days)?.action ?? null} />
                     )}
                   </td>
                   <td className={`${TD_NUM} text-muted`}>{formatNumber(c.selectedVideos)}</td>

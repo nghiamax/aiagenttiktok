@@ -19,6 +19,7 @@ import { offsetOf } from '../../../../shared/agentMatch';
 import { offsetTotalLine, offsetWarning } from '../../../../shared/offsetText';
 import type { VideoOffset } from '../../../../shared/agentTypes';
 import { useTrend } from '../trend';
+import { classifyVideo } from '../classify';
 import type { TrendInfo } from '../../../../shared/trend';
 
 type VideoSortKey = 'cost' | 'revenue' | 'orders' | 'cpa' | 'roi';
@@ -181,7 +182,7 @@ export default function VideoTable({
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Video</th>
               <th className={`${TH} text-left`}>Sản phẩm</th>
-              <th className={`${TH} text-left`}>Nhóm</th>
+              <th className={`${TH} text-left`} title="Nhóm Agent xét theo 7 · 14 · 30 ngày đến hôm qua, không đổi theo ô chọn ngày">Nhóm</th>
               <th className={`${TH} text-left`}>Trạng thái</th>
               <SortableHeader label="Chi phí" sortKey="cost" {...header} />
               <SortableHeader label="Doanh thu" sortKey="revenue" {...header} />
@@ -236,6 +237,7 @@ export default function VideoTable({
                     ) : (
                       <TrendGroupCell
                         level="video"
+                        current={classifyVideo(v, campaignById.get(v.campaignId), settings)?.action ?? null}
                         trend={trend}
                         extra={
                           cut &&

@@ -98,7 +98,7 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
     // Tài khoản chính = shop đang chạy (NECOTECH) — chủ là các Quản trị viên cũ
     const mainAccount = id();
     const mainName = config.tiktok.advertiserName || 'Shop chính';
-    insAccount.run(mainAccount, mainName, 'pro', null, iso);
+    insAccount.run(mainAccount, mainName, 'free', null, iso); // Quản trị viên luôn dùng như Pro (effectivePlan)
     r.accounts++;
     const mainShop = id();
     db.prepare('INSERT INTO shops (id, account_id, name, created_at) VALUES (?, ?, ?, ?)').run(mainShop, mainAccount, mainName, iso);

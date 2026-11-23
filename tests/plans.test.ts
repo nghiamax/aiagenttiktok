@@ -24,6 +24,7 @@ vi.mock('../server/config', async () => {
   };
 });
 
+const db = await import('../server/db/index');
 const users = await import('../server/auth/users');
 const usage = await import('../server/finance/usage');
 const costs = await import('../server/finance/costs');
@@ -54,7 +55,8 @@ function call(router: { stack: unknown[] }, method: string, routePath: string, r
 }
 
 beforeEach(() => {
-  for (const f of ['users.json', 'sessions.json', 'usage.json', 'costs.json']) fs.rmSync(path.join(dir.path, f), { force: true });
+  db.clearAllForTests();
+  for (const f of ['usage.json', 'costs.json']) fs.rmSync(path.join(dir.path, f), { force: true });
 });
 
 describe('Gói', () => {
@@ -193,4 +195,5 @@ describe('Nhớ giá vốn theo SKU (theo tài khoản)', () => {
   });
 });
 
+process.on('exit', () => db.closeDb());
 process.on('exit', () => fs.rmSync(dir.path, { recursive: true, force: true }));

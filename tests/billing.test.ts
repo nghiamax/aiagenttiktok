@@ -24,6 +24,7 @@ vi.mock('../server/config', async () => {
   };
 });
 
+const db = await import('../server/db/index');
 const users = await import('../server/auth/users');
 const store = await import('../server/billing/store');
 const { billingWebhook, billingRouter } = await import('../server/routes/billing');
@@ -63,7 +64,8 @@ function webhook(body: unknown, auth = 'Apikey khoa-bi-mat') {
 }
 
 beforeEach(() => {
-  for (const f of ['users.json', 'billing.json', 'billing-orders.json']) fs.rmSync(path.join(dir.path, f), { force: true });
+  db.clearAllForTests();
+  for (const f of ['billing.json', 'billing-orders.json']) fs.rmSync(path.join(dir.path, f), { force: true });
 });
 
 describe('Mã đơn + hạn Pro', () => {
@@ -152,4 +154,5 @@ describe('Đơn + webhook SePay', () => {
   });
 });
 
+process.on('exit', () => db.closeDb());
 process.on('exit', () => fs.rmSync(dir.path, { recursive: true, force: true }));

@@ -14,6 +14,7 @@ import { BILLING_WEBHOOK_PATH, billingRouter, billingWebhook } from './routes/bi
 import { CALLBACK_PATH, tiktokCallback, tiktokRouter } from './routes/tiktok.js';
 import { requireAuth } from './auth/middleware.js';
 import { hasUsers } from './auth/users.js';
+import { bootDatabase } from './db/boot.js';
 
 // Hàng rào: thư mục chìa khoá / dữ liệu nằm trong thư mục web công khai → không chạy
 const unsafe = unsafeDirReason({ secretsDir: config.secretsDir, dataDir: config.dataDir });
@@ -21,6 +22,9 @@ if (unsafe) {
   console.error(`\n✖ KHÔNG KHỞI ĐỘNG: ${unsafe}\n`);
   process.exit(1);
 }
+
+// Database: tạo bảng + chép dữ liệu JSON cũ (1 lần) trước khi nhận request
+bootDatabase();
 
 const app = express();
 app.disable('x-powered-by');

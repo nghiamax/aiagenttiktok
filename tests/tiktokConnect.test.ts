@@ -53,6 +53,7 @@ vi.stubGlobal('fetch', async (url: string, init?: { body?: unknown }) => {
 
 const flow = await import('../server/tiktok/oauthFlow');
 const tAuth = await import('../server/tiktok/auth');
+const db = await import('../server/db/index');
 const users = await import('../server/auth/users');
 const sessions = await import('../server/auth/sessions');
 const { tiktokCallback, tiktokRouter } = await import('../server/routes/tiktok');
@@ -68,9 +69,13 @@ beforeEach(() => {
   refreshMode = 'ok';
   revokeMode = 'ok';
   calls.length = 0;
-  for (const f of ['tiktok-mcp.json', 'users.json', 'sessions.json']) fs.rmSync(path.join(dir.path, f), { force: true });
+  db.clearAllForTests();
+  for (const f of ['tiktok-mcp.json']) fs.rmSync(path.join(dir.path, f), { force: true });
 });
-afterAll(() => fs.rmSync(dir.path, { recursive: true, force: true }));
+afterAll(() => {
+  db.closeDb();
+  fs.rmSync(dir.path, { recursive: true, force: true });
+});
 
 describe('startConnect / finishConnect', () => {
   it('link đăng nhập có redirect về web + PKCE S256; đúng state → lưu token kèm người / lúc kết nối', async () => {

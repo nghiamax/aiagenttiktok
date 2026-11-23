@@ -80,3 +80,13 @@ export function parseJson<T>(text: unknown, fallback: T): T {
     return fallback;
   }
 }
+
+/** Chỉ dùng trong test: xoá sạch dữ liệu (giữ bảng) */
+export function clearAllForTests() {
+  const conn = getDb();
+  conn.exec('PRAGMA foreign_keys = OFF');
+  for (const t of ['sessions', 'watchlist', 'actions', 'proposals', 'agent_runtime', 'agent_config', 'shop_settings', 'tiktok_links', 'shops', 'users', 'accounts', 'meta']) {
+    conn.exec(`DELETE FROM ${t}`);
+  }
+  conn.exec('PRAGMA foreign_keys = ON');
+}

@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
-import { APP_NAME, APP_TAGLINE, NAV_ITEMS } from '../../config/navigation';
+import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS } from '../../config/navigation';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -85,17 +85,23 @@ export default function Sidebar({
                     {children.map((c) => (
                       <li key={c.label}>
                         <NavLink
-                          to={c.path}
+                          to={c.anchor ? { pathname: c.path, hash: c.anchor } : c.path}
                           end
                           onClick={(e) => {
-                            // Đang ở đúng trang → chỉ cuộn lên đầu (giữ bộ lọc trên URL); trang khác → chuyển tới và mở ở đầu
-                            if (location.pathname === c.path) e.preventDefault();
-                            window.scrollTo({ top: 0, behavior: location.pathname === c.path ? 'smooth' : 'auto' });
                             onCloseMobile();
+                            if (location.pathname !== c.path) {
+                              // Trang khác → chuyển tới (mốc đi bằng #id, trang tự cuộn tới khi dựng xong)
+                              if (!c.anchor) window.scrollTo({ top: 0 });
+                              return;
+                            }
+                            // Đang ở đúng trang → không đổi URL (giữ bộ lọc), chỉ cuộn
+                            e.preventDefault();
+                            if (c.anchor) window.dispatchEvent(new CustomEvent(NAV_ANCHOR_EVENT, { detail: c.anchor }));
+                            else window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
                           className={({ isActive }) =>
                             `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                              isActive ? 'font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
+                              isActive && !c.anchor ? 'font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
                             }`
                           }
                         >

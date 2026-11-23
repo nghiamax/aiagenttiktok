@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { NAV_ANCHOR_EVENT, WATCH_ANCHOR } from '../../../config/navigation';
 import { ChevronRight, Eye, Plus, X } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { formatDateTime, formatNumber, formatVnd } from '../../../lib/format';
@@ -73,10 +74,35 @@ export default function WatchCard() {
     return out;
   }, [state.actions]);
 
+  // Sidebar "Theo dõi video": mở ô + cuộn tới (đang ở trang → sự kiện; từ trang khác → #theo-doi trên URL, xoá sau khi cuộn)
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const reveal = () => {
+      setOpen(true);
+      try {
+        localStorage.setItem(OPEN_KEY, '1');
+      } catch {
+        /* bỏ qua */
+      }
+      // Đợi ô mở ra rồi mới cuộn
+      setTimeout(() => document.getElementById(WATCH_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    };
+    if (location.hash === `#${WATCH_ANCHOR}`) {
+      reveal();
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true });
+    }
+    const onAnchor = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === WATCH_ANCHOR) reveal();
+    };
+    window.addEventListener(NAV_ANCHOR_EVENT, onAnchor);
+    return () => window.removeEventListener(NAV_ANCHOR_EVENT, onAnchor);
+  }, [location.hash, location.pathname, location.search, navigate]);
+
   const total = recent.length + watch.items.length;
 
   return (
-    <Card>
+    <Card id={WATCH_ANCHOR} className="scroll-mt-20">
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <button type="button" onClick={toggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronRight className={`size-4 shrink-0 text-muted transition-transform ${open ? 'rotate-90' : ''}`} />

@@ -207,7 +207,7 @@ Không hard-code mã màu trong component — dùng token.
 └───────────────┴────────────────────────────────────────────┘
 ```
 
-- **Sidebar:** nền trắng, rộng `256px`, thu gọn còn `76px` (chỉ icon, có tooltip `title`). Tab active: nền `primary-soft`, chữ/icon `primary`, `font-semibold`. **Mục con** (`NavItem.children` trong `navigation.ts`, ẩn khi thu gọn): ADS 24/7 → **Tổng quan** (`/ads`; Sếp chốt 23/11 tạm 1 mục) — đang ở trang đó thì bấm chỉ cuộn mượt lên đầu (giữ bộ lọc trên URL), trang khác thì chuyển tới và mở ở đầu.
+- **Sidebar:** nền trắng, rộng `256px`, thu gọn còn `76px` (chỉ icon, có tooltip `title`). Tab active: nền `primary-soft`, chữ/icon `primary`, `font-semibold`. **Mục con** (`NavItem.children` trong `navigation.ts`, ẩn khi thu gọn): ADS 24/7 → **Tổng quan** (`/ads`) — đang ở trang đó thì bấm chỉ cuộn mượt lên đầu (giữ bộ lọc trên URL), trang khác thì chuyển tới và mở ở đầu; **Theo dõi video** (`anchor: WATCH_ANCHOR`) — mở hẳn ô Đang theo dõi + cuộn tới (đang ở trang: sự kiện `NAV_ANCHOR_EVENT`; trang khác: `/ads#theo-doi`, `WatchCard` xử lý rồi xoá `#`).
 - **Header:** sticky, nền trắng, viền dưới; có tên tài khoản, nút cài đặt, chuông thông báo, avatar.
 - **Responsive:** desktop ưu tiên. `< lg (1024px)`: sidebar ẩn, mở dạng drawer bằng nút `≡` trên header, có lớp phủ mờ, tự đóng khi chuyển trang.
 - Cả 4 tab dùng chung `AppLayout`.

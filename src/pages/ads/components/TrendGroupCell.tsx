@@ -15,7 +15,15 @@ interface TrendGroupCellProps {
    * Nhóm theo số của khoảng ngày đang chọn (bỏ trống = không so, vd ô Đang theo dõi luôn hiện 7 ngày).
    * Khoảng chọn trùng 7 / 14 / 30 ngày → chấm khung đó có viền; khác → thêm dòng "Khoảng chọn: ● nhóm".
    */
-  current?: string | null;
+  current?: CurrentRange | null;
+}
+
+/** Nhóm + số của dòng theo khoảng ngày đang chọn */
+export interface CurrentRange {
+  group: string | null;
+  cost: number | null;
+  orders: number | null;
+  roi: number | null;
 }
 
 const WINDOWS = [
@@ -24,8 +32,8 @@ const WINDOWS = [
   { key: 'g30', w: 'w30', label: '30N', name: '30 ngày' },
 ] as const;
 
-const statText = (s: WindowStat | null) =>
-  s ? `chi ${shortVnd(s.cost ?? 0)} · ${formatNumber(s.orders ?? 0)} đơn · ROI ${s.roi == null ? '--' : formatNumber(s.roi, 2)}` : 'không có số';
+const statText = (s: Pick<WindowStat, 'cost' | 'orders' | 'roi'> | null) =>
+  s ? `Chi ${shortVnd(s.cost ?? 0)} · ${formatNumber(s.orders ?? 0)} đơn · ROI ${s.roi == null ? '--' : formatNumber(s.roi, 2)}` : 'không có số';
 
 /**
  * Ô Nhóm theo 3 khung 7 · 14 · 30 ngày đến hôm qua (Sếp chốt 22/11): badge nhóm đã xác nhận (7 = 14 ngày),
@@ -43,14 +51,14 @@ export default function TrendGroupCell({ level, trend, extra, current }: TrendGr
   };
   // Khoảng chọn khác 7 / 14 / 30 ngày → nhóm theo số đang hiện (Agent vẫn xét theo 3 khung)
   const currentLine =
-    compare && !viewing.ring && current ? (
+    compare && !viewing.ring && current?.group ? (
       <span
-        title={`Theo số ${viewing.label}. Agent vẫn xét theo 7 · 14 · 30 ngày đến hôm qua.`}
-        className={`flex cursor-help items-center gap-1 whitespace-nowrap text-xs ${current !== (trend?.group ?? trend?.g7) ? 'font-semibold text-ink' : 'text-muted'}`}
+        title={statText(current)}
+        className={`flex cursor-help items-center gap-1 whitespace-nowrap text-xs ${current.group !== (trend?.group ?? trend?.g7) ? 'font-semibold text-ink' : 'text-muted'}`}
       >
-        <span className="font-normal text-muted">Khoảng chọn:</span>
-        <span className={`size-2 rounded-full ${dotOf(current)}`} />
-        {nameOf(current)}
+        <span className="font-normal text-muted">{viewing.label}</span>
+        <span className={`size-2 rounded-full ${dotOf(current.group)}`} />
+        {nameOf(current.group)}
       </span>
     ) : null;
 
@@ -66,6 +74,7 @@ export default function TrendGroupCell({ level, trend, extra, current }: TrendGr
   }
   const label = trendLabel(trend);
   const detail = trendDetail(trend, nameOf);
+  const detailTitle = detail && `${detail}\n14N: ${statText(trend.w14)}`;
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -73,20 +82,20 @@ export default function TrendGroupCell({ level, trend, extra, current }: TrendGr
         action={trend.group ?? trend.g7}
         level={level}
         unconfirmed={trend.unconfirmed}
-        reason={trend.unconfirmed ? `7 ngày gần nhất thuộc ${nameOf(trend.g7)}, nhưng 14 ngày vẫn là ${nameOf(trend.g14)}. Agent chờ thêm, chưa đề xuất.` : trend.reason}
+        reason={trend.unconfirmed ? `7N: ${nameOf(trend.g7)} · 14N: ${nameOf(trend.g14)} — chờ thêm` : trend.reason}
       />
       <span className="flex items-center gap-1.5">
         <span className="flex items-center gap-0.5" aria-label="Nhóm theo 7, 14, 30 ngày">
           {WINDOWS.map((x) => (
             <span
               key={x.key}
-              title={`${x.name}: ${nameOf(trend[x.key])} · ${statText(trend[x.w])}${ring === x.key ? ' · đang xem khung này' : ''}`}
+              title={`${x.label} · ${nameOf(trend[x.key])}${ring === x.key ? ' (đang xem)' : ''} — ${statText(trend[x.w])}`}
               className={`size-2 cursor-help rounded-full ${dotOf(trend[x.key])} ${ring === x.key ? 'ring-2 ring-primary/40 ring-offset-1' : ''}`}
             />
           ))}
         </span>
         {label && (
-          <span title={detail ?? undefined} className={`cursor-help whitespace-nowrap text-xs ${trend.long || trend.slowLoss ? 'font-medium text-ink' : 'text-muted'}`}>
+          <span title={detailTitle ?? undefined}className={`cursor-help whitespace-nowrap text-xs ${trend.long || trend.slowLoss ? 'font-medium text-ink' : 'text-muted'}`}>
             {label}
           </span>
         )}

@@ -119,7 +119,7 @@ export default function ProductTable({
               <SortableHeader label="CPA" sortKey="cpa" {...header} />
               <SortableHeader label="ROI" sortKey="roi" {...header} />
               <th className={`${TH} text-right`}>ROI hoà vốn</th>
-              <th className={`${TH} text-left`} title="Nhóm Agent xét theo 7 · 14 · 30 ngày đến hôm qua, không đổi theo ô chọn ngày">Nhóm</th>
+              <th className={`${TH} text-left`} title="Agent xét theo 7 · 14 · 30 ngày">Nhóm</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -195,7 +195,7 @@ export default function ProductTable({
                     })()}
                   </td>
                   <td className={TD}>
-                    <TrendGroupCell level="product" trend={trend} current={classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null} />
+                    <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                   </td>
                 </tr>
                 </Fragment>

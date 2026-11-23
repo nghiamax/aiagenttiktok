@@ -182,7 +182,7 @@ export default function VideoTable({
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Video</th>
               <th className={`${TH} text-left`}>Sản phẩm</th>
-              <th className={`${TH} text-left`} title="Nhóm Agent xét theo 7 · 14 · 30 ngày đến hôm qua, không đổi theo ô chọn ngày">Nhóm</th>
+              <th className={`${TH} text-left`} title="Agent xét theo 7 · 14 · 30 ngày">Nhóm</th>
               <th className={`${TH} text-left`}>Trạng thái</th>
               <SortableHeader label="Chi phí" sortKey="cost" {...header} />
               <SortableHeader label="Doanh thu" sortKey="revenue" {...header} />
@@ -237,7 +237,7 @@ export default function VideoTable({
                     ) : (
                       <TrendGroupCell
                         level="video"
-                        current={classifyVideo(v, campaignById.get(v.campaignId), settings)?.action ?? null}
+                        current={{ group: classifyVideo(v, campaignById.get(v.campaignId), settings)?.action ?? null, cost: v.cost, orders: v.orders, roi: v.roi }}
                         trend={trend}
                         extra={
                           cut &&

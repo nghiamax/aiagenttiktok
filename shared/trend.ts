@@ -188,11 +188,11 @@ export function trendLabel(t: TrendInfo): string | null {
   return t.long ? 'kéo dài' : '2 tuần';
 }
 
-/** Câu đầy đủ (tooltip) */
+/** Câu ngắn (tooltip nhãn dưới badge) */
 export function trendDetail(t: TrendInfo, groupName: (id: string | null) => string): string | null {
-  if (t.slowLoss) return `Lỗ âm thầm: 7 ngày chi ít chưa tới ngưỡng, nhưng 14 và 30 ngày đều ${groupName(t.group)}`;
-  if (t.recovering) return `Đang hồi phục: 14 và 30 ngày thuộc ${groupName(t.g14)}, nhưng 7 ngày gần nhất đã tốt lên — Agent không làm gì`;
-  if (t.unconfirmed) return `Dấu hiệu: 7 ngày gần nhất thuộc ${groupName(t.g7)}, 14 ngày vẫn là ${groupName(t.g14)} — Agent chờ thêm, chưa đề xuất`;
+  if (t.slowLoss) return `7N chi chưa tới ngưỡng · 14 · 30N: ${groupName(t.group)}`;
+  if (t.recovering) return `14 · 30N: ${groupName(t.g14)} · 7N đã tốt lên`;
+  if (t.unconfirmed) return `7N: ${groupName(t.g7)} · 14N: ${groupName(t.g14)} — chờ thêm`;
   if (!t.group) return null;
-  return t.long ? 'Kéo dài: 7, 14 và 30 ngày đều cùng nhóm' : `2 tuần gần đây: 7 và 14 ngày cùng nhóm, 30 ngày là ${groupName(t.g30)}`;
+  return t.long ? '7 · 14 · 30N cùng nhóm' : `7 · 14N cùng nhóm · 30N: ${groupName(t.g30)}`;
 }

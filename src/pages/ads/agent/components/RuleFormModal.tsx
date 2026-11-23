@@ -175,7 +175,7 @@ export default function RuleFormModal({
           <p className="mt-2 text-xs text-muted">
             {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
             <Link
-              to={`/ads/agent?view=groups&level=${level}`}
+              to={`/care-ads/product?view=groups&level=${level}`}
               onClick={onClose}
               className="font-medium text-primary hover:text-primary-hover"
             >
@@ -183,7 +183,7 @@ export default function RuleFormModal({
             </Link>
           </p>
           <p className="mt-2 text-sm">
-            Hiện có <b>{formatNumber(matches.names.length)}</b> {matches.unit} khớp
+            <b>{formatNumber(matches.names.length)}</b> {matches.unit} Agent làm được
             {matches.names.length > 0 && (
               <span className="text-muted" title={matches.names.join('\n')}>
                 {' '}

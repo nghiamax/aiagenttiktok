@@ -161,7 +161,8 @@ describe('Mọi route đều có kiểm tra quyền', () => {
     expect(permsOf(usersRouter).length).toBeGreaterThan(3);
     expect(new Set(permsOf(usersRouter))).toEqual(new Set(['manage_users']));
     expect(new Set(permsOf(financeRouter))).toEqual(new Set(['finance']));
-    const routes = [agentRouter, settingsRouter, adsRouter].flatMap((r) =>
+    const { watchlistRouter } = await import('../server/routes/watchlist');
+    const routes = [agentRouter, settingsRouter, adsRouter, watchlistRouter].flatMap((r) =>
       (r.stack as { route?: { path: string; methods: Record<string, boolean>; stack: { handle: { permission?: string } }[] } }[])
         .filter((l) => l.route)
         .map((l) => ({

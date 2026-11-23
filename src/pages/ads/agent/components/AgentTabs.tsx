@@ -16,10 +16,10 @@ const TABS: { value: AgentView; label: string; icon: LucideIcon }[] = [
   { value: 'groups', label: 'Nhóm', icon: Layers },
 ];
 
-/** Các tab của trang AI Agent (cùng kiểu với ListViewTabs) */
+/** Các tab của trang BOT AI (cùng kiểu với ListViewTabs) */
 export default function AgentTabs({ value, onChange, counts }: AgentTabsProps) {
   return (
-    <div className="flex flex-wrap gap-1" role="tablist" aria-label="AI Agent">
+    <div className="flex flex-wrap gap-1" role="tablist" aria-label="BOT AI">
       {TABS.map(({ value: tab, label, icon: Icon }) => {
         const active = tab === value;
         return (

@@ -122,8 +122,9 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             />
           )}
           <p className="text-xs text-muted" title={matches.names.join('\n')}>
-            Hiện có <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} khớp (7 ngày{trends.confirmOn ? ', đã xác nhận 14 ngày' : ''})
-            {skippedText(matches) && <span className="block">{skippedText(matches)}</span>}
+            <b className="text-ink">{formatNumber(matches.names.length)}</b> {matches.unit} Agent làm được
+            {skippedText(matches) && <> · {skippedText(matches)}</>}
+            <span className="block">Xét 7 ngày{trends.confirmOn ? ' + 14 ngày (30 ngày để bắt lỗ âm thầm)' : ''}</span>
           </p>
         </dd>
         <dt className="font-semibold text-muted">Thì</dt>

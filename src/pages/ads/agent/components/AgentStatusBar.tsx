@@ -112,7 +112,7 @@ export default function AgentStatusBar({
           </span>
           <div>
             <p className="flex items-center gap-2 font-semibold">
-              AI Agent
+              BOT AI
               {running && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
                   <Loader2 className="size-3 animate-spin" />

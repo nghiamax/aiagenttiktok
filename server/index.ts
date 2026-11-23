@@ -5,6 +5,7 @@ import { config, unsafeDirReason } from './config.js';
 import { startScheduler } from './agent/scheduler.js';
 import { adsRouter } from './routes/ads.js';
 import { agentRouter, settingsRouter } from './routes/agent.js';
+import { watchlistRouter } from './routes/watchlist.js';
 import { authRouter } from './routes/auth.js';
 import { financeRouter } from './routes/finance.js';
 import { usersRouter } from './routes/users.js';
@@ -62,6 +63,7 @@ app.use('/api/finance', financeRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seller', sellerRouter);
+app.use('/api/watchlist', watchlistRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ code: 'NOT_FOUND', error: 'Không có API này' });
 });

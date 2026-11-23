@@ -1,7 +1,7 @@
 import {
-  confirmRuleTargets,
-  findRuleTargets,
   ineligibleReason,
+  matchRuleTrend,
+  RECOVERING_REASON,
   ruleLevel,
   UNCONFIRMED_REASON,
   type ConfirmSnaps,
@@ -30,8 +30,9 @@ export function matchRuleTargets(
 ): RuleMatches {
   const names: string[] = [];
   const skipped: Record<string, number> = {};
-  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, findRuleTargets(rule, settings, snapshot), confirm);
+  const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm);
   if (unconfirmed.length > 0) skipped[UNCONFIRMED_REASON] = unconfirmed.length;
+  if (recovering.length > 0) skipped[RECOVERING_REASON] = recovering.length;
   for (const t of kept) {
     const why = ineligibleReason(rule.actionType, rule.params, t);
     if (why) skipped[why] = (skipped[why] ?? 0) + 1;
@@ -40,11 +41,18 @@ export function matchRuleTargets(
   return { unit: LEVEL_UNIT[ruleLevel(rule)], names, skipped };
 }
 
-/** "+2 bỏ qua: video đã bị gỡ 1, chiến dịch đang tắt 1"; không có → null */
+/** Tên ngắn của lý do bỏ qua (để cộng lại khớp với số ở thẻ nhóm) */
+const SHORT: Record<string, string> = {
+  [UNCONFIRMED_REASON]: 'dấu hiệu',
+  [RECOVERING_REASON]: 'đang hồi phục',
+  'Video đã bị gỡ': 'đã gỡ',
+  'Chiến dịch đang tắt': 'chiến dịch tắt',
+  'Video không khả dụng — đã ngừng chạy': 'không khả dụng',
+};
+
+/** "+1 đã gỡ · +4 dấu hiệu"; không có → null */
 export function skippedText(m: RuleMatches): string | null {
   const entries = Object.entries(m.skipped);
   if (entries.length === 0) return null;
-  const total = entries.reduce((s, [, n]) => s + n, 0);
-  const detail = entries.map(([why, n]) => (entries.length > 1 ? `${why.toLowerCase()} ${n}` : why.toLowerCase())).join(', ');
-  return `+${total} bỏ qua: ${detail}`;
+  return entries.map(([why, n]) => `+${n} ${SHORT[why] ?? why.toLowerCase()}`).join(' · ');
 }

@@ -1,16 +1,50 @@
-import { KeyRound, Megaphone, ShoppingBag, UserCog, Users, Wallet, type LucideIcon } from 'lucide-react';
+import {
+  BarChart3,
+  Bot,
+  Calculator,
+  Eye,
+  KeyRound,
+  LayoutDashboard,
+  Megaphone,
+  Music2,
+  Package,
+  Radio,
+  ShoppingBag,
+  TrendingUp,
+  UserCog,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Permission } from '../../shared/permissions';
+
+export interface NavChild {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  /** Mốc trong trang (id phần tử) — bấm thì cuộn tới, xem NAV_ANCHOR_EVENT */
+  anchor?: string;
+  /** Chỉ gói Pro — gói Miễn phí thấy nhãn Pro */
+  pro?: boolean;
+}
+
+/** Sự kiện báo trang đang mở cuộn tới mốc (detail = id); trang khác thì đi bằng #id trên URL */
+export const NAV_ANCHOR_EVENT = 'nav-anchor';
+/** Mốc ô Đang theo dõi (trang Tổng quan ADS) */
+export const WATCH_ANCHOR = 'theo-doi';
+/** Mốc card Phân tích GMV Max (trang Tổng quan ADS) */
+export const GMV_LIST_ANCHOR = 'ads-list';
 
 export interface NavItem {
   label: string;
   path: string;
   icon: LucideIcon;
-  /** Quyền cần có để thấy mục này (Người dùng chỉ có `finance`) */
+  /** Quyền cần có để thấy mục này (xem shared/permissions.ts) */
   permission: Permission;
   /** Không dùng làm trang mở đầu sau khi đăng nhập */
   notHome?: boolean;
-  /** Mục con (hiện dưới mục cha khi đang ở trong mục đó) */
-  children?: { label: string; path: string; /** Chỉ gói Pro — gói Miễn phí thấy nhãn Pro */ pro?: boolean }[];
+  /** Mục con hiện dưới mục cha (ẩn khi sidebar thu gọn) */
+  children?: NavChild[];
 }
 
 export const APP_NAME = 'Shop Agent';
@@ -25,11 +59,31 @@ export const NAV_ITEMS: NavItem[] = [
     permission: 'finance',
     notHome: true,
     children: [
-      { label: 'TikTok', path: '/accounts/tiktok' },
-      { label: 'Shopee', path: '/accounts/shopee' },
+      { label: 'TikTok', path: '/accounts/tiktok', icon: Music2 },
+      { label: 'Shopee', path: '/accounts/shopee', icon: ShoppingBag },
     ],
   },
-  { label: 'ADS 24/7', path: '/ads', icon: Megaphone, permission: 'view' },
+  {
+    label: 'Quản lí chiến dịch',
+    path: '/ads',
+    icon: Megaphone,
+    permission: 'view',
+    children: [
+      { label: 'Tổng quan', path: '/ads', icon: LayoutDashboard },
+      { label: 'Theo dõi video', path: '/ads', icon: Eye, anchor: WATCH_ANCHOR },
+      { label: 'Phân tích GMV Max', path: '/ads', icon: BarChart3, anchor: GMV_LIST_ANCHOR },
+    ],
+  },
+  {
+    label: 'Care Ads 24/7',
+    path: '/care-ads',
+    icon: Bot,
+    permission: 'view',
+    children: [
+      { label: 'GMV Max sản phẩm', path: '/care-ads/product', icon: Package },
+      { label: 'GMV Max Livestream', path: '/care-ads/live', icon: Radio },
+    ],
+  },
   { label: 'Đơn hàng', path: '/orders', icon: ShoppingBag, permission: 'view' },
   { label: 'Booking KOC', path: '/koc-booking', icon: Users, permission: 'view' },
   {
@@ -38,8 +92,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Wallet,
     permission: 'finance',
     children: [
-      { label: 'Tính giá bán', path: '/finance/pricing' },
-      { label: 'Tính lợi nhuận', path: '/finance/profit' },
+      { label: 'Tính giá bán', path: '/finance/pricing', icon: Calculator },
+      { label: 'Tính lợi nhuận', path: '/finance/profit', icon: TrendingUp },
     ],
   },
   { label: 'Tài khoản', path: '/admin/users', icon: UserCog, permission: 'manage_users' },

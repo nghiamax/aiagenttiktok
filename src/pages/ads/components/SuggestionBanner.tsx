@@ -9,7 +9,7 @@ export default function SuggestionBanner() {
 
   return (
     <Link
-      to="/ads/agent?view=suggest"
+      to="/care-ads/product?view=suggest"
       className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-3.5 shadow-sm transition hover:border-primary/30 hover:shadow-md"
     >
       <span className="flex min-w-0 items-center gap-3">

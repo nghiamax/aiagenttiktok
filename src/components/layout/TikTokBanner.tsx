@@ -31,7 +31,7 @@ export default function TikTokBanner({ onOpenConnect }: TikTokBannerProps) {
 
   const lost = status?.state === 'lost';
   // Lần đầu chưa kết nối: trang ADS đã có thẻ "Kết nối TikTok để bắt đầu" → dải nhẹ chỉ hiện ở các tab khác
-  const never = status?.state === 'never' && !pathname.startsWith('/ads');
+  const never = status?.state === 'never' && !pathname.startsWith('/ads') && !pathname.startsWith('/care-ads');
   if (!result && !lost && !never) return null;
 
   return (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, Loader2, RotateCcw, Trash2, Zap, type LucideIcon } from 'lucide-react';
+import { ExternalLink, Loader2, RotateCcw, Star, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import { ineligibleReason, offsetOf, type RuleTarget } from '../../../../shared/agentMatch';
 import { offsetWarning, profitWarning } from '../../../../shared/offsetText';
 import { useAdsSettings } from '../settings';
@@ -11,6 +11,7 @@ import { useAgentStore, type ExecOutcome } from '../agent/agentStore';
 import ConfirmExecuteModal from '../agent/components/ConfirmExecuteModal';
 import { describeExec } from '../agent/execText';
 import { useAdsData } from '../data';
+import { useWatchlist } from '../watchlist';
 import type { AdsVideo, VideoStatus } from '../types';
 import type { AgentActionType, AgentRuleParams } from '../agent/types';
 import BoostDialog from './BoostDialog';
@@ -74,6 +75,8 @@ export default function VideoActions({ video: v, campaignRunning, videoUrl }: Vi
   const noExec = useNoPermission('execute');
   const reason = (t: AgentActionType, params: AgentRuleParams = {}) => noExec ?? ineligibleReason(t, params, probe);
   const removed = status === 'excluded';
+  const watch = useWatchlist();
+  const watching = watch.has(v.id);
 
   const todayStart = startOfToday();
   const usedToday = state.actions
@@ -111,6 +114,18 @@ export default function VideoActions({ video: v, campaignRunning, videoUrl }: Vi
             <ActionButton icon={Zap} label="Tăng cường" iconOnly why={reason('boost_creative', boostParams)} onClick={() => setBoosting(true)} />
           </>
         )}
+        <button
+          type="button"
+          disabled={!watch.canEdit}
+          onClick={() => void (watching ? watch.remove(v.id) : watch.add(v.id))}
+          aria-label={watching ? 'Bỏ theo dõi' : 'Theo dõi video'}
+          title={!watch.canEdit ? 'Tài khoản không có quyền' : watching ? 'Đang theo dõi — bấm để bỏ' : 'Theo dõi video (hiện ở ô Đang theo dõi)'}
+          className={`flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 ${
+            watching ? 'text-amber-500' : 'text-muted hover:text-amber-500'
+          }`}
+        >
+          <Star className="size-4" fill={watching ? 'currentColor' : 'none'} />
+        </button>
         {videoUrl ? (
           <a
             href={videoUrl}
@@ -136,7 +151,7 @@ export default function VideoActions({ video: v, campaignRunning, videoUrl }: Vi
       {result && (
         <span className={`max-w-[220px] text-right text-xs ${result.ok ? 'text-accent-green' : 'text-danger'}`}>
           {result.ok ? 'Đã gửi lên TikTok · ' : `${result.message} · `}
-          <Link to="/ads/agent?view=log" className="font-semibold underline underline-offset-2 hover:text-ink">
+          <Link to="/care-ads/product?view=log" className="font-semibold underline underline-offset-2 hover:text-ink">
             Nhật ký
           </Link>
         </span>

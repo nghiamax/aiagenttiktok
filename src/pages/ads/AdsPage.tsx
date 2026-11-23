@@ -11,7 +11,6 @@ import { useTrend } from './trend';
 import type { TrendInfo } from '../../../shared/trend';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
-import AdsSubNav from './components/AdsSubNav';
 import BreakEvenModal from './components/BreakEvenModal';
 import CampaignTable from './components/CampaignTable';
 import GmvMaxListCard, { LIST_ANCHOR } from './components/GmvMaxListCard';
@@ -19,16 +18,18 @@ import ProductTable from './components/ProductTable';
 import SuggestionBanner from './components/SuggestionBanner';
 import AdsRangeControl from './components/AdsRangeControl';
 import VideoTable from './components/VideoTable';
+import WatchCard from './components/WatchCard';
 import { SIGNAL_ANCHOR } from './components/SignalDivider';
 import { useAdsData } from './data';
 import { offsetOf } from '../../../shared/agentMatch';
+import { effectiveStatus } from '../../../shared/videoStatus';
 import { productKey } from './metrics';
 import type { GroupLevel } from './groups';
 import { breakEvenOf, useAdsSettings } from './settings';
 import type { AdsListTab, AdsProduct, AdsVideo, VideoAction } from './types';
 
 /** Ghi chú dưới ô (đếm 1 lần theo key): nhóm "kéo dài 30 ngày" / nhóm 7 ngày chưa được 14 ngày xác nhận */
-function markIn(summary: Record<string, ActionSummary>, groupId: string, key: string, seen: Set<string>, field: 'long' | 'unconfirmed') {
+function markIn(summary: Record<string, ActionSummary>, groupId: string, key: string, seen: Set<string>, field: 'unconfirmed') {
   const k = `${field}|${groupId}|${key}`;
   if (seen.has(k)) return;
   seen.add(k);
@@ -41,15 +42,6 @@ const metricLine = (roi: number | null, cost: number | null) =>
   `ROI ${formatNumber(roi, 2)} · Chi ${cost == null ? '--' : shortVnd(cost)}`;
 
 const emptySummary = (): ActionSummary => ({ count: 0, rows: 0, cost: 0, revenue: 0 });
-
-/** Đối tượng đã xử lý / không làm được → ghi vào `skipped` (đếm 1 lần theo key), không tính số / chi / DT */
-function skipIn(summary: Record<string, ActionSummary>, groupId: string, key: string, seen: Set<string>) {
-  const k = `skip|${groupId}|${key}`;
-  if (seen.has(k)) return;
-  seen.add(k);
-  const s = (summary[groupId] ??= emptySummary());
-  s.skipped = (s.skipped ?? 0) + 1;
-}
 
 /**
  * Cộng một dòng đã phân loại vào ô của nhóm. key: đếm theo đối tượng khác nhau (video gắn nhiều sản phẩm
@@ -116,19 +108,16 @@ export default function AdsPage() {
     const confirmedGroup = (bucket: Record<string, ActionSummary>, t: TrendInfo | undefined, key: string) => {
       if (!t) return null;
       if (t.unconfirmed && t.g7) markIn(bucket, t.g7, key, seen, 'unconfirmed');
-      if (t.group && t.long) markIn(bucket, t.group, key, seen, 'long');
       return t.group;
     };
     for (const v of d7.videos) {
       if (v.contentType !== 'video') continue;
+      // Video đã gỡ: không thuộc nhóm nào, không hiện ở ô (đã có Nhật ký theo dõi — Sếp chốt 22/11)
+      // Thuộc chiến dịch đã tắt → Agent không làm gì được, không tính (bảng để ở phần cuối)
+      if (effectiveStatus(v) === 'excluded' || !running(v.campaignId)) continue;
       const key = `${v.campaignId}/${v.id}`;
       const group = confirmedGroup(summary.video, trends.video(v), key);
       if (!group) continue;
-      // Video đã gỡ / thuộc chiến dịch đã tắt → Agent không làm gì được, không tính vào hộp theo dõi (bảng vẫn hiện)
-      if (v.status === 'excluded' || !running(v.campaignId)) {
-        skipIn(summary.video, group, key, seen);
-        continue;
-      }
       addTo(summary.video, group, v.cost, v.revenue, key, seenVideos);
       if (group === 'cut') (cutRows.get(key) ?? cutRows.set(key, new Set()).get(key)!).add(v);
     }
@@ -141,17 +130,14 @@ export default function AdsPage() {
       }
     }
     for (const p of d7.products) {
-      const key = `${p.campaignId}/${p.id}`;
-      const group = confirmedGroup(summary.product, trends.product(p), key);
-      if (!group) continue;
-      if (!running(p.campaignId)) skipIn(summary.product, group, key, seen);
-      else addTo(summary.product, group, p.cost, p.revenue);
+      if (!running(p.campaignId)) continue;
+      const group = confirmedGroup(summary.product, trends.product(p), `${p.campaignId}/${p.id}`);
+      if (group) addTo(summary.product, group, p.cost, p.revenue);
     }
     for (const c of d7.campaigns) {
+      if (c.status !== 'running') continue;
       const group = confirmedGroup(summary.campaign, trends.campaign(c), c.id);
-      if (!group) continue;
-      if (c.status !== 'running') skipIn(summary.campaign, group, c.id, seen);
-      else addTo(summary.campaign, group, c.cost, c.revenue);
+      if (group) addTo(summary.campaign, group, c.cost, c.revenue);
     }
     return summary;
   }, [settings, trends]);
@@ -253,11 +239,10 @@ export default function AdsPage() {
     <>
       <PageHeader
         icon={Megaphone}
-        title="ADS 24/7"
+        title="Quản lí chiến dịch"
         description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
         actions={<AdsRangeControl />}
       />
-      <AdsSubNav pendingCount={pendingCount} />
 
       <div className="space-y-6">
         <AdsStatsGrid summary={snapshot.summary} previous={snapshot.previousSummary} />
@@ -277,6 +262,7 @@ export default function AdsPage() {
             ruleFor: (level, id) => ruleForTrigger(agentState.rules, id, level),
           }}
         />
+        <WatchCard />
         <GmvMaxListCard
           tab={tab}
           onTabChange={(t) => update({ tab: t, action: null })}

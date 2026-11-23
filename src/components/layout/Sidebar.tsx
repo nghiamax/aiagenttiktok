@@ -2,7 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { effectivePlan } from '../../../shared/plans';
-import { APP_NAME, APP_TAGLINE, NAV_ITEMS } from '../../config/navigation';
+import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS } from '../../config/navigation';
+import { useScrollSpy } from '../../lib/useScrollSpy';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -12,7 +13,12 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  // Mục con là mốc trong trang đang mở (Theo dõi video, Phân tích GMV Max) → sáng theo phần đang xem khi cuộn
+  const anchors = NAV_ITEMS.flatMap((i) => i.children ?? [])
+    .filter((c) => c.anchor && c.path === location.pathname)
+    .map((c) => c.anchor!);
+  const spy = useScrollSpy(anchors, anchors.length > 0);
   const { can, user } = useAuth();
   const isPro = !!user && effectivePlan(user) === 'pro';
   const items = NAV_ITEMS.filter((n) => can(n.permission));
@@ -80,28 +86,40 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                   <Icon className="size-5 shrink-0" strokeWidth={1.9} />
                   <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{label}</span>
                 </NavLink>
-                {children && pathname.startsWith(path) && (
-                  <ul className={`ml-6 mt-1 space-y-0.5 border-l border-line pl-3 ${collapsed ? 'lg:hidden' : ''}`}>
+                {children && (
+                  <ul className={`mt-1 space-y-0.5 pl-6 ${collapsed ? 'lg:hidden' : ''}`}>
                     {children.map((c) => (
-                      <li key={c.path}>
+                      <li key={c.label}>
                         <NavLink
-                          to={c.path}
+                          to={c.anchor ? { pathname: c.path, hash: c.anchor } : c.path}
+                          end
+                          onClick={(e) => {
+                            onCloseMobile();
+                            if (location.pathname !== c.path) {
+                              // Trang khác → chuyển tới (mốc đi bằng #id, trang tự cuộn tới khi dựng xong)
+                              if (!c.anchor) window.scrollTo({ top: 0 });
+                              return;
+                            }
+                            // Đang ở đúng trang → không đổi URL (giữ bộ lọc), chỉ cuộn
+                            e.preventDefault();
+                            if (c.anchor) window.dispatchEvent(new CustomEvent(NAV_ANCHOR_EVENT, { detail: c.anchor }));
+                            else window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
                           className={({ isActive }) =>
-                            `block rounded-lg px-3 py-2 text-sm transition-colors ${
-                              isActive
+                            `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                              isActive && (c.anchor ? spy === c.anchor : !spy)
                                 ? 'font-semibold text-primary'
                                 : 'font-medium text-muted hover:bg-canvas hover:text-ink'
                             }`
                           }
                         >
-                          <span className="flex items-center gap-1.5">
-                            {c.label}
-                            {c.pro && !isPro && (
-                              <span className="rounded bg-accent-violet/10 px-1.5 text-xs font-semibold leading-5 text-accent-violet">
-                                Pro
-                              </span>
-                            )}
-                          </span>
+                          <c.icon className="size-4 shrink-0" strokeWidth={1.9} />
+                          <span className="truncate">{c.label}</span>
+                          {c.pro && !isPro && (
+                            <span className="rounded bg-accent-violet/10 px-1.5 text-xs font-semibold leading-5 text-accent-violet">
+                              Pro
+                            </span>
+                          )}
                         </NavLink>
                       </li>
                     ))}

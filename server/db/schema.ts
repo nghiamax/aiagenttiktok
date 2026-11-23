@@ -107,4 +107,14 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Cờ hệ thống (vd đã chép dữ liệu JSON cũ sang database chưa)
+      CREATE TABLE meta (
+        key    TEXT PRIMARY KEY,
+        value  TEXT NOT NULL
+      );
+    `,
+  },
 ];

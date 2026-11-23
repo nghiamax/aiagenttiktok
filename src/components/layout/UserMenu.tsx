@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { KeyRound, LogOut } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Crown, KeyRound, LogOut, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { ROLE_LABEL } from '../../../shared/permissions';
+import { effectivePlan, PLAN_LABEL } from '../../../shared/plans';
 import ChangePasswordModal from './ChangePasswordModal';
 
 /** Chữ cái đầu của tên (tối đa 2) */
@@ -31,19 +33,43 @@ export default function UserMenu() {
   }, [open]);
 
   if (!user) return null;
-  const item = 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-canvas';
+  const admin = user.role === 'owner';
+  const pro = effectivePlan(user) === 'pro';
+  const item =
+    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-canvas';
 
   return (
-    <div ref={ref} className="relative ml-1">
+    <div ref={ref} className="relative ml-1 flex items-center gap-2">
+      {/* Loại tài khoản hiện luôn cạnh avatar; Miễn phí / Pro bấm → trang Nâng cấp */}
+      {admin ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-xs font-bold text-white">
+          <ShieldCheck className="size-3.5" /> ADMIN
+        </span>
+      ) : (
+        <Link
+          to="/upgrade"
+          title={pro ? 'Gói Pro — xem / gia hạn' : 'Nâng cấp lên Pro'}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition ${
+            pro
+              ? 'bg-accent-violet text-white hover:opacity-90'
+              : 'bg-canvas text-muted ring-1 ring-line hover:bg-accent-violet/10 hover:text-accent-violet'
+          }`}
+        >
+          {pro ? <Crown className="size-3.5" /> : <Sparkles className="size-3.5" />}
+          {pro ? 'PRO' : 'FREE · Nâng cấp'}
+        </Link>
+      )}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Tài khoản"
         aria-expanded={open}
         title={user.name}
-        className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-accent-green to-primary text-sm font-semibold text-white ring-2 ring-white transition-shadow hover:shadow-md"
+        className="rounded-full transition hover:shadow-md"
       >
-        {initials(user.name)}
+        <span className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-accent-green to-primary text-sm font-semibold text-white ring-2 ring-white">
+          {initials(user.name)}
+        </span>
       </button>
       {open && (
         <div className="absolute right-0 top-12 z-40 w-60 rounded-2xl border border-line bg-white p-2 shadow-lg">
@@ -52,8 +78,22 @@ export default function UserMenu() {
             <p className="truncate text-xs text-muted">
               @{user.username} · {ROLE_LABEL[user.role]}
             </p>
+            {!admin && (
+              <p className={`mt-0.5 text-xs font-medium ${pro ? 'text-accent-violet' : 'text-muted'}`}>
+                Gói {PLAN_LABEL[pro ? 'pro' : 'free']}
+                {user.role !== 'owner' && user.proUntil && pro
+                  ? ` · đến ${new Date(user.proUntil).toLocaleDateString('vi-VN')}`
+                  : ''}
+              </p>
+            )}
           </div>
           <div className="pt-1">
+            {!admin && (
+              <Link to="/upgrade" className={`${item} text-accent-violet`} onClick={() => setOpen(false)}>
+                <Sparkles className="size-4" />
+                {pro ? 'Gia hạn gói Pro' : 'Nâng cấp lên Pro'}
+              </Link>
+            )}
             <button
               type="button"
               className={item}

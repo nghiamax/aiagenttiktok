@@ -1,11 +1,13 @@
 import readline from 'node:readline';
 import { isRole, ROLE_LABEL, ROLES } from '../shared/permissions.js';
 import { destroyUserSessions } from './auth/sessions.js';
-import { createUser, findUser, listUsers, setDisabled, setPassword, UserError } from './auth/users.js';
+import { effectivePlan, isPlan, PLAN_LABEL } from '../shared/plans.js';
+import { createUser, findUser, listUsers, publicUser, setDisabled, setPassword, setPlan, UserError } from './auth/users.js';
 
 /**
  * Quản lý tài khoản web trên máy chạy server (chưa có trang quản trị):
- *   npm run user -- add <tên> [--name "Tên hiển thị"] [--role owner|staff]
+ *   npm run user -- add <tên> [--name "Tên hiển thị"] [--role owner|staff|user] [--plan free|pro] [--days N]
+ *   npm run user -- plan <tên> free|pro [--days N]     (Pro không ghi --days = không hạn)
  *   npm run user -- passwd <tên>
  *   npm run user -- disable <tên>   |   enable <tên>
  *   npm run user -- list
@@ -41,6 +43,12 @@ function flag(args: string[], name: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+/** --days N → hạn Pro (ISO); không ghi = không hạn */
+function untilFrom(days: string | undefined): string | null {
+  const n = Number(days);
+  return days && Number.isFinite(n) && n > 0 ? new Date(Date.now() + Math.round(n) * 86_400_000).toISOString() : null;
+}
+
 function need(username: string | undefined) {
   if (!username) throw new UserError('Thiếu tên đăng nhập');
   const u = findUser(username);
@@ -52,11 +60,28 @@ async function main() {
   const [cmd, username, ...rest] = process.argv.slice(2);
   switch (cmd) {
     case 'add': {
-      if (!username) throw new UserError('Cách dùng: npm run user -- add <tên> [--name "…"] [--role owner|staff]');
+      if (!username) throw new UserError('Cách dùng: npm run user -- add <tên> [--name "…"] [--role owner|staff|user] [--plan free|pro] [--days N]');
       const role = flag(rest, 'role') ?? 'owner';
       if (!isRole(role)) throw new UserError(`Vai trò: ${ROLES.join(' | ')}`);
-      const u = createUser({ username, name: flag(rest, 'name'), role, password: await askNewPassword() });
-      console.log(`Đã tạo tài khoản ${u.username} (${ROLE_LABEL[u.role]}).`);
+      const plan = flag(rest, 'plan') ?? 'free';
+      if (!isPlan(plan)) throw new UserError('Gói: free | pro');
+      const u = createUser({
+        username,
+        name: flag(rest, 'name'),
+        role,
+        plan,
+        proUntil: untilFrom(flag(rest, 'days')),
+        password: await askNewPassword(),
+      });
+      console.log(`Đã tạo tài khoản ${u.username} (${ROLE_LABEL[u.role]} · gói ${PLAN_LABEL[effectivePlan(publicUser(u))]}).`);
+      break;
+    }
+    case 'plan': {
+      const u = need(username);
+      const plan = rest[0];
+      if (!isPlan(plan)) throw new UserError('Cách dùng: npm run user -- plan <tên> free|pro [--days N]');
+      const v = setPlan(u.id, plan, plan === 'pro' ? untilFrom(flag(rest, 'days')) : null);
+      console.log(`${v.username}: gói ${PLAN_LABEL[plan]}${v.proUntil ? ` đến ${new Date(v.proUntil).toLocaleDateString('vi-VN')}` : ''}.`);
       break;
     }
     case 'passwd': {
@@ -77,11 +102,14 @@ async function main() {
     case 'list': {
       const users = listUsers();
       if (users.length === 0) console.log('Chưa có tài khoản nào.');
-      for (const u of users) console.log(`${u.username}\t${u.name}\t${ROLE_LABEL[u.role]}${u.disabled ? '\t(đã khoá)' : ''}`);
+      for (const u of users) {
+        const plan = PLAN_LABEL[effectivePlan(publicUser(u))];
+        console.log(`${u.username}\t${u.name}\t${ROLE_LABEL[u.role]}\t${plan}${u.disabled ? '\t(đã khoá)' : ''}`);
+      }
       break;
     }
     default:
-      console.log('Lệnh: add <tên> [--name "…"] [--role owner|staff] · passwd <tên> · disable <tên> · enable <tên> · list');
+      console.log('Lệnh: add <tên> [--name "…"] [--role owner|staff|user] [--plan free|pro] [--days N] · plan <tên> free|pro [--days N] · passwd <tên> · disable <tên> · enable <tên> · list');
   }
 }
 

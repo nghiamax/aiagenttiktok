@@ -1,5 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
+import { useAuth } from '../../auth/AuthProvider';
+import { effectivePlan } from '../../../shared/plans';
 import { APP_NAME, APP_TAGLINE, NAV_ITEMS } from '../../config/navigation';
 
 interface SidebarProps {
@@ -9,12 +11,11 @@ interface SidebarProps {
   onCloseMobile: () => void;
 }
 
-export default function Sidebar({
-  collapsed,
-  onToggleCollapse,
-  mobileOpen,
-  onCloseMobile,
-}: SidebarProps) {
+export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
+  const { pathname } = useLocation();
+  const { can, user } = useAuth();
+  const isPro = !!user && effectivePlan(user) === 'pro';
+  const items = NAV_ITEMS.filter((n) => can(n.permission));
   return (
     <>
       {/* Lớp phủ khi mở drawer trên mobile/tablet */}
@@ -61,7 +62,7 @@ export default function Sidebar({
             Chức năng
           </p>
           <ul className="space-y-1">
-            {NAV_ITEMS.map(({ label, path, icon: Icon }) => (
+            {items.map(({ label, path, icon: Icon, children }) => (
               <li key={path}>
                 <NavLink
                   to={path}
@@ -79,6 +80,33 @@ export default function Sidebar({
                   <Icon className="size-5 shrink-0" strokeWidth={1.9} />
                   <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{label}</span>
                 </NavLink>
+                {children && pathname.startsWith(path) && (
+                  <ul className={`ml-6 mt-1 space-y-0.5 border-l border-line pl-3 ${collapsed ? 'lg:hidden' : ''}`}>
+                    {children.map((c) => (
+                      <li key={c.path}>
+                        <NavLink
+                          to={c.path}
+                          className={({ isActive }) =>
+                            `block rounded-lg px-3 py-2 text-sm transition-colors ${
+                              isActive
+                                ? 'font-semibold text-primary'
+                                : 'font-medium text-muted hover:bg-canvas hover:text-ink'
+                            }`
+                          }
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {c.label}
+                            {c.pro && !isPro && (
+                              <span className="rounded bg-accent-violet/10 px-1.5 text-xs font-semibold leading-5 text-accent-violet">
+                                Pro
+                              </span>
+                            )}
+                          </span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

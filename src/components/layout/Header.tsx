@@ -4,8 +4,8 @@ import UserMenu from './UserMenu';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
-  /** Mở hộp Kết nối TikTok */
-  onOpenTikTok: () => void;
+  /** Mở hộp Kết nối TikTok (không có = tài khoản không dùng ADS → ẩn nút shop) */
+  onOpenTikTok?: () => void;
 }
 
 const iconButton =
@@ -19,30 +19,28 @@ export default function Header({ onOpenMobileMenu, onOpenTikTok }: HeaderProps) 
       : status.state === 'connected'
         ? { className: 'bg-accent-green', label: 'Đang kết nối TikTok' }
         : { className: 'bg-danger', label: 'Mất kết nối TikTok — bấm để kết nối lại' };
-  const shopName = status?.state === 'never' ? 'Chưa kết nối TikTok' : (status?.advertiser.name ?? 'Tài khoản TikTok Shop');
+  const shopName =
+    status?.state === 'never' ? 'Chưa kết nối TikTok' : (status?.advertiser.name ?? 'Tài khoản TikTok Shop');
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-white/90 px-4 backdrop-blur md:px-8">
-      <button
-        type="button"
-        onClick={onOpenMobileMenu}
-        className={`${iconButton} lg:hidden`}
-        aria-label="Mở menu"
-      >
+      <button type="button" onClick={onOpenMobileMenu} className={`${iconButton} lg:hidden`} aria-label="Mở menu">
         <Menu className="size-5" />
       </button>
 
       {/* Shop đang dùng + trạng thái kết nối TikTok → bấm mở hộp Kết nối TikTok */}
-      <button
-        type="button"
-        onClick={onOpenTikTok}
-        title={dot.label}
-        className="flex min-w-0 items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm font-semibold transition-colors hover:bg-canvas"
-      >
-        <Store className="size-4 shrink-0 text-primary" />
-        <span className="truncate">{shopName}</span>
-        <span className={`size-2 shrink-0 rounded-full ${dot.className}`} aria-label={dot.label} />
-        <ChevronDown className="size-4 shrink-0 text-muted" />
-      </button>
+      {onOpenTikTok && (
+        <button
+          type="button"
+          onClick={onOpenTikTok}
+          title={dot.label}
+          className="flex min-w-0 items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm font-semibold transition-colors hover:bg-canvas"
+        >
+          <Store className="size-4 shrink-0 text-primary" />
+          <span className="truncate">{shopName}</span>
+          <span className={`size-2 shrink-0 rounded-full ${dot.className}`} aria-label={dot.label} />
+          <ChevronDown className="size-4 shrink-0 text-muted" />
+        </button>
+      )}
 
       <div className="ml-auto flex items-center gap-1 md:gap-2">
         <button type="button" className={iconButton} aria-label="Cài đặt">

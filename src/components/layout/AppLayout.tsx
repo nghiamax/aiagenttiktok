@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthProvider';
 import { TikTokProvider } from '../../tiktok/TikTokProvider';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -11,6 +12,8 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const location = useLocation();
+  // Người dùng (khách) không xem ADS → không có nút / dải Kết nối TikTok
+  const tiktok = useAuth().can('view');
 
   // Đóng drawer trên mobile khi chuyển trang
   useEffect(() => {
@@ -18,7 +21,7 @@ export default function AppLayout() {
   }, [location.pathname]);
 
   return (
-    <TikTokProvider>
+    <TikTokProvider enabled={tiktok}>
       <div className="flex min-h-screen">
         <Sidebar
           collapsed={collapsed}
@@ -28,10 +31,13 @@ export default function AppLayout() {
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <Header onOpenMobileMenu={() => setMobileOpen(true)} onOpenTikTok={() => setConnectOpen(true)} />
+          <Header
+            onOpenMobileMenu={() => setMobileOpen(true)}
+            onOpenTikTok={tiktok ? () => setConnectOpen(true) : undefined}
+          />
           <main className="flex-1 p-4 md:p-8">
             <div className="mx-auto w-full max-w-7xl">
-              <TikTokBanner onOpenConnect={() => setConnectOpen(true)} />
+              {tiktok && <TikTokBanner onOpenConnect={() => setConnectOpen(true)} />}
               <Outlet />
             </div>
           </main>

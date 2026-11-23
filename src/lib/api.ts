@@ -14,10 +14,15 @@ export const AUTH_REQUIRED_EVENT = 'auth:required';
 
 /** Gọi khi một phản hồi API báo AUTH_REQUIRED (cả các chỗ dùng fetch trực tiếp) */
 export function notifyAuthRequired(status: number, code: string | undefined) {
-  if (status === 401 && code === 'AUTH_REQUIRED') window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  // globalThis = window trên trình duyệt (viết vậy để file cũng kiểm tra type được trong tests/, không có DOM)
+  if (status === 401 && code === 'AUTH_REQUIRED')
+    (globalThis as unknown as EventTarget).dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
 }
 
-export async function api<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
+export async function api<T>(
+  path: string,
+  init?: { method?: string; body?: unknown; signal?: AbortSignal },
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {

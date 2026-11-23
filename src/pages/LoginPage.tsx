@@ -6,7 +6,7 @@ import { APP_NAME, APP_TAGLINE } from '../config/navigation';
 import { ApiError } from '../lib/api';
 
 /** Chỉ cho quay về đường dẫn trong app (chặn chuyển hướng ra trang ngoài) */
-const safeNext = (next: string | null) => (next && next.startsWith('/') && !next.startsWith('//') ? next : '/ads');
+const safeNext = (next: string | null) => (next && next.startsWith('/') && !next.startsWith('//') ? next : '/');
 
 const INPUT =
   'w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[15px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20';

@@ -51,7 +51,8 @@ const PENDING_MAX_MS = 10 * 60_000;
 /** Đánh dấu "vừa kết nối xong" để sau khi tải lại trang hiện dải xanh */
 export const JUST_CONNECTED_KEY = 'tiktok-just-connected';
 
-export function TikTokProvider({ children }: { children: ReactNode }) {
+/** enabled = false (tài khoản không xem được ADS) → không gọi /api/ads/status */
+export function TikTokProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const [status, setStatus] = useState<TikTokStatus | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -73,6 +74,10 @@ export function TikTokProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   useEffect(() => {
+    if (!enabled) {
+      setChecked(true);
+      return;
+    }
     void load();
     const t = setInterval(() => void load(), POLL_MS);
     // Quay lại tab (vd vừa cho phép TikTok ở trình duyệt / tab khác) → đọc lại ngay
@@ -84,7 +89,7 @@ export function TikTokProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-  }, [load]);
+  }, [load, enabled]);
 
   // Đang chờ cho phép: kiểm tra mỗi 3 giây; kết nối xong → tải lại cả trang (số liệu mới, Sếp chốt)
   useEffect(() => {

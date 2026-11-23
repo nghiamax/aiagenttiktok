@@ -12,6 +12,8 @@ export default {
         'accent-violet': '#7C3AED',
         'accent-green': '#16A34A',
         danger: '#E11D48',
+        /** Màu nhận diện sàn Shopee (thẻ chọn sàn) */
+        shopee: { DEFAULT: '#EE4D2D', soft: '#FFF1EE' },
       },
       fontFamily: {
         sans: ['"Be Vietnam Pro"', 'Inter', 'system-ui', 'sans-serif'],

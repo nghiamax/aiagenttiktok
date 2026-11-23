@@ -106,7 +106,7 @@ describe('requireAuth / requirePermission', () => {
     const req = fakeReq(`sid=${sessions.createSession(u.id)}`);
     const r = run(mw.requireAuth, req);
     expect(r.nexted).toBe(true);
-    expect(req.user).toEqual({ id: u.id, username: 'sep', name: 'Sếp', role: 'owner' });
+    expect(req.user).toEqual({ id: u.id, username: 'sep', name: 'Sếp', role: 'owner', plan: 'free', proUntil: null });
   });
 
   it('tài khoản bị khoá giữa chừng → phiên cũ hết dùng được', () => {
@@ -126,7 +126,9 @@ describe('requireAuth / requirePermission', () => {
   });
 
   it('bảng quyền: chủ shop có mọi quyền, nhân viên chỉ xem', () => {
-    expect(ROLE_PERMISSIONS.owner).toEqual(['view', 'execute', 'configure', 'manage_users']);
+    expect(ROLE_PERMISSIONS.owner).toEqual(['view', 'execute', 'configure', 'manage_users', 'finance']);
+    // Người dùng: thấy mọi mục như Nhân viên, không chạy thao tác / sửa thiết lập / quản lý tài khoản
+    expect(ROLE_PERMISSIONS.user).toEqual(['view', 'finance']);
     expect(can('staff', 'view')).toBe(true);
     expect(can('staff', 'execute')).toBe(false);
     expect(can(null, 'view')).toBe(false);
@@ -149,6 +151,16 @@ describe('Mọi route đều có kiểm tra quyền', () => {
   it('route ghi (POST/PUT) cần execute hoặc configure; route đọc cần view', async () => {
     const { agentRouter, settingsRouter } = await import('../server/routes/agent');
     const { adsRouter } = await import('../server/routes/ads');
+    const { usersRouter } = await import('../server/routes/users');
+    const { financeRouter } = await import('../server/routes/finance');
+    const permsOf = (router: typeof adsRouter) =>
+      (router.stack as { route?: { path: string; stack: { handle: { permission?: string } }[] } }[])
+        .filter((l) => l.route)
+        .map((l) => l.route!.stack.map((s) => s.handle.permission).find(Boolean));
+    // Trang Tài khoản: mọi route cần manage_users · Tài chính: mọi route cần finance
+    expect(permsOf(usersRouter).length).toBeGreaterThan(3);
+    expect(new Set(permsOf(usersRouter))).toEqual(new Set(['manage_users']));
+    expect(new Set(permsOf(financeRouter))).toEqual(new Set(['finance']));
     const routes = [agentRouter, settingsRouter, adsRouter].flatMap((r) =>
       (r.stack as { route?: { path: string; methods: Record<string, boolean>; stack: { handle: { permission?: string } }[] } }[])
         .filter((l) => l.route)

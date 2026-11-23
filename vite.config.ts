@@ -8,5 +8,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://127.0.0.1:8787',
     },
+    // Không theo dõi dữ liệu server: hồ sơ Chrome của Seller Center (.secrets/seller) khoá file tạm → Vite sập (EBUSY)
+    watch: {
+      ignored: ['**/.secrets/**', '**/server-data/**', '**/dist/**'],
+    },
   },
 });

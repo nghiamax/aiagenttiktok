@@ -16,6 +16,7 @@ export const PERMISSION_TEXT: Record<Permission, string> = {
   execute: 'chạy thao tác trên TikTok',
   configure: 'sửa thiết lập / quy tắc',
   manage_users: 'quản lý tài khoản',
+  finance: 'dùng mục Tài chính',
 };
 
 /** Phải đăng nhập (cookie phiên hợp lệ + tài khoản đang hoạt động) */

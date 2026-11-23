@@ -110,7 +110,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
             to="/ads/agent"
             className="flex w-fit items-center gap-2 rounded-xl bg-primary-soft px-3.5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
           >
-            Mở AI Agent
+            Mở BOT AI
             {agent.pendingCount > 0 && (
               <span className="rounded-full bg-danger px-1.5 py-0.5 text-xs leading-none text-white">
                 {agent.pendingCount} chờ duyệt
@@ -140,7 +140,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
 
       {tiles.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted">
-          Chưa có nhóm {unit} nào bật “Hiện ở Tổng quan”. Bật trong AI Agent → Nhóm.
+          Chưa có nhóm {unit} nào bật “Hiện ở Tổng quan”. Bật trong BOT AI → Nhóm.
         </p>
       ) : (
         /* gap-px + nền line = đường kẻ giữa các ô, đúng với mọi số lượng nhóm */
@@ -153,7 +153,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
             // Nhóm đang trống → làm nhạt để mắt tập trung vào ô có việc
             const empty = s.count === 0;
             const needsBreakEven = empty && breakEvenBlocked && groupUsesBreakEven(group);
-            // Ô = 2 vùng bấm riêng: nội dung → lọc bảng bên dưới; chip quy tắc → sang AI Agent (không lồng link trong button)
+            // Ô = 2 vùng bấm riêng: nội dung → lọc bảng bên dưới; chip quy tắc → sang BOT AI (không lồng link trong button)
             return (
               <div key={group.id} className="group bg-white p-5 transition-colors hover:bg-canvas">
                 <button
@@ -216,7 +216,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                   {rule ? (
                     <Link
                       to="/ads/agent?view=rules"
-                      title="Xem / sửa quy tắc ở AI Agent"
+                      title="Xem / sửa quy tắc ở BOT AI"
                       className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition hover:ring-1 hover:ring-current ${
                         rule.mode !== 'off' ? 'bg-violet-50 text-accent-violet' : 'bg-canvas text-muted hover:text-ink'
                       }`}

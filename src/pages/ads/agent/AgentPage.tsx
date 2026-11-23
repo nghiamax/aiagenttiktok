@@ -84,7 +84,7 @@ export default function AgentPage() {
     <>
       <PageHeader
         icon={Megaphone}
-        title="ADS 24/7"
+        title="Quản lí chiến dịch"
         description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads."
         actions={<AdsRangeControl />}
       />

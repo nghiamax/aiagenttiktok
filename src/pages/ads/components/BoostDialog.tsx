@@ -72,7 +72,7 @@ export default function BoostDialog({ title, usedToday, dailyCap, onNext, onClos
         </p>
         {overCap && (
           <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700 sm:col-span-2">
-            Vượt trần tăng cường hôm nay. Giảm ngân sách hoặc nâng trần ở AI Agent → Quy tắc → Giới hạn an toàn.
+            Vượt trần tăng cường hôm nay. Giảm ngân sách hoặc nâng trần ở BOT AI → Quy tắc → Giới hạn an toàn.
           </p>
         )}
       </div>

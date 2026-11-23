@@ -1,4 +1,4 @@
-import { Eye, LayoutDashboard, Megaphone, ShoppingBag, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { Bot, Eye, LayoutDashboard, Megaphone, ShoppingBag, Users, Wallet, type LucideIcon } from 'lucide-react';
 
 export interface NavChild {
   label: string;
@@ -27,11 +27,12 @@ export const APP_TAGLINE = 'Vận hành TikTok Shop';
 /** Nguồn duy nhất cho danh sách tab trên sidebar. Thêm tab mới tại đây. */
 export const NAV_ITEMS: NavItem[] = [
   {
-    label: 'ADS 24/7',
+    label: 'Quản lí chiến dịch',
     path: '/ads',
     icon: Megaphone,
     children: [
       { label: 'Tổng quan', path: '/ads', icon: LayoutDashboard },
+      { label: 'Care Ads 24/7', path: '/ads/agent', icon: Bot },
       { label: 'Theo dõi video', path: '/ads', icon: Eye, anchor: WATCH_ANCHOR },
     ],
   },

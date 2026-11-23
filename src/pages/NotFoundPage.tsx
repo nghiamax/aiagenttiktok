@@ -11,7 +11,7 @@ export default function NotFoundPage() {
         to="/ads"
         className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
       >
-        Về trang ADS 24/7
+        Về trang Quản lí chiến dịch
       </Link>
     </Card>
   );

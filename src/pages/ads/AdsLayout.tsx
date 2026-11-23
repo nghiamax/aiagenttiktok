@@ -20,7 +20,7 @@ export default function AdsLayout() {
   if (status?.state === 'never') {
     return (
       <>
-        <PageHeader icon={Megaphone} title="ADS 24/7" description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads." />
+        <PageHeader icon={Megaphone} title="Quản lí chiến dịch" description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads." />
         <ConnectTikTokCard />
       </>
     );

@@ -82,7 +82,7 @@ Quy tắc:
 
 | Tab | Route | Icon (lucide) | Mục đích |
 |---|---|---|---|
-| ADS 24/7 | `/ads` | `Megaphone` | Quản lý & tự động hóa TikTok Ads (sau này dùng MCP TikTok for Business + AI Agent chạy 24/7) |
+| Quản lí chiến dịch (trước là ADS 24/7) | `/ads` | `Megaphone` | Quản lý & tự động hóa TikTok Ads (sau này dùng MCP TikTok for Business + AI Agent chạy 24/7) |
 | Đơn hàng | `/orders` | `ShoppingBag` | Theo dõi đơn hàng TikTok Shop |
 | Booking KOC | `/koc-booking` | `Users` | Quản lý booking KOC, tiến độ hợp tác, hiệu quả nội dung |
 | Tài chính | `/finance` | `Wallet` | Doanh thu, chi phí, lợi nhuận |
@@ -207,7 +207,7 @@ Không hard-code mã màu trong component — dùng token.
 └───────────────┴────────────────────────────────────────────┘
 ```
 
-- **Sidebar:** nền trắng, rộng `256px`, thu gọn còn `76px` (chỉ icon, có tooltip `title`). Tab active: nền `primary-soft`, chữ/icon `primary`, `font-semibold`. **Mục con** (`NavItem.children` trong `navigation.ts`, ẩn khi thu gọn): ADS 24/7 → **Tổng quan** (`/ads`) — đang ở trang đó thì bấm chỉ cuộn mượt lên đầu (giữ bộ lọc trên URL), trang khác thì chuyển tới và mở ở đầu; **Theo dõi video** (`anchor: WATCH_ANCHOR`) — mở hẳn ô Đang theo dõi + cuộn tới (đang ở trang: sự kiện `NAV_ANCHOR_EVENT`; trang khác: `/ads#theo-doi`, `WatchCard` xử lý rồi xoá `#`).
+- **Sidebar:** nền trắng, rộng `256px`, thu gọn còn `76px` (chỉ icon, có tooltip `title`). Tab active: nền `primary-soft`, chữ/icon `primary`, `font-semibold`. **Tên hiển thị (Sếp chốt 23/11)**: mục cha "Quản lí chiến dịch" (route vẫn `/ads`, tiêu đề trang cũng vậy), trang Agent hiển thị là **"BOT AI"** (tab, hộp trạng thái, câu hướng dẫn — tên trong code / CLAUDE.md vẫn gọi AI Agent). **Mục con** (`NavItem.children` trong `navigation.ts`, ẩn khi thu gọn): **Tổng quan** (`/ads`) — đang ở trang đó thì bấm chỉ cuộn mượt lên đầu (giữ bộ lọc trên URL), trang khác thì chuyển tới và mở ở đầu; **Care Ads 24/7** (`/ads/agent`, trang BOT AI, cùng cách bấm); **Theo dõi video** (`anchor: WATCH_ANCHOR`) — mở hẳn ô Đang theo dõi + cuộn tới (đang ở trang: sự kiện `NAV_ANCHOR_EVENT`; trang khác: `/ads#theo-doi`, `WatchCard` xử lý rồi xoá `#`).
 - **Header:** sticky, nền trắng, viền dưới; có tên tài khoản, nút cài đặt, chuông thông báo, avatar.
 - **Responsive:** desktop ưu tiên. `< lg (1024px)`: sidebar ẩn, mở dạng drawer bằng nút `≡` trên header, có lớp phủ mờ, tự đóng khi chuyển trang.
 - Cả 4 tab dùng chung `AppLayout`.

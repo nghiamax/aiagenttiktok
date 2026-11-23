@@ -171,7 +171,7 @@ export default function VideoTable({
               : action === UNAVAILABLE_FILTER
                 ? 'TikTok báo video không khả dụng (đã ngừng chạy) — chưa có cách xử lý, không xếp nhóm, Agent không đề xuất'
                 : action === REMOVED_FILTER
-                  ? 'Video đã gỡ khỏi chiến dịch — không thuộc nhóm nào. Kết quả sau khi gỡ xem ở AI Agent → Nhật ký'
+                  ? 'Video đã gỡ khỏi chiến dịch — không thuộc nhóm nào. Kết quả sau khi gỡ xem ở BOT AI → Nhật ký'
                   : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
         </span>
       </div>

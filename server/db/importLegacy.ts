@@ -67,6 +67,10 @@ export interface ImportResult {
   actions: number;
   watch: number;
   token: boolean;
+  /** Shop chính vừa tạo (bản 1 shop cũ) */
+  mainShopId?: string;
+  /** Số file số liệu lưu sẵn đã chép sang shop chính */
+  cache?: number;
 }
 
 function readJson<T>(p: string): T | null {
@@ -89,7 +93,7 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
   const token = readJson<LegacyToken>(tokenFile);
   const hasShopData = ['settings.json', 'agent-config.json', 'agent-state.json', 'watchlist.json'].some((f) => fs.existsSync(data(f)));
 
-  return tx(db, () => {
+  const result: ImportResult = tx(db, (): ImportResult => {
     if (db.prepare('SELECT 1 FROM meta WHERE key = ?').get(LEGACY_FLAG)) return { ...empty, skipped: 'đã chép trước đó' };
     const iso = now.toISOString();
     const markDone = (r: ImportResult) => {
@@ -99,6 +103,7 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
     if (users.length === 0 && !token && !hasShopData) return markDone({ ...empty, skipped: 'không có dữ liệu cũ' });
 
     const r: ImportResult = { ...empty, imported: true };
+
     const insAccount = db.prepare('INSERT INTO accounts (id, name, plan, pro_until, created_at) VALUES (?, ?, ?, ?, ?)');
     const insUser = db.prepare(
       `INSERT INTO users (id, account_id, username, name, role, is_admin, password_hash, disabled, created_at, password_changed_at, data)
@@ -113,6 +118,7 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
     const mainShop = id();
     db.prepare('INSERT INTO shops (id, account_id, name, created_at) VALUES (?, ?, ?, ?)').run(mainShop, mainAccount, mainName, iso);
     r.shops++;
+    r.mainShopId = mainShop;
 
     const accountOf = new Map<string, string>();
     for (const u of users) {
@@ -214,4 +220,25 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
 
     return markDone(r);
   });
+  // Ngoài transaction: chép số liệu lưu sẵn cũ sang thư mục cache của shop chính (khỏi tải lại từ TikTok lần đầu)
+  if (result.imported && result.token && result.mainShopId) result.cache = copyLegacyCache(result.mainShopId);
+  return result;
+}
+
+/** cache/<from>_<to>.json (bản 1 shop) → cache/<shop>/<advertiser>_<store>/ ; giữ file gốc */
+function copyLegacyCache(shopId: string): number {
+  const src = path.join(config.dataDir, 'cache');
+  const dest = path.join(src, shopId, `${LEGACY.advertiserId}_${LEGACY.storeId}`);
+  let n = 0;
+  try {
+    for (const f of fs.readdirSync(src)) {
+      if (!/^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.json$/.test(f)) continue;
+      fs.mkdirSync(dest, { recursive: true });
+      fs.copyFileSync(path.join(src, f), path.join(dest, f));
+      n++;
+    }
+  } catch {
+    /* không có cache cũ */
+  }
+  return n;
 }

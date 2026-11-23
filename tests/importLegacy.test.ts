@@ -58,6 +58,7 @@ describe('importLegacy', () => {
       proposals: [{ id: 'p1', status: 'pending', createdAt: '2026-11-23T09:00:00Z' }],
       actions: [{ id: 'a1', status: 'success', executedAt: '2026-11-22T09:00:00Z' }, { id: 'a2', status: 'failed', executedAt: '2026-11-21T09:00:00Z' }],
     });
+    write('data', 'cache/2026-11-01_2026-11-07.json', { build: 2, range: { from: '2026-11-01', to: '2026-11-07' } });
     write('data', 'watchlist.json', [{ videoId: '7600254603350838549', note: 'xem', addedAt: '2026-11-22T00:00:00Z' }]);
     write('secrets', 'tiktok-mcp.json', { client_id: 'c', access_token: 'token-bi-mat-khong-duoc-lo', refresh_token: 'RT', savedAt: '2026-11-23T08:00:00Z', connectedAt: '2026-11-21T00:00:00Z' });
 
@@ -93,6 +94,11 @@ describe('importLegacy', () => {
     expect(db.prepare('SELECT count(*) n FROM actions WHERE shop_id = ?').get(shop.id)).toMatchObject({ n: 2 });
     expect(JSON.parse((db.prepare('SELECT data FROM shop_settings WHERE shop_id = ?').get(shop.id) as { data: string }).data)).toEqual({ breakEvenRoi: { p1: 2.5 } });
     expect(db.prepare('SELECT note FROM watchlist WHERE shop_id = ?').get(shop.id)).toMatchObject({ note: 'xem' });
+
+    // Số liệu lưu sẵn cũ chép sang thư mục cache của shop chính (theo tài khoản quảng cáo cũ), file gốc giữ
+    expect(r.cache).toBe(1);
+    expect(fs.existsSync(path.join(dir.path, 'data', 'cache', shop.id, 'ADV1_STORE1', '2026-11-01_2026-11-07.json'))).toBe(true);
+    expect(fs.existsSync(path.join(dir.path, 'data', 'cache', '2026-11-01_2026-11-07.json'))).toBe(true);
 
     // File cũ vẫn còn (quay lại bản cũ được)
     expect(fs.existsSync(path.join(dir.path, 'data', 'users.json'))).toBe(true);

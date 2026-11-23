@@ -53,11 +53,15 @@ vi.stubGlobal('fetch', async (url: string, init?: { body?: unknown }) => {
 
 const flow = await import('../server/tiktok/oauthFlow');
 const tAuth = await import('../server/tiktok/auth');
+const db = await import('../server/db/index');
 const users = await import('../server/auth/users');
 const sessions = await import('../server/auth/sessions');
 const { tiktokCallback, tiktokRouter } = await import('../server/routes/tiktok');
+const { setTestShop } = await import('../server/shopContext');
+const { makeShop } = await import('./shopHelper');
 
-const tokenFile = () => path.join(dir.path, 'tiktok-mcp.json');
+/** Shop có token chưa (token lưu mã hoá trong database theo shop) */
+const hasToken = () => !!tAuth.readToken();
 const SEP = { id: 'u1', name: 'Sếp' };
 const REDIRECT = 'http://localhost:5173/api/tiktok/callback';
 const stateOf = (authUrl: string) => new URL(authUrl).searchParams.get('state')!;
@@ -68,9 +72,14 @@ beforeEach(() => {
   refreshMode = 'ok';
   revokeMode = 'ok';
   calls.length = 0;
-  for (const f of ['tiktok-mcp.json', 'users.json', 'sessions.json']) fs.rmSync(path.join(dir.path, f), { force: true });
+  db.clearAllForTests();
+  setTestShop(makeShop('s1'));
 });
-afterAll(() => fs.rmSync(dir.path, { recursive: true, force: true }));
+afterAll(() => {
+  setTestShop(null);
+  db.closeDb();
+  fs.rmSync(dir.path, { recursive: true, force: true });
+});
 
 describe('startConnect / finishConnect', () => {
   it('link đăng nhập có redirect về web + PKCE S256; đúng state → lưu token kèm người / lúc kết nối', async () => {
@@ -101,7 +110,7 @@ describe('startConnect / finishConnect', () => {
 
     const s3 = stateOf(await flow.startConnect(REDIRECT, SEP));
     await expect(flow.finishConnect({ state: s3, error: 'access_denied' }, SEP.id)).rejects.toMatchObject({ code: 'DENIED' });
-    expect(fs.existsSync(tokenFile())).toBe(false);
+    expect(hasToken()).toBe(false);
   });
 });
 
@@ -117,7 +126,7 @@ describe('GET /api/tiktok/callback', () => {
     const authUrl = await flow.startConnect(REDIRECT, SEP);
     const nv = users.createUser({ username: 'nhanvien', password: 'matkhau123', role: 'staff' });
     expect(await call(`sid=${sessions.createSession(nv.id)}`, { state: stateOf(authUrl), code: 'x' })).toMatch(/^\/tiktok\/done\?error=/);
-    expect(fs.existsSync(tokenFile())).toBe(false);
+    expect(hasToken()).toBe(false);
   });
 
   it('copy link sang trình duyệt chưa đăng nhập web + state đúng → lưu token (người bấm), về /tiktok/done', async () => {
@@ -132,7 +141,7 @@ describe('GET /api/tiktok/callback', () => {
     expect(await call(undefined, { state: 'doan-bua', code: 'x' })).toMatch(/^\/tiktok\/done\?error=/);
     const s = stateOf(await flow.startConnect(REDIRECT, SEP, Date.now() - flow.PENDING_TTL_MS - 1));
     expect(await call(undefined, { state: s, code: 'x' })).toMatch(/^\/tiktok\/done\?error=/);
-    expect(fs.existsSync(tokenFile())).toBe(false);
+    expect(hasToken()).toBe(false);
   });
 
   it('chủ shop + đúng state → lưu token, chuyển về /tiktok/done (không có token trên URL)', async () => {
@@ -211,7 +220,7 @@ describe('Ngắt kết nối', () => {
       ['refresh_token', 'r-bi-mat', 'client-9'],
       ['access_token', SECRET, 'client-9'],
     ]);
-    expect(fs.existsSync(tokenFile())).toBe(false);
+    expect(hasToken()).toBe(false);
     const { tiktokState } = await import('../server/routes/ads');
     expect(tiktokState(tAuth.readToken())).toBe('never');
     expect(JSON.stringify(r)).not.toContain(SECRET);
@@ -222,7 +231,7 @@ describe('Ngắt kết nối', () => {
       connected();
       revokeMode = mode;
       expect(await flow.disconnect(SEP)).toEqual({ revoked: false });
-      expect(fs.existsSync(tokenFile())).toBe(false);
+      expect(hasToken()).toBe(false);
     }
   });
 
@@ -242,6 +251,6 @@ describe('Ngắt kết nối', () => {
     const res = { code: 0, status(c: number) { res.code = c; return res; }, json() { return res; } };
     await handler({ body: {} }, res, () => {});
     expect(res.code).toBe(400);
-    expect(fs.existsSync(tokenFile())).toBe(true);
+    expect(hasToken()).toBe(true);
   });
 });

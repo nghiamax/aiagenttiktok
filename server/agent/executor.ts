@@ -20,7 +20,7 @@ import type {
 } from '../../shared/agentTypes.js';
 import { getSnapshot, todayVN } from '../ads/cache.js';
 import { videoStatus, type ReportRow } from '../ads/mapping.js';
-import { config } from '../config.js';
+import { requireAccount } from '../tiktok/link.js';
 import { callReadTool } from '../tiktok/mcpClient.js';
 import { callWriteTool, type WriteTool } from '../tiktok/writeTools.js';
 import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
@@ -81,7 +81,7 @@ const vnDate = (offsetDays: number) => new Date(Date.parse(todayVN()) - offsetDa
 
 export function getCampaignInfo(campaignId: string): Promise<CampaignInfo> {
   return callReadTool<CampaignInfo>('campaign_gmv_max_info_get', {
-    advertiser_id: config.tiktok.advertiserId,
+    advertiser_id: requireAccount().advertiserId,
     campaign_id: campaignId,
   });
 }
@@ -90,8 +90,8 @@ export function getCampaignInfo(campaignId: string): Promise<CampaignInfo> {
 export async function getVideoStatus(campaignId: string, productId: string, videoId: string): Promise<VideoStatus | null> {
   for (let page = 1; page <= 5; page++) {
     const data = await callReadTool<{ list?: ReportRow[]; page_info?: { total_page: number } }>('gmv_max_report_get', {
-      advertiser_id: config.tiktok.advertiserId,
-      store_ids: [config.tiktok.storeId],
+      advertiser_id: requireAccount().advertiserId,
+      store_ids: [requireAccount().storeId],
       start_date: vnDate(6),
       end_date: todayVN(),
       page,
@@ -161,7 +161,7 @@ async function planCreative(
   return {
     tool: 'gmv_max_creative_update',
     params: {
-      advertiser_id: config.tiktok.advertiserId,
+      advertiser_id: requireAccount().advertiserId,
       campaign_id: target.campaignId,
       action,
       item_list: [{ item_id: target.videoId, spu_id_list: spuIds }],
@@ -187,9 +187,9 @@ async function planBoost(info: CampaignInfo, target: AgentTarget, params: AgentR
   return {
     tool: 'campaign_gmv_max_session_create',
     params: {
-      advertiser_id: config.tiktok.advertiserId,
+      advertiser_id: requireAccount().advertiserId,
       campaign_id: target.campaignId,
-      store_id: info.store_id ?? config.tiktok.storeId,
+      store_id: info.store_id ?? requireAccount().storeId,
       session: {
         bid_type: 'CREATIVE_NO_BID',
         item_id: target.videoId,
@@ -210,11 +210,11 @@ async function planBoost(info: CampaignInfo, target: AgentTarget, params: AgentR
 async function requireExclusive() {
   const data = await callReadTool<{
     store_list?: { store_id: string; exclusive_authorized_advertiser_info?: { advertiser_id?: string } }[];
-  }>('gmv_max_store_list_get', { advertiser_id: config.tiktok.advertiserId });
+  }>('gmv_max_store_list_get', { advertiser_id: requireAccount().advertiserId });
   const ok = data.store_list?.some(
     (s) =>
-      s.store_id === config.tiktok.storeId &&
-      s.exclusive_authorized_advertiser_info?.advertiser_id === config.tiktok.advertiserId,
+      s.store_id === requireAccount().storeId &&
+      s.exclusive_authorized_advertiser_info?.advertiser_id === requireAccount().advertiserId,
   );
   if (!ok) throw new PrecheckError('Shop chưa cấp quyền GMV Max độc quyền cho tài khoản quảng cáo này');
 }
@@ -222,7 +222,7 @@ async function requireExclusive() {
 function updatePlan(campaignId: string, fields: Record<string, unknown>, prev: ExecutedValues, next: ExecutedValues, summary: string): Plan {
   return {
     tool: 'campaign_gmv_max_update',
-    params: { advertiser_id: config.tiktok.advertiserId, campaign_id: campaignId, ...fields },
+    params: { advertiser_id: requireAccount().advertiserId, campaign_id: campaignId, ...fields },
     prev,
     next,
     verify: 'readback',

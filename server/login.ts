@@ -1,11 +1,26 @@
 /**
- * Đăng nhập TikTok for Business cho server (chạy trên máy): npm run login
+ * Đăng nhập TikTok for Business cho 1 shop (chạy trên máy): npm run login [-- --shop <id shop>]
+ * Không ghi --shop = shop đầu tiên của Quản trị viên (shop chính).
  * Trên VPS dùng nút "Kết nối TikTok" trên web thay cho lệnh này (cùng luồng: server/tiktok/oauthFlow.ts).
  * Token có quyền lớn (cả ghi) → không copy .secrets/ sang máy khác, mỗi máy tự đăng nhập.
  */
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { createAuthRequest, exchangeAndSave } from './tiktok/oauthFlow.js';
+import { autoSelectAccount } from './tiktok/accounts.js';
+import { bootDatabase } from './db/boot.js';
+import { withShop } from './shopContext.js';
+
+const db = bootDatabase();
+const shopArg = process.argv.indexOf('--shop');
+const shopId =
+  shopArg > 0
+    ? process.argv[shopArg + 1]
+    : (
+        db
+          .prepare('SELECT s.id FROM shops s JOIN users u ON u.account_id = s.account_id WHERE u.is_admin = 1 ORDER BY u.created_at, s.created_at LIMIT 1')
+          .get() as { id: string } | undefined
+      )?.id;
 
 const PORT = 8788;
 const REDIRECT = `http://127.0.0.1:${PORT}/callback`;
@@ -24,6 +39,10 @@ function openBrowser(url: string) {
         : ['xdg-open', [url]];
   spawn(cmd as string, args as string[], { detached: true, stdio: 'ignore' }).unref();
 }
+
+if (!shopId || !db.prepare('SELECT 1 FROM shops WHERE id = ?').get(shopId)) fail('Không tìm thấy shop — dùng --shop <id shop>');
+const shop = shopId!;
+console.log(`▶ Kết nối TikTok cho shop ${shop}`);
 
 console.log('▶ Đăng ký client');
 const req = await createAuthRequest(REDIRECT).catch((e: Error) => fail(e.message));
@@ -59,8 +78,12 @@ const code = await new Promise<string>((resolve) => {
 
 console.log('▶ Đổi code lấy token');
 try {
-  const token = await exchangeAndSave(req, code);
-  console.log(`✔ Đã lưu token (hết hạn sau ${token.expires_in ?? '?'} giây, gia hạn tự động: ${Boolean(token.refresh_token)})`);
+  await withShop(shop, async () => {
+    const token = await exchangeAndSave(req, code);
+    console.log(`✔ Đã lưu token (hết hạn sau ${token.expires_in ?? '?'} giây, gia hạn tự động: ${Boolean(token.refresh_token)})`);
+    const account = await autoSelectAccount();
+    console.log(account ? `✔ Tài khoản quảng cáo: ${account.advertiserName ?? account.advertiserId} · shop ${account.storeName ?? account.storeId}` : '! Nhiều tài khoản / shop — chọn trên web (Kết nối TikTok → Chọn tài khoản)');
+  });
 } catch (e) {
   fail(`Lấy token lỗi: ${(e as Error).message}`);
 }

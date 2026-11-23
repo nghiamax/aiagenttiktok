@@ -23,7 +23,8 @@ export type Permission =
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: ['view', 'execute', 'configure', 'manage_users', 'finance'],
   staff: ['view', 'finance'],
-  user: ['view', 'finance'],
+  // Người dùng = chủ tài khoản khách: toàn quyền trên CÁC SHOP CỦA MÌNH (requireShop chặn shop người khác)
+  user: ['view', 'execute', 'configure', 'finance'],
 };
 
 export const ROLE_LABEL: Record<Role, string> = { owner: 'Quản trị viên', staff: 'Nhân viên', user: 'Người dùng' };

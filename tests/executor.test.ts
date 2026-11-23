@@ -57,6 +57,12 @@ vi.mock('../server/store', () => ({
   },
 }));
 
+// Shop đang chạy tài khoản quảng cáo / shop TikTok này (bình thường lấy từ database theo shop)
+vi.mock('../server/tiktok/link', () => {
+  const account = { advertiserId: '7579465349544869906', advertiserName: 'Shop', storeId: '7496093946365052968', storeName: 'Shop', currency: 'VND' };
+  return { requireAccount: () => account, getAccount: () => account };
+});
+
 vi.mock('../server/tiktok/mcpClient', () => ({
   callReadTool: async (tool: string, params: Record<string, unknown>) => {
     if (tool === 'campaign_gmv_max_info_get') return structuredClone(mock.info);

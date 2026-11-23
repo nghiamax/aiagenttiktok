@@ -4,6 +4,8 @@ import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
 import { config } from '../config.js';
 import { buildSnapshot, SNAPSHOT_BUILD, type DateRange } from './buildSnapshot.js';
 import { annotateCrossProduct } from '../../shared/videoStatus.js';
+import { currentShopId } from '../shopContext.js';
+import { requireAccount } from '../tiktok/link.js';
 
 const DIR = path.join(config.dataDir, 'cache');
 /** Khoảng ngày có chứa hôm nay → số liệu còn đổi, cache ngắn */
@@ -14,7 +16,15 @@ const RECENT_DAYS = 2;
 
 const inflight = new Map<string, Promise<AdsSnapshot>>();
 
-const fileOf = (r: DateRange) => path.join(DIR, `${r.from}_${r.to}.json`);
+/**
+ * Cache theo shop + tài khoản quảng cáo + shop TikTok: cache/<shop>/<advertiser>_<store>/<from>_<to>.json —
+ * đổi tài khoản thì không dùng nhầm số cũ; shop khác không bao giờ đọc được file của nhau.
+ */
+function scopeDir(): string {
+  const a = requireAccount();
+  return path.join(DIR, currentShopId(), `${a.advertiserId}_${a.storeId}`);
+}
+const fileOf = (r: DateRange) => path.join(scopeDir(), `${r.from}_${r.to}.json`);
 
 /** Ngày hôm nay theo giờ Việt Nam (yyyy-MM-dd) */
 export function todayVN(): string {
@@ -41,8 +51,9 @@ function readCache(r: DateRange): AdsSnapshot | null {
 }
 
 function writeCache(r: DateRange, snap: AdsSnapshot) {
-  fs.mkdirSync(DIR, { recursive: true });
-  fs.writeFileSync(fileOf(r), JSON.stringify(snap));
+  const file = fileOf(r);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(snap));
 }
 
 /** Lấy snapshot theo khoảng ngày: cache → nếu không có thì gọi TikTok. Yêu cầu trùng dùng chung 1 lần gọi. */
@@ -51,7 +62,7 @@ export async function getSnapshot(r: DateRange, refresh = false): Promise<{ snap
     const hit = readCache(r);
     if (hit) return { snapshot: annotateCrossProduct(hit), cached: true };
   }
-  const key = `${r.from}_${r.to}`;
+  const key = fileOf(r);
   let job = inflight.get(key);
   if (!job) {
     job = buildSnapshot(r)

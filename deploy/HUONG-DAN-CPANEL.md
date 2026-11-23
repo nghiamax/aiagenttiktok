@@ -21,7 +21,7 @@ cPanel → **Setup Node.js App** → **Create Application**:
 
 | Ô | Điền |
 |---|---|
-| Node.js version | **22** (không có thì chọn bản cao nhất, tối thiểu 20) |
+| Node.js version | **22** — cần **22.13 trở lên** (database SQLite có sẵn trong Node). Chạy `node -v` để xem |
 | Application mode | Production |
 | Application root | `tiktok-admin` |
 | Application URL | `tool.necomax.com` (để trống phần sau dấu /) |
@@ -75,15 +75,25 @@ Dòng đầu là để hosting không tắt app khi vắng người dùng. App c
 1. Mở `https://tool.necomax.com` → đăng nhập.
 2. **Đổi mật khẩu ngay**, vì file tài khoản đã bị lộ hôm 21/11: bấm avatar → Đổi mật khẩu.
 3. Bấm tên shop → **Kết nối TikTok**.
-4. Báo Claude kiểm tra từ ngoài: các file bí mật phải trả 404.
+4. Báo Claude kiểm tra từ ngoài: các file bí mật (`.secrets/…`, `server-data/app.db`, `server-data/users.json`) không tải được.
 
 ## Cập nhật code mới
 Terminal:
 ```
 source /home/necomaxc/nodevenv/tiktok-admin/22/bin/activate && cd ~/tiktok-admin
+cp -a server-data ~/server-data-backup-$(date +%Y%m%d-%H%M)     # sao lưu trước mỗi lần cập nhật
+git checkout -- package-lock.json                                # bỏ thay đổi npm tự ghi (nếu có)
 git pull && npm install --include=dev && npx vite build
 ```
 Sau đó vào Setup Node.js App → **Restart**.
+- Luôn dùng `npm install --include=dev` (hosting chạy chế độ production — thiếu `--include=dev` sẽ mất vite / tsx, server không khởi động).
+- `npx vite build` hỏi "Need to install vite@…" → bấm **n** (thiếu bước `--include=dev` ở trên).
+
+### Lần đầu lên bản nhiều shop (database, 23/11/2026)
+- Cần Node **≥ 22.13** (`node -v`). Thấp hơn → Setup Node.js App chọn bản 22 mới hơn (hoặc 24) rồi làm lại các lệnh trên.
+- Khi Restart, server tự tạo `server-data/app.db` và **chép dữ liệu cũ** (tài khoản, phiên, token TikTok, thiết lập, quy tắc, đề xuất, nhật ký, theo dõi, số liệu lưu sẵn) sang shop "Phụ Kiện NECOTECH". File JSON cũ giữ nguyên. Xem `stderr.log` / log có dòng `[db] Đã chép dữ liệu cũ…`.
+- Khoá mã hoá token tự sinh ở `.secrets/app-secret` (không xoá file này — mất thì phải Kết nối TikTok lại).
+- Quay lại bản cũ: `git checkout <commit trước>` + build + Restart (bản cũ vẫn đọc file JSON; thay đổi làm sau khi lên bản mới sẽ không có ở bản cũ).
 
 ## Khi có lỗi
 - Trang báo lỗi 503 / "Incomplete response": xem file `~/tiktok-admin/stderr.log` trong File Manager.

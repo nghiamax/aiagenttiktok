@@ -11,9 +11,15 @@ vi.mock('../server/config', async () => {
   dir.path = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'watch-'));
   return { config: { dataDir: dir.path } };
 });
+const db = await import('../server/db/index');
 const w = await import('../server/watchlist');
-afterAll(() => fs.rmSync(dir.path, { recursive: true, force: true }));
-beforeEach(() => fs.rmSync(`${dir.path}/watchlist.json`, { force: true }));
+const { withShop } = await import('../server/shopContext');
+const { makeShop } = await import('./shopHelper');
+afterAll(() => {
+  db.closeDb();
+  fs.rmSync(dir.path, { recursive: true, force: true });
+});
+beforeEach(() => db.clearAllForTests());
 
 describe('parseVideoId', () => {
   it('nhận mã số, link tiktok.com/@user/video/<id>, link có item_id', () => {
@@ -30,6 +36,7 @@ describe('parseVideoId', () => {
 
 describe('watchlist', () => {
   it('thêm (mới nhất lên đầu), thêm trùng → chỉ cập nhật ghi chú, bỏ', () => {
+    withShop(makeShop('s1'), () => {
     w.addWatch('111111111111111111', 'video A', { id: 'u1', name: 'Sếp' });
     w.addWatch('222222222222222222', undefined);
     expect(w.getWatchlist().map((x) => x.videoId)).toEqual(['222222222222222222', '111111111111111111']);
@@ -38,5 +45,16 @@ describe('watchlist', () => {
     expect(w.getWatchlist().find((x) => x.videoId === '111111111111111111')).toMatchObject({ note: 'đổi ghi chú', addedBy: { name: 'Sếp' } });
     w.removeWatch('111111111111111111');
     expect(w.getWatchlist().map((x) => x.videoId)).toEqual(['222222222222222222']);
+    });
+  });
+
+  it('mỗi shop 1 danh sách riêng: shop B không thấy / không xoá được video của shop A; ngoài shop → lỗi', () => {
+    withShop(makeShop('shopA'), () => w.addWatch('333333333333333333', 'của A'));
+    withShop(makeShop('shopB'), () => {
+      expect(w.getWatchlist()).toEqual([]);
+      w.removeWatch('333333333333333333');
+    });
+    expect(withShop('shopA', () => w.getWatchlist().map((x) => x.videoId))).toEqual(['333333333333333333']);
+    expect(() => w.getWatchlist()).toThrow('Chưa chọn shop');
   });
 });

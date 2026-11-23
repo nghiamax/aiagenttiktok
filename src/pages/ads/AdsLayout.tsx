@@ -1,6 +1,9 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { Bot, Megaphone } from 'lucide-react';
 import ConnectTikTokCard from '../../components/ui/ConnectTikTokCard';
+import ChooseAccountCard from '../../components/ui/ChooseAccountCard';
+import CreateShopCard from '../../components/ui/CreateShopCard';
+import { useShop } from '../../shop/ShopProvider';
 import PageHeader from '../../components/ui/PageHeader';
 import { useTikTok } from '../../tiktok/TikTokProvider';
 import { AgentStoreProvider } from './agent/agentStore';
@@ -15,10 +18,19 @@ import { WatchlistProvider } from './watchlist';
  */
 export default function AdsLayout() {
   const { status, checked } = useTikTok();
+  const shop = useShop();
   const care = useLocation().pathname.startsWith('/care-ads');
-  // Chờ đọc trạng thái kết nối (rất nhanh) để không nháy số liệu lưu sẵn trước thẻ chào
-  if (!checked) return null;
-  if (status?.state === 'never') {
+  // Chờ đọc shop + trạng thái kết nối (rất nhanh) để không nháy số liệu lưu sẵn trước thẻ chào
+  if (!shop.loaded || (shop.current && !checked)) return null;
+  // Thứ tự: chưa có shop → tạo shop; shop chưa kết nối TikTok → kết nối; đã kết nối mà chưa chọn tài khoản → chọn
+  const gate = !shop.current
+    ? <CreateShopCard />
+    : status?.state === 'never'
+      ? <ConnectTikTokCard />
+      : status && !status.account
+        ? <ChooseAccountCard />
+        : null;
+  if (gate) {
     return (
       <>
         {care ? (
@@ -26,7 +38,7 @@ export default function AdsLayout() {
         ) : (
           <PageHeader icon={Megaphone} title="Quản lí chiến dịch" description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads." />
         )}
-        <ConnectTikTokCard />
+        {gate}
       </>
     );
   }

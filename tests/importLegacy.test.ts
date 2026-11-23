@@ -59,7 +59,7 @@ describe('importLegacy', () => {
       actions: [{ id: 'a1', status: 'success', executedAt: '2026-11-22T09:00:00Z' }, { id: 'a2', status: 'failed', executedAt: '2026-11-21T09:00:00Z' }],
     });
     write('data', 'watchlist.json', [{ videoId: '7600254603350838549', note: 'xem', addedAt: '2026-11-22T00:00:00Z' }]);
-    write('secrets', 'tiktok-mcp.json', { client_id: 'c', access_token: 'AT', refresh_token: 'RT', savedAt: '2026-11-23T08:00:00Z', connectedAt: '2026-11-21T00:00:00Z' });
+    write('secrets', 'tiktok-mcp.json', { client_id: 'c', access_token: 'token-bi-mat-khong-duoc-lo', refresh_token: 'RT', savedAt: '2026-11-23T08:00:00Z', connectedAt: '2026-11-21T00:00:00Z' });
 
     const db = getDb();
     const r = importLegacy(db, NOW);
@@ -86,8 +86,8 @@ describe('importLegacy', () => {
 
     const link = db.prepare('SELECT * FROM tiktok_links WHERE shop_id = ?').get(shop.id) as Record<string, string>;
     expect(link).toMatchObject({ advertiser_id: 'ADV1', store_id: 'STORE1', connected_at: '2026-11-21T00:00:00Z' });
-    expect(link.token_enc).not.toContain('AT'); // không lưu bản rõ
-    expect(JSON.parse(decrypt(link.token_enc)!)).toMatchObject({ access_token: 'AT', refresh_token: 'RT' });
+    expect(link.token_enc).not.toContain('token-bi-mat'); // không lưu bản rõ
+    expect(JSON.parse(decrypt(link.token_enc)!)).toMatchObject({ access_token: 'token-bi-mat-khong-duoc-lo', refresh_token: 'RT' });
 
     expect(db.prepare('SELECT status FROM proposals WHERE shop_id = ? AND id = ?').get(shop.id, 'p1')).toMatchObject({ status: 'pending' });
     expect(db.prepare('SELECT count(*) n FROM actions WHERE shop_id = ?').get(shop.id)).toMatchObject({ n: 2 });

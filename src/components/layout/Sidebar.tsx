@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, NAV_ITEMS } from '../../config/navigation';
 
@@ -15,6 +15,7 @@ export default function Sidebar({
   mobileOpen,
   onCloseMobile,
 }: SidebarProps) {
+  const location = useLocation();
   return (
     <>
       {/* Lớp phủ khi mở drawer trên mobile/tablet */}
@@ -61,7 +62,7 @@ export default function Sidebar({
             Chức năng
           </p>
           <ul className="space-y-1">
-            {NAV_ITEMS.map(({ label, path, icon: Icon }) => (
+            {NAV_ITEMS.map(({ label, path, icon: Icon, children }) => (
               <li key={path}>
                 <NavLink
                   to={path}
@@ -79,6 +80,32 @@ export default function Sidebar({
                   <Icon className="size-5 shrink-0" strokeWidth={1.9} />
                   <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{label}</span>
                 </NavLink>
+                {children && (
+                  <ul className={`mt-1 space-y-0.5 pl-6 ${collapsed ? 'lg:hidden' : ''}`}>
+                    {children.map((c) => (
+                      <li key={c.label}>
+                        <NavLink
+                          to={c.path}
+                          end
+                          onClick={(e) => {
+                            // Đang ở đúng trang → chỉ cuộn lên đầu (giữ bộ lọc trên URL); trang khác → chuyển tới và mở ở đầu
+                            if (location.pathname === c.path) e.preventDefault();
+                            window.scrollTo({ top: 0, behavior: location.pathname === c.path ? 'smooth' : 'auto' });
+                            onCloseMobile();
+                          }}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                              isActive ? 'font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
+                            }`
+                          }
+                        >
+                          <c.icon className="size-4 shrink-0" strokeWidth={1.9} />
+                          <span className="truncate">{c.label}</span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

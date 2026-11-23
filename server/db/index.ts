@@ -11,7 +11,13 @@ import { MIGRATIONS } from './schema.js';
  */
 
 // Nạp lúc chạy (vite / vitest 5 chưa biết node:sqlite là module có sẵn → import tĩnh bị lỗi khi test)
-const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+const { DatabaseSync } = (() => {
+  try {
+    return createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  } catch {
+    throw new Error(`Node ${process.version} chưa có SQLite sẵn — cần Node 22.13 trở lên (cPanel: Setup Node.js App → chọn bản Node mới hơn)`);
+  }
+})();
 type DatabaseSync = DatabaseSyncType;
 
 export type Db = DatabaseSync;

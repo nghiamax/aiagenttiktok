@@ -117,4 +117,14 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- Thứ tự đề xuất / nhật ký như danh sách trong code (0 = mới nhất)
+      ALTER TABLE proposals ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE actions ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX proposals_shop_seq ON proposals(shop_id, seq);
+      CREATE INDEX actions_shop_seq ON actions(shop_id, seq);
+    `,
+  },
 ];

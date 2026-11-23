@@ -1,13 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeSettings, type AdsSettings } from '../shared/settings.js';
-import type { AgentConfig, AgentRuntime, AgentState } from '../shared/agentTypes.js';
+import type { AgentActionLog, AgentConfig, AgentProposal, AgentRuntime, AgentState } from '../shared/agentTypes.js';
 import { AUTO_MODE_ENABLED } from '../shared/agentPolicy.js';
 import { config } from './config.js';
+import { getDb, parseJson, tx } from './db/index.js';
+import { currentShopId } from './shopContext.js';
 
-/* Lưu thiết lập + dữ liệu Agent vào server-data/*.json (không commit). Mặc định lấy từ src/data/. */
-
-const file = (name: string) => path.join(config.dataDir, name);
+/*
+ * Thiết lập + dữ liệu Agent THEO SHOP (database: shop_settings, agent_config, agent_runtime, proposals, actions).
+ * Shop lấy từ `currentShopId()` (middleware requireShop / vòng lặp lịch Agent) — không có shop thì báo lỗi.
+ * Mặc định lấy từ src/data/.
+ */
 
 function readJson<T>(p: string): T | null {
   try {
@@ -17,41 +21,40 @@ function readJson<T>(p: string): T | null {
   }
 }
 
-/** Ghi nguyên tử: ghi file tạm rồi đổi tên, tránh hỏng file khi đang ghi thì tắt server */
-function writeJson(p: string, data: unknown) {
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  const tmp = `${p}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, p);
-}
-
 const DEFAULT_SETTINGS = readJson<AdsSettings>(path.join(config.root, 'src', 'data', 'ads-settings.json'))!;
 const DEFAULT_AGENT = readJson<AgentState>(path.join(config.root, 'src', 'data', 'agent.json'))!;
 
+/** Đọc / ghi 1 bảng dạng (shop_id, data JSON) */
+function readRow(table: 'shop_settings' | 'agent_config' | 'agent_runtime', shopId = currentShopId()): unknown | null {
+  const r = getDb().prepare(`SELECT data FROM ${table} WHERE shop_id = ?`).get(shopId) as { data: string } | undefined;
+  return r ? parseJson(r.data, null) : null;
+}
+function writeRow(table: 'shop_settings' | 'agent_config' | 'agent_runtime', data: unknown, shopId = currentShopId()) {
+  getDb()
+    .prepare(`INSERT INTO ${table} (shop_id, data) VALUES (?, ?) ON CONFLICT(shop_id) DO UPDATE SET data = excluded.data`)
+    .run(shopId, JSON.stringify(data));
+}
+
 /* ───────── Thiết lập phân loại ───────── */
 
-const SETTINGS_FILE = file('settings.json');
-
 export function settingsStored(): boolean {
-  return fs.existsSync(SETTINGS_FILE);
+  return readRow('shop_settings') !== null;
 }
 
 export function getSettings(): AdsSettings {
-  return normalizeSettings(readJson<Partial<AdsSettings>>(SETTINGS_FILE), DEFAULT_SETTINGS);
+  return normalizeSettings(readRow('shop_settings') as Partial<AdsSettings> | null, DEFAULT_SETTINGS);
 }
 
 export function saveSettings(next: Partial<AdsSettings>): AdsSettings {
   const settings = normalizeSettings(next, DEFAULT_SETTINGS);
-  writeJson(SETTINGS_FILE, settings);
+  writeRow('shop_settings', settings);
   return settings;
 }
 
-/* ───────── Cấu hình Agent (Sếp chỉnh) ───────── */
-
-const CONFIG_FILE = file('agent-config.json');
+/* ───────── Cấu hình Agent (chủ shop chỉnh) ───────── */
 
 export function agentConfigStored(): boolean {
-  return fs.existsSync(CONFIG_FILE);
+  return readRow('agent_config') !== null;
 }
 
 /** Ghép bản lưu với mặc định: giữ quy tắc mẫu theo file mặc định + phần đã chỉnh, nối quy tắc tự tạo */
@@ -72,42 +75,66 @@ export function normalizeAgentConfig(saved: Partial<AgentConfig> | null): AgentC
 }
 
 export function getAgentConfig(): AgentConfig {
-  return normalizeAgentConfig(readJson<Partial<AgentConfig>>(CONFIG_FILE));
+  return normalizeAgentConfig(readRow('agent_config') as Partial<AgentConfig> | null);
 }
 
 export function saveAgentConfig(next: Partial<AgentConfig>): AgentConfig {
   const cfg = normalizeAgentConfig({ ...getAgentConfig(), ...next });
-  writeJson(CONFIG_FILE, cfg);
+  writeRow('agent_config', cfg);
   return cfg;
 }
 
 /** Về mặc định (xoá cả quy tắc tự tạo), giữ trạng thái tạm dừng */
 export function resetAgentConfig(): AgentConfig {
   const cfg = normalizeAgentConfig({ paused: getAgentConfig().paused });
-  writeJson(CONFIG_FILE, cfg);
+  writeRow('agent_config', cfg);
   return cfg;
 }
 
 /* ───────── Dữ liệu Agent tự ghi ───────── */
 
-const RUNTIME_FILE = file('agent-state.json');
-
-export function getRuntime(): AgentRuntime {
-  const saved = readJson<Partial<AgentRuntime>>(RUNTIME_FILE);
+function readRuntime(shopId: string): AgentRuntime {
+  const db = getDb();
+  const head = (readRow('agent_runtime', shopId) ?? {}) as Partial<AgentRuntime>;
+  const rows = (table: 'proposals' | 'actions') =>
+    (db.prepare(`SELECT data FROM ${table} WHERE shop_id = ? ORDER BY seq`).all(shopId) as { data: string }[]).map((r) => parseJson(r.data, null)).filter(Boolean);
   return {
-    lastRunAt: saved?.lastRunAt ?? null,
-    lastRunError: saved?.lastRunError ?? null,
-    proposals: saved?.proposals ?? [],
-    actions: saved?.actions ?? [],
+    lastRunAt: head.lastRunAt ?? null,
+    lastRunError: head.lastRunError ?? null,
+    proposals: rows('proposals') as unknown as AgentProposal[],
+    actions: rows('actions') as unknown as AgentActionLog[],
   };
 }
 
-/** Sửa dữ liệu Agent trong 1 bước (đọc → sửa → ghi), tuần tự trong 1 tiến trình */
+/** Ghi lại toàn bộ danh sách (thứ tự = seq). Tối đa 2000 dòng mỗi loại nên ghi lại cả bảng vẫn nhanh. */
+function writeRuntime(shopId: string, rt: AgentRuntime) {
+  const db = getDb();
+  writeRow('agent_runtime', { lastRunAt: rt.lastRunAt ?? null, lastRunError: rt.lastRunError ?? null }, shopId);
+  db.prepare('DELETE FROM proposals WHERE shop_id = ?').run(shopId);
+  const insP = db.prepare('INSERT OR REPLACE INTO proposals (id, shop_id, status, created_at, data, seq) VALUES (?, ?, ?, ?, ?, ?)');
+  rt.proposals.forEach((p, i) => insP.run(p.id, shopId, p.status, p.createdAt, JSON.stringify(p), i));
+  db.prepare('DELETE FROM actions WHERE shop_id = ?').run(shopId);
+  const insA = db.prepare('INSERT OR REPLACE INTO actions (id, shop_id, status, executed_at, data, seq) VALUES (?, ?, ?, ?, ?, ?)');
+  rt.actions.forEach((a, i) => insA.run(a.id, shopId, a.status, a.executedAt, JSON.stringify(a), i));
+}
+
+export function getRuntime(): AgentRuntime {
+  return readRuntime(currentShopId());
+}
+
+/**
+ * Sửa dữ liệu Agent trong 1 bước (đọc → sửa → ghi) trong 1 transaction IMMEDIATE —
+ * nhiều tiến trình Passenger cũng không ghi đè lẫn nhau.
+ */
 export function updateRuntime(fn: (r: AgentRuntime) => AgentRuntime | void): AgentRuntime {
-  const current = getRuntime();
-  const next = fn(current) ?? current;
-  writeJson(RUNTIME_FILE, next);
-  return next;
+  const shopId = currentShopId();
+  const db = getDb();
+  return tx(db, () => {
+    const current = readRuntime(shopId);
+    const next = fn(current) ?? current;
+    writeRuntime(shopId, next);
+    return next;
+  });
 }
 
 export function getAgentState(): AgentState {

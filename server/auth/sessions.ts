@@ -99,3 +99,16 @@ export function sessionCookie(token: string): string {
 export function clearCookie(): string {
   return [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0', ...(config.cookieSecure ? ['Secure'] : [])].join('; ');
 }
+
+/* ───────── Shop đang mở trong phiên ───────── */
+
+export function sessionShopId(token: string | undefined): string | null {
+  if (!token) return null;
+  const r = getDb().prepare('SELECT shop_id FROM sessions WHERE token_hash = ?').get(sha(token)) as { shop_id: string | null } | undefined;
+  return r?.shop_id ?? null;
+}
+
+/** Đổi shop đang mở (nơi gọi đã kiểm tra quyền) */
+export function setSessionShop(token: string, shopId: string | null) {
+  getDb().prepare('UPDATE sessions SET shop_id = ? WHERE token_hash = ?').run(shopId, sha(token));
+}

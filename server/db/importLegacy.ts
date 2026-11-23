@@ -182,16 +182,16 @@ export function importLegacy(db: Db, now = new Date()): ImportResult {
         mainShop,
         JSON.stringify({ lastRunAt: runtime.lastRunAt ?? null, lastRunError: runtime.lastRunError ?? null }),
       );
-      const insP = db.prepare('INSERT OR REPLACE INTO proposals (id, shop_id, status, created_at, data) VALUES (?, ?, ?, ?, ?)');
+      const insP = db.prepare('INSERT OR REPLACE INTO proposals (id, shop_id, status, created_at, data, seq) VALUES (?, ?, ?, ?, ?, ?)');
       for (const p of arr<{ id: string; status: string; createdAt: string }>(runtime.proposals)) {
         if (!p?.id) continue;
-        insP.run(p.id, mainShop, p.status ?? 'pending', p.createdAt ?? iso, JSON.stringify(p));
+        insP.run(p.id, mainShop, p.status ?? 'pending', p.createdAt ?? iso, JSON.stringify(p), r.proposals);
         r.proposals++;
       }
-      const insA = db.prepare('INSERT OR REPLACE INTO actions (id, shop_id, status, executed_at, data) VALUES (?, ?, ?, ?, ?)');
+      const insA = db.prepare('INSERT OR REPLACE INTO actions (id, shop_id, status, executed_at, data, seq) VALUES (?, ?, ?, ?, ?, ?)');
       for (const a of arr<{ id: string; status: string; executedAt: string }>(runtime.actions)) {
         if (!a?.id) continue;
-        insA.run(a.id, mainShop, a.status ?? 'success', a.executedAt ?? iso, JSON.stringify(a));
+        insA.run(a.id, mainShop, a.status ?? 'success', a.executedAt ?? iso, JSON.stringify(a), r.actions);
         r.actions++;
       }
     }

@@ -6,13 +6,14 @@ import { startScheduler } from './agent/scheduler.js';
 import { adsRouter } from './routes/ads.js';
 import { agentRouter, settingsRouter } from './routes/agent.js';
 import { watchlistRouter } from './routes/watchlist.js';
+import { shopsRouter } from './routes/shops.js';
 import { authRouter } from './routes/auth.js';
 import { financeRouter } from './routes/finance.js';
 import { usersRouter } from './routes/users.js';
 import { sellerRouter } from './routes/seller.js';
 import { BILLING_WEBHOOK_PATH, billingRouter, billingWebhook } from './routes/billing.js';
 import { CALLBACK_PATH, tiktokCallback, tiktokRouter } from './routes/tiktok.js';
-import { requireAuth } from './auth/middleware.js';
+import { requireAuth, requireShop } from './auth/middleware.js';
 import { hasUsers } from './auth/users.js';
 import { bootDatabase } from './db/boot.js';
 
@@ -59,15 +60,17 @@ app.get(CALLBACK_PATH, tiktokCallback);
 app.post(BILLING_WEBHOOK_PATH, billingWebhook);
 // Mọi API còn lại: phải đăng nhập (quyền từng route đặt trong router)
 app.use('/api', requireAuth);
-app.use('/api/ads', adsRouter);
-app.use('/api/tiktok', tiktokRouter);
-app.use('/api/settings', settingsRouter);
-app.use('/api/agent', agentRouter);
+// Mục theo shop: requireShop gắn shop đang mở (thuộc tài khoản người dùng) → mọi dữ liệu bên dưới chỉ của shop đó
+app.use('/api/shops', shopsRouter);
+app.use('/api/ads', requireShop, adsRouter);
+app.use('/api/tiktok', requireShop, tiktokRouter);
+app.use('/api/settings', requireShop, settingsRouter);
+app.use('/api/agent', requireShop, agentRouter);
 app.use('/api/finance', financeRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seller', sellerRouter);
-app.use('/api/watchlist', watchlistRouter);
+app.use('/api/watchlist', requireShop, watchlistRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ code: 'NOT_FOUND', error: 'Không có API này' });
 });

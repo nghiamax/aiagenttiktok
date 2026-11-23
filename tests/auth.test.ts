@@ -126,10 +126,10 @@ describe('requireAuth / requirePermission', () => {
     expect(run(mw.requirePermission('execute'), owner).nexted).toBe(true);
   });
 
-  it('bảng quyền: chủ shop có mọi quyền, nhân viên chỉ xem', () => {
+  it('bảng quyền: Quản trị viên có mọi quyền, Người dùng (chủ tài khoản khách) toàn quyền shop của mình, nhân viên chỉ xem', () => {
     expect(ROLE_PERMISSIONS.owner).toEqual(['view', 'execute', 'configure', 'manage_users', 'finance']);
-    // Người dùng: thấy mọi mục như Nhân viên, không chạy thao tác / sửa thiết lập / quản lý tài khoản
-    expect(ROLE_PERMISSIONS.user).toEqual(['view', 'finance']);
+    // Người dùng = chủ tài khoản khách: chạy / cấu hình CHỈ trên shop của mình (requireShop), không quản lý tài khoản người khác
+    expect(ROLE_PERMISSIONS.user).toEqual(['view', 'execute', 'configure', 'finance']);
     expect(can('staff', 'view')).toBe(true);
     expect(can('staff', 'execute')).toBe(false);
     expect(can(null, 'view')).toBe(false);
@@ -181,6 +181,19 @@ describe('Mọi route đều có kiểm tra quyền', () => {
     for (const p of ['/proposals/:id/approve', '/actions/manual', '/actions/:id/undo']) {
       expect(routes.find((r) => r.path === p)?.perm).toBe('execute');
     }
+  });
+
+  it('mục theo shop đều đi qua requireShop; /api/shops có kiểm tra quyền ở mọi route', async () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'server', 'index.ts'), 'utf8');
+    for (const m of ['ads', 'tiktok', 'settings', 'agent', 'watchlist']) {
+      expect(src.includes(`app.use('/api/${m}', requireShop, `), m).toBe(true);
+    }
+    const { shopsRouter } = await import('../server/routes/shops');
+    const perms = (shopsRouter.stack as { route?: { stack: { handle: { permission?: string } }[] } }[])
+      .filter((l) => l.route)
+      .map((l) => l.route!.stack.map((x) => x.handle.permission).find(Boolean));
+    expect(perms.length).toBe(3);
+    expect(perms.every(Boolean)).toBe(true);
   });
 });
 

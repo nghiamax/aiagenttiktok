@@ -76,10 +76,10 @@ describe('Gói', () => {
     expect(quotaOf({ role: 'user' }, 0, now, 40)).toMatchObject({ profitUsed: 40, profitLimit: FREE_PROFIT_ORDERS, profitRemaining: 60 });
   });
 
-  it('Người dùng thấy mọi mục, không chạy thao tác / quản lý tài khoản', () => {
+  it('Người dùng (chủ tài khoản khách): dùng mọi mục trên shop của mình, không quản lý tài khoản', () => {
     expect(can('user', 'finance')).toBe(true);
     expect(can('user', 'view')).toBe(true);
-    expect(can('user', 'execute')).toBe(false);
+    expect(can('user', 'execute')).toBe(true);
     expect(can('user', 'manage_users')).toBe(false);
   });
 });

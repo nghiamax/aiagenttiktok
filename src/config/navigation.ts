@@ -1,4 +1,4 @@
-import { Bot, Eye, LayoutDashboard, Megaphone, ShoppingBag, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { BarChart3, Bot, Eye, LayoutDashboard, Megaphone, ShoppingBag, Users, Wallet, type LucideIcon } from 'lucide-react';
 
 export interface NavChild {
   label: string;
@@ -12,6 +12,8 @@ export interface NavChild {
 export const NAV_ANCHOR_EVENT = 'nav-anchor';
 /** Mốc ô Đang theo dõi (trang Tổng quan ADS) */
 export const WATCH_ANCHOR = 'theo-doi';
+/** Mốc card Danh sách GMV Max (trang Tổng quan ADS) */
+export const GMV_LIST_ANCHOR = 'ads-list';
 
 export interface NavItem {
   label: string;
@@ -34,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: 'Tổng quan', path: '/ads', icon: LayoutDashboard },
       { label: 'Care Ads 24/7', path: '/ads/agent', icon: Bot },
       { label: 'Theo dõi video', path: '/ads', icon: Eye, anchor: WATCH_ANCHOR },
+      { label: 'Phân tích GMV Max', path: '/ads', icon: BarChart3, anchor: GMV_LIST_ANCHOR },
     ],
   },
   { label: 'Đơn hàng', path: '/orders', icon: ShoppingBag },

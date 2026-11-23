@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { NAV_ANCHOR_EVENT, WATCH_ANCHOR } from '../../../config/navigation';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { WATCH_ANCHOR } from '../../../config/navigation';
+import { useNavAnchor } from '../../../lib/useNavAnchor';
 import { ChevronRight, Eye, Plus, X } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { formatDateTime, formatNumber, formatVnd } from '../../../lib/format';
@@ -74,30 +75,15 @@ export default function WatchCard() {
     return out;
   }, [state.actions]);
 
-  // Sidebar "Theo dõi video": mở ô + cuộn tới (đang ở trang → sự kiện; từ trang khác → #theo-doi trên URL, xoá sau khi cuộn)
-  const location = useLocation();
-  const navigate = useNavigate();
-  useEffect(() => {
-    const reveal = () => {
-      setOpen(true);
-      try {
-        localStorage.setItem(OPEN_KEY, '1');
-      } catch {
-        /* bỏ qua */
-      }
-      // Đợi ô mở ra rồi mới cuộn
-      setTimeout(() => document.getElementById(WATCH_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    };
-    if (location.hash === `#${WATCH_ANCHOR}`) {
-      reveal();
-      navigate({ pathname: location.pathname, search: location.search }, { replace: true });
+  // Sidebar "Theo dõi video": mở hẳn ô rồi cuộn tới
+  useNavAnchor(WATCH_ANCHOR, () => {
+    setOpen(true);
+    try {
+      localStorage.setItem(OPEN_KEY, '1');
+    } catch {
+      /* bỏ qua */
     }
-    const onAnchor = (e: Event) => {
-      if ((e as CustomEvent<string>).detail === WATCH_ANCHOR) reveal();
-    };
-    window.addEventListener(NAV_ANCHOR_EVENT, onAnchor);
-    return () => window.removeEventListener(NAV_ANCHOR_EVENT, onAnchor);
-  }, [location.hash, location.pathname, location.search, navigate]);
+  });
 
   const total = recent.length + watch.items.length;
 

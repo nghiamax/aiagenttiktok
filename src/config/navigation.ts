@@ -12,7 +12,7 @@ export interface NavChild {
 export const NAV_ANCHOR_EVENT = 'nav-anchor';
 /** Mốc ô Đang theo dõi (trang Tổng quan ADS) */
 export const WATCH_ANCHOR = 'theo-doi';
-/** Mốc card Danh sách GMV Max (trang Tổng quan ADS) */
+/** Mốc card Phân tích GMV Max (trang Tổng quan ADS) */
 export const GMV_LIST_ANCHOR = 'ads-list';
 
 export interface NavItem {

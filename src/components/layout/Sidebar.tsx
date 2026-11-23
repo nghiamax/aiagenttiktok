@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS } from '../../config/navigation';
+import { useScrollSpy } from '../../lib/useScrollSpy';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -16,6 +17,11 @@ export default function Sidebar({
   onCloseMobile,
 }: SidebarProps) {
   const location = useLocation();
+  // Mục con là mốc trong trang đang mở (Theo dõi video, Phân tích GMV Max) → sáng theo phần đang xem khi cuộn
+  const anchors = NAV_ITEMS.flatMap((i) => i.children ?? [])
+    .filter((c) => c.anchor && c.path === location.pathname)
+    .map((c) => c.anchor!);
+  const spy = useScrollSpy(anchors, anchors.length > 0);
   return (
     <>
       {/* Lớp phủ khi mở drawer trên mobile/tablet */}
@@ -101,7 +107,7 @@ export default function Sidebar({
                           }}
                           className={({ isActive }) =>
                             `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                              isActive && !c.anchor ? 'font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
+                              isActive && (c.anchor ? spy === c.anchor : !spy) ? 'font-semibold text-primary' : 'font-medium text-muted hover:bg-canvas hover:text-ink'
                             }`
                           }
                         >

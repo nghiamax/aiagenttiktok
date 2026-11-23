@@ -29,7 +29,7 @@ export default function GmvMaxListCard({ tab, onTabChange, filters, counts, chil
     <Card id={LIST_ANCHOR} className="scroll-mt-20">
       <div className="space-y-4 border-b border-line p-5">
         <div>
-          <h2 className="text-lg font-semibold">Danh sách GMV Max</h2>
+          <h2 className="text-lg font-semibold">Phân tích GMV Max</h2>
           <p className="text-sm text-muted">
             {formatNumber(counts.campaigns)} chiến dịch · {formatNumber(counts.products)} sản phẩm ·{' '}
             {formatNumber(counts.videos)} video

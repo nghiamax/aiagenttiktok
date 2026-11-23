@@ -52,14 +52,27 @@ describe('tự chọn tài khoản sau khi kết nối', () => {
     });
   });
 
-  it('nhiều tài khoản / shop → chưa chọn (chờ chủ shop chọn); tài khoản đang chọn vẫn còn quyền → giữ', async () => {
+  it('nhiều cặp có quyền độc quyền → chưa chọn (chờ chủ shop chọn); tài khoản đang chọn vẫn còn quyền → giữ', async () => {
     tt.advertisers.push({ advertiser_id: 'A2', advertiser_name: 'TK 2' });
-    tt.stores.A2 = [{ store_id: 'S2', store_name: 'Shop 2' }];
+    tt.stores.A2 = [{ store_id: 'S2', store_name: 'Shop 2', exclusive_authorized_advertiser_info: { advertiser_id: 'A2' } }];
     await withShop(makeShop('s1'), async () => {
       expect(await accounts.autoSelectAccount()).toBeNull();
       expect(link.getAccount()).toBeNull();
       link.setAccount({ advertiserId: 'A2', advertiserName: null, storeId: 'S2', storeName: null, currency: 'VND' });
       expect(await accounts.autoSelectAccount()).toMatchObject({ advertiserId: 'A2', storeId: 'S2', advertiserName: 'TK 2' });
+    });
+  });
+
+  it('nhiều cặp nhưng đúng 1 cặp có quyền GMV Max độc quyền → tự chọn cặp đó; 2 cặp độc quyền → chờ chọn', async () => {
+    // Cùng Business Center: shop S1 hiện dưới cả A1 và A2, nhưng chỉ cấp quyền độc quyền cho A1
+    tt.advertisers.push({ advertiser_id: 'A2', advertiser_name: 'TK 2' });
+    tt.stores.A2 = [{ store_id: 'S1', store_name: 'Shop 1', exclusive_authorized_advertiser_info: { advertiser_id: 'A1' } }];
+    await withShop(makeShop('s1'), async () => {
+      expect(await accounts.autoSelectAccount()).toMatchObject({ advertiserId: 'A1', storeId: 'S1' });
+    });
+    tt.stores.A2.push({ store_id: 'S2', store_name: 'Shop 2', exclusive_authorized_advertiser_info: { advertiser_id: 'A2' } });
+    await withShop(makeShop('s2'), async () => {
+      expect(await accounts.autoSelectAccount()).toBeNull();
     });
   });
 

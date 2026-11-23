@@ -12,6 +12,8 @@ export interface StoreOption {
   storeName: string | null;
   /** Shop đã cấp quyền GMV Max độc quyền cho đúng tài khoản này (cần để đổi ngân sách / ROI / sản phẩm) */
   exclusive: boolean;
+  /** Tài khoản quảng cáo đang giữ quyền GMV Max độc quyền của shop (null = chưa cấp cho ai) */
+  exclusiveAdvertiserId: string | null;
 }
 
 export interface AdvertiserOption {
@@ -52,6 +54,7 @@ export async function listAccounts(): Promise<AdvertiserOption[]> {
             storeId: String(x.store_id),
             storeName: x.store_name ?? null,
             exclusive: x.exclusive_authorized_advertiser_info?.advertiser_id === a.advertiserId,
+            exclusiveAdvertiserId: x.exclusive_authorized_advertiser_info?.advertiser_id ?? null,
           })),
       });
     } catch (e) {
@@ -70,7 +73,8 @@ const toAccount = (a: AdvertiserOption, s: StoreOption): TikTokAccount => ({
 });
 
 /**
- * Sau khi Kết nối: tài khoản đang chọn còn trong danh sách → giữ (cập nhật tên); chỉ có đúng 1 cặp (tài khoản, shop) → tự chọn;
+ * Sau khi Kết nối: tài khoản đang chọn còn trong danh sách → giữ (cập nhật tên); chỉ có đúng 1 cặp (tài khoản, shop)
+ * hoặc đúng 1 cặp có quyền GMV Max độc quyền → tự chọn;
  * còn lại → bỏ chọn để chủ shop chọn trên web. Trả tài khoản đang dùng (null = cần chọn).
  */
 export function pickAccount(options: AdvertiserOption[], current: TikTokAccount | null): TikTokAccount | null {
@@ -79,7 +83,10 @@ export function pickAccount(options: AdvertiserOption[], current: TikTokAccount 
     const same = pairs.find((p) => p.a.advertiserId === current.advertiserId && p.s.storeId === current.storeId);
     if (same) return toAccount(same.a, same.s);
   }
-  return pairs.length === 1 ? toAccount(pairs[0].a, pairs[0].s) : null;
+  if (pairs.length === 1) return toAccount(pairs[0].a, pairs[0].s);
+  // Mỗi shop chỉ cấp quyền GMV Max độc quyền cho 1 tài khoản → cặp có quyền đó là cặp đang chạy quảng cáo
+  const exclusive = pairs.filter((p) => p.s.exclusive);
+  return exclusive.length === 1 ? toAccount(exclusive[0].a, exclusive[0].s) : null;
 }
 
 /** Chạy sau khi lưu token mới: liệt kê + tự chọn. Lỗi đọc TikTok → giữ nguyên, web sẽ cho chọn lại. */

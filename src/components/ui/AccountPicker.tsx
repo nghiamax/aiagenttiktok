@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 
 /* Chọn tài khoản quảng cáo + shop TikTok cho shop đang mở (GET /api/tiktok/accounts → POST /api/tiktok/account) */
@@ -8,6 +8,7 @@ interface StoreOption {
   storeId: string;
   storeName: string | null;
   exclusive: boolean;
+  exclusiveAdvertiserId: string | null;
 }
 interface AdvertiserOption {
   advertiserId: string;
@@ -31,6 +32,7 @@ export default function AccountPicker({ current, onDone }: AccountPickerProps) {
   const [picked, setPicked] = useState<string | null>(current ? key(current.advertiserId, current.storeId) : null);
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [showOthers, setShowOthers] = useState(false);
 
   useEffect(() => {
     setList(null);
@@ -40,9 +42,28 @@ export default function AccountPicker({ current, onDone }: AccountPickerProps) {
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Không đọc được danh sách tài khoản'));
   }, [reloadKey]);
 
-  const withStores = list?.filter((a) => a.stores.length > 0) ?? [];
-  const without = list?.filter((a) => a.stores.length === 0) ?? [];
-  const changed = !!picked && picked !== (current ? key(current.advertiserId, current.storeId) : null);
+  // Mỗi shop chỉ cấp quyền GMV Max độc quyền cho 1 tài khoản → cặp có quyền đó là cặp đang chạy quảng cáo (Nên chọn)
+  const pairs = (list ?? []).flatMap((a) => a.stores.map((s) => ({ a, s, k: key(a.advertiserId, s.storeId) })));
+  const recommended = pairs.filter((p) => p.s.exclusive);
+  const others = pairs.filter((p) => !p.s.exclusive);
+  const nameOf = (advertiserId: string) => list?.find((a) => a.advertiserId === advertiserId)?.advertiserName ?? advertiserId;
+  const currentKey = current ? key(current.advertiserId, current.storeId) : null;
+  const othersOpen = showOthers || (!!currentKey && others.some((p) => p.k === currentKey)) || recommended.length === 0;
+
+  const row = (p: (typeof pairs)[number], note?: string) => (
+    <label key={p.k} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-canvas">
+      <input type="radio" name="tiktok-account" checked={picked === p.k} onChange={() => setPicked(p.k)} className="accent-primary" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">{p.s.storeName ?? p.s.storeId}</span>
+        <span className="block truncate text-xs text-muted">
+          Tài khoản {p.a.advertiserName ?? p.a.advertiserId} · ID shop {p.s.storeId}
+        </span>
+        {note && <span className="block text-xs text-amber-700">{note}</span>}
+      </span>
+      {p.k === currentKey && <CheckCircle2 className="size-4 shrink-0 text-accent-green" />}
+    </label>
+  );
+  const changed = !!picked && picked !== currentKey;
 
   async function save() {
     if (!picked) return;
@@ -78,43 +99,48 @@ export default function AccountPicker({ current, onDone }: AccountPickerProps) {
         </div>
       )}
 
-      {list && withStores.length === 0 && (
+      {list && pairs.length === 0 && (
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
           Không tài khoản quảng cáo nào có shop chạy GMV Max. Kiểm tra lại quyền đã cấp trên TikTok rồi Kết nối lại.
         </p>
       )}
 
-      {withStores.length > 0 && (
-        <ul className="max-h-[50vh] space-y-2 overflow-y-auto">
-          {withStores.map((a) => (
-            <li key={a.advertiserId} className="rounded-xl border border-line">
-              <p className="border-b border-line px-4 py-2 text-sm font-semibold">
-                {a.advertiserName ?? a.advertiserId}
-                <span className="ml-2 text-xs font-normal text-muted">ID {a.advertiserId}</span>
-              </p>
-              {a.stores.map((s) => {
-                const k = key(a.advertiserId, s.storeId);
-                return (
-                  <label key={k} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 transition hover:bg-canvas">
-                    <input type="radio" name="tiktok-account" checked={picked === k} onChange={() => setPicked(k)} className="accent-primary" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{s.storeName ?? s.storeId}</span>
-                      {!s.exclusive && <span className="block text-xs text-amber-700">Chưa cấp quyền GMV Max độc quyền — chỉ xem được số liệu</span>}
-                    </span>
-                    {current && k === key(current.advertiserId, current.storeId) && <CheckCircle2 className="size-4 shrink-0 text-accent-green" />}
-                  </label>
-                );
-              })}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="max-h-[55vh] space-y-3 overflow-y-auto">
+        {recommended.length > 0 && (
+          <section>
+            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">Nên chọn — shop đã cấp quyền GMV Max</p>
+            <div className="rounded-xl border border-line p-1">{recommended.map((p) => row(p))}</div>
+          </section>
+        )}
 
-      {without.length > 0 && (
-        <p className="text-xs text-muted">
-          {without.length} tài khoản không có shop GMV Max: {without.map((a) => a.advertiserName ?? a.advertiserId).join(', ')}
-        </p>
-      )}
+        {others.length > 0 && (
+          <section>
+            {recommended.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowOthers((v) => !v)}
+                aria-expanded={othersOpen}
+                className="flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted hover:text-ink"
+              >
+                <ChevronRight className={`size-3.5 transition-transform ${othersOpen ? 'rotate-90' : ''}`} />
+                Lựa chọn khác ({others.length})
+              </button>
+            )}
+            {othersOpen && (
+              <div className="rounded-xl border border-dashed border-line p-1">
+                {others.map((p) =>
+                  row(
+                    p,
+                    p.s.exclusiveAdvertiserId
+                      ? `Shop đang cấp quyền GMV Max cho tài khoản ${nameOf(p.s.exclusiveAdvertiserId)} — thường không có số liệu`
+                      : 'Shop chưa cấp quyền GMV Max cho tài khoản nào',
+                  ),
+                )}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
 
       {current && changed && (
         <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
@@ -123,7 +149,7 @@ export default function AccountPicker({ current, onDone }: AccountPickerProps) {
         </p>
       )}
 
-      {withStores.length > 0 && (
+      {pairs.length > 0 && (
         <div className="flex justify-end">
           <button
             type="button"

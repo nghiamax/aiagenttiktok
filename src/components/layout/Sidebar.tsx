@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { effectivePlan } from '../../../shared/plans';
 import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS } from '../../config/navigation';
 import { useScrollSpy } from '../../lib/useScrollSpy';
+import SidebarProfile from './SidebarProfile';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -130,8 +131,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
           </ul>
         </nav>
 
+        {/* Hồ sơ: dính đáy, luôn hiện (nav phía trên tự cuộn) */}
+        <SidebarProfile collapsed={collapsed} onNavigate={onCloseMobile} />
+
         {/* Thu gọn / mở rộng (chỉ desktop) */}
-        <div className="hidden border-t border-line p-3 lg:block">
+        <div className="hidden px-3 pb-3 lg:block">
           <button
             type="button"
             onClick={onToggleCollapse}

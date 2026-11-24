@@ -5,6 +5,8 @@ import { useAuth } from '../../auth/AuthProvider';
 import { api, ApiError } from '../../lib/api';
 import { useTikTok } from '../../tiktok/TikTokProvider';
 import TikTokPendingBox from '../ui/TikTokPendingBox';
+import AccountPicker from '../ui/AccountPicker';
+import { useShop } from '../../shop/ShopProvider';
 
 /** Kết nối TikTok: chỉ thông tin chính (trạng thái + tài khoản) + nút Kết nối / Kết nối lại */
 export default function TikTokConnectModal({ onClose }: { onClose: () => void }) {
@@ -14,6 +16,8 @@ export default function TikTokConnectModal({ onClose }: { onClose: () => void })
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const shop = useShop().current;
   const ok = !!status?.connected;
   const hasToken = !!status && status.state !== 'never';
 
@@ -63,16 +67,34 @@ export default function TikTokConnectModal({ onClose }: { onClose: () => void })
     );
   }
 
+  if (picking) {
+    return (
+      <Modal title="Chọn tài khoản quảng cáo" description={shop ? `Cho shop ${shop.name}` : undefined} onClose={() => setPicking(false)}>
+        <div className="p-5">
+          <AccountPicker current={status?.account ?? null} />
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal title="Kết nối TikTok" onClose={onClose}>
+    <Modal title="Kết nối TikTok" description={shop ? `Shop: ${shop.name}` : undefined} onClose={onClose}>
       <div className="space-y-4 p-5">
         {!status ? (
           <p className="text-sm text-muted">Chưa đọc được trạng thái kết nối.</p>
         ) : (
           <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate font-semibold">{status.state === 'never' ? 'TikTok for Business' : status.advertiser.name}</p>
-              <p className="text-sm text-muted">Tài khoản quảng cáo</p>
+              <p className="truncate font-semibold">
+                {status.state === 'never'
+                  ? 'TikTok for Business'
+                  : status.account
+                    ? (status.account.storeName ?? status.account.storeId)
+                    : 'Chưa chọn tài khoản quảng cáo'}
+              </p>
+              <p className="truncate text-sm text-muted">
+                {status.account ? `Tài khoản quảng cáo: ${status.account.advertiserName ?? status.account.advertiserId}` : 'Tài khoản quảng cáo'}
+              </p>
             </div>
             {ok ? (
               <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-accent-green">
@@ -96,6 +118,15 @@ export default function TikTokConnectModal({ onClose }: { onClose: () => void })
           <TikTokPendingBox />
         ) : canConnect ? (
           <div className="flex items-center justify-end gap-2">
+            {hasToken && ok && (
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="mr-auto rounded-xl border border-line px-4 py-2 text-sm font-medium text-ink transition hover:bg-canvas"
+              >
+                {status?.account ? 'Đổi tài khoản' : 'Chọn tài khoản'}
+              </button>
+            )}
             {hasToken && (
               <button
                 type="button"

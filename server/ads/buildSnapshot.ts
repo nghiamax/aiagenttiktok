@@ -1,5 +1,5 @@
 import type { AdsProduct, AdsSnapshot, AdsVideo, Campaign, PreviousSummary } from '../../shared/adsSnapshot.js';
-import { config } from '../config.js';
+import { requireAccount } from '../tiktok/link.js';
 import { callReadTool } from '../tiktok/mcpClient.js';
 import { getAuthors } from './authors.js';
 import { markCrossProduct } from '../../shared/videoStatus.js';
@@ -31,8 +31,8 @@ async function report(range: DateRange, params: Record<string, unknown>) {
   let total: Record<string, string> | undefined;
   for (let page = 1; page <= MAX_PAGES; page++) {
     const data = await callReadTool<ReportData>('gmv_max_report_get', {
-      advertiser_id: config.tiktok.advertiserId,
-      store_ids: [config.tiktok.storeId],
+      advertiser_id: requireAccount().advertiserId,
+      store_ids: [requireAccount().storeId],
       start_date: range.from,
       end_date: range.to,
       page,
@@ -94,6 +94,7 @@ async function fetchVideos(range: DateRange, campaignId: string, productId: stri
 
 /** Dựng snapshot số liệu GMV Max sản phẩm cho khoảng ngày (chỉ gọi tool đọc) */
 export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
+  const acct = requireAccount();
   const [{ rows: campaignRows, total }, previousSummary] = await Promise.all([
     fetchCampaigns(range),
     fetchPrevious(range).catch(() => null), // thiếu kỳ trước thì chỉ ẩn dòng so sánh
@@ -138,7 +139,7 @@ export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
     build: SNAPSHOT_BUILD,
     updatedAt: new Date().toISOString(),
     range: { from: range.from, to: range.to },
-    advertiser: { id: config.tiktok.advertiserId, name: config.tiktok.advertiserName, currency: config.tiktok.currency },
+    advertiser: { id: acct.advertiserId, name: acct.advertiserName ?? acct.storeName ?? acct.advertiserId, currency: acct.currency },
     summary: {
       totalCost,
       totalRevenue,

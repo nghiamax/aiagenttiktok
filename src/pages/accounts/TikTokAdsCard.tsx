@@ -39,7 +39,7 @@ export default function TikTokAdsCard() {
           <p className="text-sm text-muted">Dùng cho: ADS 24/7, AI Agent</p>
           {status && state !== 'never' && (
             <p className="mt-0.5 text-sm text-muted">
-              {status.advertiser.name}
+              {status.advertiser?.name ?? 'Chưa chọn tài khoản quảng cáo'}
               {status.connectedAt && ` · kết nối lúc ${timeVi(status.connectedAt)}`}
               {status.connectedBy && ` bởi ${status.connectedBy}`}
             </p>

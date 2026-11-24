@@ -97,14 +97,19 @@ describe('Tự chạy bị khoá (mọi việc cần Sếp duyệt)', () => {
     vi.stubEnv('DATA_DIR', dir);
     vi.resetModules();
     const store = await import('../server/store');
-    const base = store.getAgentConfig();
-    const saved = store.saveAgentConfig({
-      rules: [...base.rules.map((r) => ({ ...r, mode: 'auto' as const })), { ...base.rules[0], id: 'my-rule', custom: true, mode: 'auto' as const }],
+    const { withShop } = await import('../server/shopContext');
+    const { makeShop } = await import('./shopHelper');
+    const saved = withShop(makeShop(), () => {
+      const base = store.getAgentConfig();
+      return store.saveAgentConfig({
+        rules: [...base.rules.map((r) => ({ ...r, mode: 'auto' as const })), { ...base.rules[0], id: 'my-rule', custom: true, mode: 'auto' as const }],
+      });
     });
     expect(saved.rules.every((r) => r.mode !== 'auto')).toBe(true);
     expect(saved.rules.find((r) => r.id === 'my-rule')?.mode).toBe('approve');
-    // file ghi vào thư mục tạm, không đụng server-data thật
-    expect(fs.existsSync(path.join(dir, 'agent-config.json'))).toBe(true);
+    // database ghi vào thư mục tạm, không đụng server-data thật
+    expect(fs.existsSync(path.join(dir, 'app.db'))).toBe(true);
+    (await import('../server/db/index')).closeDb();
     vi.unstubAllEnvs();
   });
 });

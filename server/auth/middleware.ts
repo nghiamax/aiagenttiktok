@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { can, type ActorRef, type Permission, type PublicUser } from '../../shared/permissions.js';
-import { readCookie, resolveSession } from './sessions.js';
+import { readCookie, resolveSession, sessionShopId } from './sessions.js';
+import { withShop } from '../shopContext.js';
+import { userCanAccessShop } from '../shops.js';
 import { findUserById, publicUser } from './users.js';
 
 /* Kiểm tra đăng nhập + quyền — MỌI route cần quyền đi qua đây (1 chỗ duy nhất) */
@@ -8,6 +10,8 @@ import { findUserById, publicUser } from './users.js';
 declare module 'express-serve-static-core' {
   interface Request {
     user?: PublicUser;
+    /** Shop đang mở (đã kiểm tra quyền) — chỉ có sau requireShop */
+    shopId?: string;
   }
 }
 
@@ -29,6 +33,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
   req.user = publicUser(user);
   next();
+}
+
+/**
+ * Mục theo shop (ADS, Agent, theo dõi, kết nối TikTok): lấy shop đang mở trong phiên, kiểm tra shop thuộc tài khoản
+ * của người đang đăng nhập rồi chạy phần còn lại TRONG shop đó (currentShopId). Không tin shop do web gửi lên.
+ */
+export function requireShop(req: Request, res: Response, next: NextFunction) {
+  const shopId = sessionShopId(readCookie(req.get('cookie')));
+  if (!shopId || !req.user || !userCanAccessShop(req.user.id, shopId)) {
+    res.status(409).json({ code: 'SHOP_REQUIRED', error: 'Chưa có shop — tạo hoặc chọn shop để dùng mục này' });
+    return;
+  }
+  req.shopId = shopId;
+  withShop(shopId, () => next());
 }
 
 /** Route cần quyền `p` (đặt sau requireAuth). Gắn cờ để test kiểm tra mọi route ghi đều có quyền. */

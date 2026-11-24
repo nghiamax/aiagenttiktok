@@ -1,8 +1,8 @@
 import { Router, type Response } from 'express';
-import { config } from '../config.js';
 import { getSnapshot, todayVN } from '../ads/cache.js';
 import { expiresAt, readToken, TikTokLoginRequired } from '../tiktok/auth.js';
 import { TikTokApiError } from '../tiktok/mcpClient.js';
+import { getAccount, TikTokAccountRequired } from '../tiktok/link.js';
 import { requirePermission } from '../auth/middleware.js';
 
 export const adsRouter = Router();
@@ -40,7 +40,12 @@ adsRouter.get('/status', requirePermission('view'), (_req, res) => {
     refreshedAt: token?.savedAt ?? null,
     /** TikTok từ chối gia hạn → phải bấm Kết nối lại */
     refreshFailedAt: token?.refreshFailedAt ?? null,
-    advertiser: { id: config.tiktok.advertiserId, name: config.tiktok.advertiserName },
+    /** Tài khoản quảng cáo + shop TikTok shop này đang chạy; null = đã kết nối nhưng chưa chọn */
+    account: getAccount(),
+    advertiser: (() => {
+      const a = getAccount();
+      return a ? { id: a.advertiserId, name: a.storeName ?? a.advertiserName ?? a.advertiserId } : null;
+    })(),
   });
 });
 
@@ -56,11 +61,14 @@ adsRouter.get('/snapshot', requirePermission('view'), async (req, res) => {
   const days = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1;
   if (days > MAX_DAYS) return sendError(res, 400, 'RANGE_TOO_LONG', `Tối đa ${MAX_DAYS} ngày mỗi lần`);
 
+  // Shop chưa kết nối → báo kết nối trước (chưa nói tới chọn tài khoản)
+  if (!readToken()?.access_token) return sendError(res, 401, 'TIKTOK_LOGIN_REQUIRED', new TikTokLoginRequired().message);
   try {
     const { snapshot, cached } = await getSnapshot({ from, to }, req.query.refresh === '1');
     res.json({ snapshot, cached });
   } catch (e) {
     if (e instanceof TikTokLoginRequired) return sendError(res, 401, 'TIKTOK_LOGIN_REQUIRED', e.message);
+    if (e instanceof TikTokAccountRequired) return sendError(res, 409, 'TIKTOK_ACCOUNT_REQUIRED', e.message);
     if (e instanceof TikTokApiError) return sendError(res, 502, 'TIKTOK_ERROR', e.message);
     console.error('[ads/snapshot]', e);
     sendError(res, 500, 'SERVER_ERROR', 'Lỗi server khi lấy số liệu');

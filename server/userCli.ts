@@ -2,6 +2,7 @@ import readline from 'node:readline';
 import { isRole, ROLE_LABEL, ROLES } from '../shared/permissions.js';
 import { destroyUserSessions } from './auth/sessions.js';
 import { effectivePlan, isPlan, PLAN_LABEL } from '../shared/plans.js';
+import { bootDatabase } from './db/boot.js';
 import { createUser, findUser, listUsers, publicUser, setDisabled, setPassword, setPlan, UserError } from './auth/users.js';
 
 /**
@@ -57,6 +58,7 @@ function need(username: string | undefined) {
 }
 
 async function main() {
+  bootDatabase();
   const [cmd, username, ...rest] = process.argv.slice(2);
   switch (cmd) {
     case 'add': {

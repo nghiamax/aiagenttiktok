@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { getAccessToken, TikTokLoginRequired } from './auth.js';
+import { currentShopId } from '../shopContext.js';
 
 /**
  * Các tool ĐỌC được phép gọi. Thêm tool vào đây phải là tool đọc.
@@ -10,6 +11,8 @@ export const READ_TOOLS = [
   'gmv_max_campaign_get',
   'gmv_max_store_list_get',
   'campaign_gmv_max_info_get',
+  /** Danh sách tài khoản quảng cáo token được quyền (chọn tài khoản sau khi Kết nối TikTok) */
+  'auth_advertiser_get',
 ] as const;
 export type ReadTool = (typeof READ_TOOLS)[number];
 
@@ -132,7 +135,16 @@ class McpSession {
   }
 }
 
-const session = new McpSession();
+/** Mỗi shop 1 phiên MCP (phiên gắn với token của shop đó) */
+const sessions = new Map<string, McpSession>();
+function sessionOf(shopId: string): McpSession {
+  let s = sessions.get(shopId);
+  if (!s) {
+    s = new McpSession();
+    sessions.set(shopId, s);
+  }
+  return s;
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Mã TikTok cho giới hạn tần suất */
@@ -158,7 +170,7 @@ export function mcpCallArgs(tool: string, params: Record<string, unknown>, url?:
 
 async function callOnce<T>(tool: string, params: Record<string, unknown>): Promise<T> {
   const { name, args } = mcpCallArgs(tool, params);
-  const text = await withSlot(() => session.callTool(name, args));
+  const text = await withSlot(() => sessionOf(currentShopId()).callTool(name, args));
   let json: TikTokResponse<T>;
   try {
     json = JSON.parse(text) as TikTokResponse<T>;

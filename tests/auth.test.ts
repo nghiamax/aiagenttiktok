@@ -24,6 +24,7 @@ vi.mock('../server/config', async () => {
   };
 });
 
+const db = await import('../server/db/index');
 const users = await import('../server/auth/users');
 const sessions = await import('../server/auth/sessions');
 const mw = await import('../server/auth/middleware');
@@ -44,14 +45,14 @@ function run(handler: (req: Request, res: Response, next: NextFunction) => void,
 }
 
 beforeEach(() => {
-  for (const f of ['users.json', 'sessions.json']) fs.rmSync(path.join(dir.path, f), { force: true });
+  db.clearAllForTests();
   mw.resetLoginLimits();
 });
 
 describe('Tài khoản + mật khẩu', () => {
   it('băm scrypt, không lưu mật khẩu rõ; đúng / sai mật khẩu; tên không phân biệt hoa thường', () => {
     const u = users.createUser({ username: 'Sep', password: 'matkhau123' });
-    const raw = fs.readFileSync(path.join(dir.path, 'users.json'), 'utf8');
+    const raw = JSON.stringify(db.getDb().prepare('SELECT * FROM users').all());
     expect(raw).not.toContain('matkhau123');
     expect(u.passwordHash.startsWith('scrypt$')).toBe(true);
     expect(users.verifyLogin('sep', 'matkhau123')?.id).toBe(u.id);
@@ -74,7 +75,7 @@ describe('Phiên đăng nhập', () => {
     const u = users.createUser({ username: 'sep', password: 'matkhau123' });
     const now = Date.parse('2026-11-21T00:00:00Z');
     const token = sessions.createSession(u.id, 'test', now);
-    expect(fs.readFileSync(path.join(dir.path, 'sessions.json'), 'utf8')).not.toContain(token);
+    expect(JSON.stringify(db.getDb().prepare('SELECT * FROM sessions').all())).not.toContain(token);
     expect(sessions.resolveSession(token, now + 1000)).toBe(u.id);
     expect(sessions.resolveSession(token, now + sessions.SESSION_TTL_MS + 1)).toBeNull();
     const t2 = sessions.createSession(u.id);
@@ -125,10 +126,10 @@ describe('requireAuth / requirePermission', () => {
     expect(run(mw.requirePermission('execute'), owner).nexted).toBe(true);
   });
 
-  it('bảng quyền: chủ shop có mọi quyền, nhân viên chỉ xem', () => {
+  it('bảng quyền: Quản trị viên có mọi quyền, Người dùng (chủ tài khoản khách) toàn quyền shop của mình, nhân viên chỉ xem', () => {
     expect(ROLE_PERMISSIONS.owner).toEqual(['view', 'execute', 'configure', 'manage_users', 'finance']);
-    // Người dùng: thấy mọi mục như Nhân viên, không chạy thao tác / sửa thiết lập / quản lý tài khoản
-    expect(ROLE_PERMISSIONS.user).toEqual(['view', 'finance']);
+    // Người dùng = chủ tài khoản khách: chạy / cấu hình CHỈ trên shop của mình (requireShop), không quản lý tài khoản người khác
+    expect(ROLE_PERMISSIONS.user).toEqual(['view', 'execute', 'configure', 'finance']);
     expect(can('staff', 'view')).toBe(true);
     expect(can('staff', 'execute')).toBe(false);
     expect(can(null, 'view')).toBe(false);
@@ -181,7 +182,21 @@ describe('Mọi route đều có kiểm tra quyền', () => {
       expect(routes.find((r) => r.path === p)?.perm).toBe('execute');
     }
   });
+
+  it('mục theo shop đều đi qua requireShop; /api/shops có kiểm tra quyền ở mọi route', async () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'server', 'index.ts'), 'utf8');
+    for (const m of ['ads', 'tiktok', 'settings', 'agent', 'watchlist']) {
+      expect(src.includes(`app.use('/api/${m}', requireShop, `), m).toBe(true);
+    }
+    const { shopsRouter } = await import('../server/routes/shops');
+    const perms = (shopsRouter.stack as { route?: { stack: { handle: { permission?: string } }[] } }[])
+      .filter((l) => l.route)
+      .map((l) => l.route!.stack.map((x) => x.handle.permission).find(Boolean));
+    expect(perms.length).toBe(3);
+    expect(perms.every(Boolean)).toBe(true);
+  });
 });
 
 // Thư mục tạm dọn sau khi chạy
+process.on('exit', () => db.closeDb());
 process.on('exit', () => fs.rmSync(dir.path || path.join(os.tmpdir(), 'none'), { recursive: true, force: true }));

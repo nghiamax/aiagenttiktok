@@ -53,17 +53,6 @@ export const APP_TAGLINE = 'Vận hành TikTok Shop';
 /** Nguồn duy nhất cho danh sách tab trên sidebar. Thêm tab mới tại đây. */
 export const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Quản lý tài khoản',
-    path: '/accounts',
-    icon: KeyRound,
-    permission: 'finance',
-    notHome: true,
-    children: [
-      { label: 'TikTok', path: '/accounts/tiktok', icon: Music2 },
-      { label: 'Shopee', path: '/accounts/shopee', icon: ShoppingBag },
-    ],
-  },
-  {
     label: 'Quản lí chiến dịch',
     path: '/ads',
     icon: Megaphone,
@@ -94,6 +83,17 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Tính giá bán', path: '/finance/pricing', icon: Calculator },
       { label: 'Tính lợi nhuận', path: '/finance/profit', icon: TrendingUp },
+    ],
+  },
+  {
+    label: 'Quản lý shop',
+    path: '/accounts',
+    icon: KeyRound,
+    permission: 'finance',
+    notHome: true,
+    children: [
+      { label: 'TikTok', path: '/accounts/tiktok', icon: Music2 },
+      { label: 'Shopee', path: '/accounts/shopee', icon: ShoppingBag },
     ],
   },
   { label: 'Tài khoản', path: '/admin/users', icon: UserCog, permission: 'manage_users' },

@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import SellerCard from './SellerCard';
 import TikTokAdsCard from './TikTokAdsCard';
 
-/** Khung Quản lý tài khoản: TikTok | Shopee (chọn ở sidebar) */
+/** Khung Quản lý shop: TikTok | Shopee (chọn ở sidebar) */
 export default function AccountsLayout() {
   const shopee = useLocation().pathname.includes('/accounts/shopee');
   return (

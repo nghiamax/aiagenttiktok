@@ -267,7 +267,7 @@ async function exportAds(page: Page, userId: string, from: string, to: string) {
 
 class LoginExpired extends Error {
   constructor() {
-    super('Phiên đăng nhập TikTok Seller đã hết hạn — vào Quản lý tài khoản → TikTok để đăng nhập lại');
+    super('Phiên đăng nhập TikTok Seller đã hết hạn — vào Quản lý shop → TikTok để đăng nhập lại');
   }
 }
 

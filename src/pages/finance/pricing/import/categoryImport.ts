@@ -8,10 +8,11 @@ export const PATH_SEP = ' › ';
 /** Đọc CSV: tự nhận dấu phân cách , ; hoặc tab, hỗ trợ ô có ngoặc kép */
 export function parseCsv(text: string): string[][] {
   const src = text.replace(/^﻿/, '');
-  const firstLine = src.split(/\r?\n/, 1)[0] ?? '';
-  const delim = ['\t', ';', ','].reduce((best, d) =>
-    firstLine.split(d).length > firstLine.split(best).length ? d : best,
-  );
+  // Đoán dấu phân cách theo dòng nhiều cột nhất trong 20 dòng đầu — file báo cáo của sàn (vd Shopee) có vài dòng
+  // tiêu đề / thông tin shop ở đầu không có dấu phân cách
+  const head = src.split(/\r?\n/, 20);
+  const widest = (d: string) => Math.max(0, ...head.map((l) => l.split(d).length));
+  const delim = ['\t', ';', ','].reduce((best, d) => (widest(d) > widest(best) ? d : best));
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';

@@ -3,9 +3,10 @@ import { CheckCircle2, ChevronRight, FileSpreadsheet, Loader2, Trash2, Upload, X
 import Card from '../../../components/ui/Card';
 import { formatNumber } from '../../../lib/format';
 import { fileKindLabel, PROFIT_ACCEPT, readProfitFile } from './profitFiles';
-import type { ProfitFile } from './useProfitStore';
+import type { ProfitFile, ProfitPlatform } from './useProfitStore';
 
 interface ProfitUploadProps {
+  platform: ProfitPlatform;
   files: ProfitFile[];
   onAdd: (files: ProfitFile[]) => void;
   onRemove: (id: string) => void;
@@ -14,21 +15,26 @@ interface ProfitUploadProps {
 
 const dateVi = (iso: string) => iso.split('-').reverse().join('/');
 
-/** 4 loại file của 1 kỳ: lấy ở đâu (đường bấm trên Seller Center) + 1 mẹo ngắn */
-const SLOTS: {
+type Slot = {
   id: string;
   title: string;
   required: boolean;
   path: string[];
   tip: string;
+  /** Dùng để tính khoản nào (hiện rõ trên ô) */
+  uses: string;
   match: (f: ProfitFile) => boolean;
-}[] = [
+};
+
+/** TikTok — 4 loại file của 1 kỳ: lấy ở đâu (đường bấm trên Seller Center) + 1 mẹo ngắn */
+const TIKTOK_SLOTS: Slot[] = [
   {
     id: 'orders',
     title: 'Đơn hàng',
     required: true,
     path: ['Đơn hàng', 'Quản lý đơn hàng', 'Xuất'],
     tip: 'Lọc theo ngày đặt của kỳ cần tính',
+    uses: 'Kỳ tính, SKU bán ra → giá vốn',
     match: (f) => f.kind === 'orders',
   },
   {
@@ -37,6 +43,7 @@ const SLOTS: {
     required: true,
     path: ['Tài chính', 'Giao dịch', 'Đã quyết toán', 'Xuất'],
     tip: 'Chọn tới ~ngày 20 tháng sau cho đủ đơn cuối kỳ',
+    uses: 'Doanh thu, phí sàn, tiền về thật',
     match: (f) => f.kind === 'income' && f.settled,
   },
   {
@@ -45,6 +52,7 @@ const SLOTS: {
     required: false,
     path: ['Tài chính', 'Giao dịch', 'Sẽ quyết toán', 'Xuất'],
     tip: 'Đơn đã giao nhưng TikTok chưa trả tiền',
+    uses: 'Tiền sắp về (ước tính)',
     match: (f) => f.kind === 'income' && !f.settled,
   },
   {
@@ -53,12 +61,74 @@ const SLOTS: {
     required: false,
     path: ['Quảng cáo', 'GMV Max', 'Xuất báo cáo'],
     tip: 'Cùng kỳ với file đơn hàng',
+    uses: 'Chi phí quảng cáo',
     match: (f) => f.kind === 'ads',
   },
 ];
 
+/** Shopee — 4 file, mỗi file lo 1 phần chi phí (không file nào thừa) */
+const SHOPEE_SLOTS: Slot[] = [
+  {
+    id: 'paid',
+    title: 'Đã thanh toán',
+    required: true,
+    path: ['Tài chính', 'Doanh thu', 'Đã thanh toán', 'Xuất'],
+    tip: 'Chọn tháng cần tính · có file shopee_xi_… thì tải cả 2',
+    uses: 'Doanh thu, tiền về, phí sàn, thuế, hoa hồng liên kết, PiShip, điều chỉnh',
+    match: (f) => f.kind === 'income',
+  },
+  {
+    id: 'orders',
+    title: 'Đơn hàng',
+    required: true,
+    path: ['Đơn hàng', 'Tất cả', 'Xuất'],
+    tip: 'Ngày đặt từ đầu tháng trước tới hết tháng cần tính (đơn tháng trước có thể được trả tháng này) · file .zip chọn nguyên file',
+    uses: 'SKU + số lượng → giá vốn, trạng thái đơn',
+    match: (f) => f.kind === 'orders',
+  },
+  {
+    id: 'adsGroup',
+    title: 'QC — Chiến dịch nhóm',
+    required: true,
+    path: ['Dịch vụ Hiển thị Shopee', 'Tải dữ liệu', 'Tất cả dữ liệu chiến dịch nhóm'],
+    tip: 'Cùng tháng với file Đã thanh toán',
+    uses: 'Chi phí quảng cáo chiến dịch nhóm',
+    match: (f) => f.kind === 'ads' && shopeeAdsType(f) === 'group',
+  },
+  {
+    id: 'adsAuto',
+    title: 'QC — Chiến dịch tự động',
+    required: true,
+    path: ['Dịch vụ Hiển thị Shopee', 'Tải dữ liệu', 'Dữ liệu Chiến dịch Tự Động Chọn Sản phẩm (cấp độ Shop)'],
+    tip: 'Cùng tháng · không tải "Số liệu thống kê chung" (trùng số)',
+    uses: 'Chi phí quảng cáo chiến dịch tự động (cấp Shop)',
+    match: (f) => f.kind === 'ads' && shopeeAdsType(f) === 'auto',
+  },
+];
+
+/** Loại báo cáo quảng cáo Shopee (file tải trước khi có phân loại → đoán theo tên file) */
+function shopeeAdsType(f: ProfitFile): 'group' | 'auto' {
+  if (f.adsType) return f.adsType;
+  return /tu\W*dong|tự\W*động/i.test(f.name) ? 'auto' : 'group';
+}
+
+const PLATFORM_TEXT: Record<ProfitPlatform, { title: string; sub: string; other: string }> = {
+  tiktok: {
+    title: 'Tải file từ Seller Center',
+    sub: 'Xuất 4 file theo đường bấm bên dưới rồi chọn tất cả 1 lần — trang tự nhận từng loại.',
+    other: 'Shopee',
+  },
+  shopee: {
+    title: 'Tải file từ Shopee Kênh Người Bán',
+    sub: 'Làm trên máy tính (banhang.shopee.vn) — xuất các file theo đường bấm bên dưới rồi chọn tất cả 1 lần.',
+    other: 'TikTok',
+  },
+};
+
 /** Tải các file xuất từ TikTok Shop Seller Center (tự nhận loại file) */
-export default function ProfitUpload({ files, onAdd, onRemove, onClear }: ProfitUploadProps) {
+export default function ProfitUpload({ platform, files, onAdd, onRemove, onClear }: ProfitUploadProps) {
+  const SLOTS = platform === 'shopee' ? SHOPEE_SLOTS : TIKTOK_SLOTS;
+  const text = PLATFORM_TEXT[platform];
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -72,7 +142,12 @@ export default function ProfitUpload({ files, onAdd, onRemove, onClear }: Profit
     const errs: string[] = [];
     for (const f of picked) {
       try {
-        ok.push(await readProfitFile(f));
+        const pf = await readProfitFile(f);
+        if ((pf.platform ?? 'tiktok') !== platform) {
+          errs.push(`${f.name}: đây là file của ${text.other} — chuyển sang tab ${text.other} rồi tải lại.`);
+          continue;
+        }
+        ok.push(pf);
       } catch (e) {
         errs.push(e instanceof Error ? e.message : `${f.name}: không đọc được file`);
       }
@@ -86,13 +161,13 @@ export default function ProfitUpload({ files, onAdd, onRemove, onClear }: Profit
   return (
     <Card className="p-5">
       <div className="mb-3">
-        <h3 className="font-semibold">Tải file từ Seller Center</h3>
-        <p className="mt-0.5 text-sm text-muted">
-          Xuất 4 file theo đường bấm bên dưới rồi chọn tất cả 1 lần — trang tự nhận từng loại.
-        </p>
+        <h3 className="font-semibold">{text.title}</h3>
+        <p className="mt-0.5 text-sm text-muted">{text.sub}</p>
       </div>
 
-      <ol className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <ol
+        className={`mb-4 grid gap-2 sm:grid-cols-2 ${SLOTS.length > 3 ? 'xl:grid-cols-4' : SLOTS.length === 3 ? 'lg:grid-cols-3' : ''}`}
+      >
         {SLOTS.map((s, i) => {
           const got = files.filter(s.match);
           const done = got.length > 0;
@@ -126,6 +201,9 @@ export default function ProfitUpload({ files, onAdd, onRemove, onClear }: Profit
                   </span>
                 ))}
               </p>
+              <p className="mt-1 text-ink/80">
+                <span className="text-muted">Tính:</span> {s.uses}
+              </p>
               <p className={`mt-0.5 ${done ? 'font-medium text-accent-green' : 'text-muted'}`}>
                 {done ? `Đã có ${got.length} file · ${formatNumber(got.reduce((n, f) => n + f.rows, 0))} dòng` : s.tip}
               </p>
@@ -153,8 +231,8 @@ export default function ProfitUpload({ files, onAdd, onRemove, onClear }: Profit
           {reading ? <Loader2 className="size-5 animate-spin" /> : <FileSpreadsheet className="size-5" />}
         </span>
         <p className="min-w-0 flex-1 text-sm text-muted">
-          Kéo thả file vào đây hoặc bấm <b className="text-ink">Chọn file</b> (.xlsx, .csv). Tải lại file mới hơn thì số
-          mới đè số cũ.
+          Kéo thả file vào đây hoặc bấm <b className="text-ink">Chọn file</b> (.xlsx, .csv, .zip). Tải lại file mới hơn
+          thì số mới đè số cũ.
         </p>
         <input
           ref={inputRef}

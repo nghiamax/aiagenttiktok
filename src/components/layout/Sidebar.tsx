@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { effectivePlan } from '../../../shared/plans';
 import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS, type NavItem } from '../../config/navigation';
@@ -12,18 +11,6 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
-}
-
-/** Mục cha người dùng tự mở thêm (ngoài mục đang dùng) — nhớ trên trình duyệt */
-const OPEN_KEY = 'sidebar-open-groups';
-
-function readOpen(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]');
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
 }
 
 const inSection = (item: NavItem, pathname: string) =>
@@ -41,19 +28,6 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const { can, user } = useAuth();
   const isPro = !!user && effectivePlan(user) === 'pro';
   const items = NAV_ITEMS.filter((n) => can(n.permission));
-
-  // Mục con chỉ mở ở mục đang dùng (+ mục người dùng tự mở) → danh sách gọn, không phải cuộn
-  const [manual, setManual] = useState<string[]>(readOpen);
-  const toggle = (path: string) =>
-    setManual((cur) => {
-      const next = cur.includes(path) ? cur.filter((p) => p !== path) : [...cur, path];
-      try {
-        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
-      } catch {
-        /* bỏ qua */
-      }
-      return next;
-    });
 
   return (
     <>
@@ -128,10 +102,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
             {items.map((item) => {
               const { label, path, icon: Icon, children } = item;
               const active = inSection(item, location.pathname);
-              const open = !!children && (active || manual.includes(path));
               return (
                 <li key={path}>
-                  <div className="group relative flex items-center">
+                  <div className="flex items-center">
                     <NavLink
                       to={path}
                       onClick={onCloseMobile}
@@ -149,21 +122,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                       <Icon className="size-5 shrink-0" strokeWidth={1.9} />
                       <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{label}</span>
                     </NavLink>
-                    {children && !active && (
-                      <button
-                        type="button"
-                        onClick={() => toggle(path)}
-                        aria-label={open ? `Đóng mục con ${label}` : `Mở mục con ${label}`}
-                        aria-expanded={open}
-                        className={`absolute right-1.5 flex size-7 items-center justify-center rounded-lg text-muted opacity-60 transition hover:bg-white hover:text-ink hover:opacity-100 group-hover:opacity-100 ${
-                          collapsed ? 'lg:hidden' : ''
-                        }`}
-                      >
-                        <ChevronDown className={`size-4 transition-transform ${open ? '' : '-rotate-90'}`} />
-                      </button>
-                    )}
                   </div>
-                  {open && (
+                  {/* Mục con luôn mở (Sếp chốt 23/11) — dạng nhánh cây gọn */}
+                  {children && (
                     <ul
                       className={`mb-1 ml-[22px] mt-0.5 space-y-0.5 border-l border-line pl-2.5 ${collapsed ? 'lg:hidden' : ''}`}
                     >

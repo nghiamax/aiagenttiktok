@@ -1,8 +1,9 @@
 import { readTableFile } from '../pricing/import/readFile';
 import { parseProfitRows, type ProfitFileKind } from './profitImport';
+import { parseShopeeServiceFees, splitServiceFees } from './shopeeImport';
 import type { ProfitFile } from './useProfitStore';
 
-export const PROFIT_ACCEPT = '.xlsx,.csv,.tsv,.txt';
+export const PROFIT_ACCEPT = '.xlsx,.csv,.tsv,.txt,.zip';
 
 export const KIND_LABEL: Record<ProfitFileKind, string> = {
   orders: 'Đơn hàng',
@@ -10,8 +11,13 @@ export const KIND_LABEL: Record<ProfitFileKind, string> = {
   ads: 'Quảng cáo',
 };
 
-export const fileKindLabel = (f: Pick<ProfitFile, 'kind' | 'settled'>) =>
-  f.kind === 'income' ? (f.settled ? 'Đã quyết toán' : 'Chờ quyết toán') : KIND_LABEL[f.kind];
+export const fileKindLabel = (f: Pick<ProfitFile, 'kind' | 'settled' | 'platform' | 'adsType'>) => {
+  if (f.platform === 'shopee') {
+    if (f.kind === 'income') return 'Đã thanh toán';
+    if (f.kind === 'ads') return f.adsType === 'auto' ? 'QC tự động' : 'QC nhóm';
+  }
+  return f.kind === 'income' ? (f.settled ? 'Đã quyết toán' : 'Chờ quyết toán') : KIND_LABEL[f.kind];
+};
 
 // Sheet có dữ liệu nằm trước: đơn hàng / quyết toán ưu tiên hơn bảng chỉ có cột "Chi phí"
 const PRIORITY: Record<ProfitFileKind, number> = { orders: 0, income: 1, ads: 2 };
@@ -33,24 +39,45 @@ export async function readProfitFile(file: File): Promise<ProfitFile> {
   const p = parsed.find((x) => (x.orders ?? x.income ?? x.ads ?? []).length > 0) ?? parsed[0];
   if (!p) {
     throw new Error(
-      `${file.name}: không nhận ra loại file. Cần file "Tất cả đơn hàng", file quyết toán (income / onhold) hoặc báo cáo quảng cáo có cột "Chi phí".`,
+      `${file.name}: không nhận ra loại file. TikTok: file "Tất cả đơn hàng", quyết toán (income / onhold), báo cáo quảng cáo. Shopee: file đơn hàng (Order.all…) hoặc báo cáo Quảng cáo Shopee.`,
     );
   }
-  const data = { orders: p.orders ?? [], income: p.income ?? [], ads: p.ads ?? [] };
-  const rows = data.orders.length + data.income.length + data.ads.length;
+  // File .zip (Shopee: nhiều file đơn hàng) → gộp mọi file cùng loại bên trong; file thường lấy 1 trang tính
+  // Shopee "Đã thanh toán": trang Doanh thu + trang Adjustment cùng là quyết toán → gộp
+  const same =
+    lower.endsWith('.zip') || (p.platform === 'shopee' && p.kind === 'income')
+      ? parsed.filter((x) => x.kind === p.kind && (x.platform ?? 'tiktok') === (p.platform ?? 'tiktok'))
+      : [p];
+  const data = {
+    orders: same.flatMap((x) => x.orders ?? []),
+    income: same.flatMap((x) => x.income ?? []),
+    ads: same.flatMap((x) => x.ads ?? []),
+  };
+  // Shopee "Đã thanh toán": trang Service Fee Details → tách Phí dịch vụ = Phí hạ tầng + Voucher Xtra
+  if (p.platform === 'shopee' && p.kind === 'income')
+    for (const s of sheets) {
+      const svc = parseShopeeServiceFees(s.rows);
+      if (svc) splitServiceFees(data.income, svc);
+    }
+  // File đơn hàng Shopee có cả dòng tiền về ước tính (tự tính) → chỉ đếm dòng đơn hàng
+  const rows = p.kind === 'orders' ? data.orders.length : data.orders.length + data.income.length + data.ads.length;
   if (rows === 0) throw new Error(`${file.name}: file ${KIND_LABEL[p.kind].toLowerCase()} chưa có dòng dữ liệu nào.`);
   return {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: file.name,
     kind: p.kind,
+    platform: p.platform ?? 'tiktok',
+    ...(p.adsType ? { adsType: p.adsType } : {}),
     settled: p.kind !== 'income' || data.income.every((r) => r.settled),
     importedAt: new Date().toISOString(),
     rows,
-    range: rangeOf([
-      ...data.orders.map((o) => o.createdAt),
-      ...data.income.map((r) => r.createdAt),
-      ...data.ads.map((a) => a.date),
-    ]),
+    range:
+      p.range ??
+      rangeOf([
+        ...data.orders.map((o) => o.createdAt),
+        ...data.income.map((r) => r.createdAt),
+        ...data.ads.map((a) => a.date),
+      ]),
     data,
   };
 }

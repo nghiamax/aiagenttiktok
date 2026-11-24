@@ -135,6 +135,9 @@ async function launch(userId: string, p: SellerPlatform): Promise<BrowserContext
         acceptDownloads: true,
         viewport: null,
         args: ['--start-maximized'],
+        // Cho cài tiện ích (Sếp yêu cầu 23/11) — chỉ cửa sổ đăng nhập; lấy file chạy ẩn (tiktokFetch.ts) vẫn tắt tiện ích.
+        // Lưu ý: tiện ích cài ở đây đọc được trang Seller Center + cookie của phiên này.
+        ignoreDefaultArgs: ['--disable-extensions', '--disable-component-extensions-with-background-pages'],
       });
     } catch (e) {
       lastErr = e;

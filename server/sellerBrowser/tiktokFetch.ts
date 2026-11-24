@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { BrowserContext, Download, Page } from 'playwright-core';
 import { closeSeller, downloadDir, isLoggedInUrl, markLoggedOut, profilePath } from './session.js';
+import { useNormalUserAgent } from './userAgent.js';
 
 /**
  * Lấy file TikTok Seller Center TỰ ĐỘNG, chạy ẨN (không mở cửa sổ) bằng phiên đã đăng nhập:
@@ -266,7 +267,7 @@ async function exportAds(page: Page, userId: string, from: string, to: string) {
 
 class LoginExpired extends Error {
   constructor() {
-    super('Phiên đăng nhập TikTok Seller đã hết hạn — vào Quản lý tài khoản → TikTok để đăng nhập lại');
+    super('Phiên đăng nhập TikTok Seller đã hết hạn — vào Quản lý shop → TikTok để đăng nhập lại');
   }
 }
 
@@ -322,6 +323,8 @@ async function runJob(userId: string, job: FetchJob) {
     if (!ctx) throw new Error(`Không mở được Chrome / Edge (${String((lastErr as Error)?.message).split('\n')[0]})`);
     const page = ctx.pages()[0] ?? (await ctx.newPage());
     page.setDefaultTimeout(15_000); // thao tác kẹt (giao diện đổi) → báo lỗi bước đó sau 15 giây, không treo
+    // Xưng như Chrome thường (không phải HeadlessChrome) — ít bị bắt xác minh hơn
+    await useNormalUserAgent(ctx, page).catch(() => undefined);
     for (const step of job.steps) {
       step.status = 'running';
       try {

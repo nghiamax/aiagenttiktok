@@ -1,6 +1,5 @@
 import { Bell, Menu, Settings } from 'lucide-react';
 import ShopMenu from './ShopMenu';
-import UserMenu from './UserMenu';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -29,7 +28,6 @@ export default function Header({ onOpenMobileMenu, onOpenTikTok }: HeaderProps) 
           <Bell className="size-5" />
           <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-danger ring-2 ring-white" />
         </button>
-        <UserMenu />
       </div>
     </header>
   );

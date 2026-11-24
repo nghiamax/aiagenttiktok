@@ -13,7 +13,7 @@ const DESCRIPTION: Record<string, string> = {
   pricing:
     'Tính giá bán có lãi: nhập giá vốn, phí sàn và chi phí quảng cáo, công cụ trừ lần lượt từng khoản và cho ra lãi trên mỗi sản phẩm.',
   profit:
-    'Tính lợi nhuận thật của shop: tải file đơn hàng, quyết toán và quảng cáo từ TikTok Shop, trang tự đối chiếu và trừ giá vốn.',
+    'Tính lợi nhuận thật của shop TikTok Shop / Shopee: tải file đơn hàng, quyết toán và quảng cáo, trang tự đối chiếu và trừ giá vốn.',
 };
 
 /** Khung Tài chính: tiêu đề + nội dung mục con (chọn Tính giá bán / Tính lợi nhuận ở sidebar) */

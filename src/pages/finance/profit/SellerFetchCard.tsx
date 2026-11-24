@@ -138,7 +138,7 @@ export default function SellerFetchCard({ onAdd }: { onAdd: (files: ProfitFile[]
           <p className="mt-0.5 text-sm text-muted">
             {loggedIn
               ? 'Chọn kỳ (ngày đặt đơn) → hệ thống tự vào Seller Center bằng phiên đã đăng nhập (chạy ẩn, không mở cửa sổ), xuất đủ 4 file (Đã quyết toán, Chờ quyết toán, Đơn hàng, Quảng cáo) rồi đưa vào trang tính.'
-              : 'Đăng nhập TikTok Seller Center 1 lần ở Quản lý tài khoản → TikTok, sau đó lấy file tự động tại đây.'}
+              : 'Đăng nhập TikTok Seller Center 1 lần ở Quản lý shop → TikTok, sau đó lấy file tự động tại đây.'}
           </p>
         </div>
         {!loggedIn && (

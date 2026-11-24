@@ -1,12 +1,19 @@
 import Card from '../../../components/ui/Card';
 import { formatNumber } from '../../../lib/format';
 import type { ProfitResult } from './profitCalc';
+import ShopeeIncomeCard from './ShopeeIncomeCard';
 
 const vnd = (n: number) => `${n < 0 ? '−' : ''}${formatNumber(Math.abs(Math.round(n)))}đ`;
 const pct = (part: number, whole: number) => (whole > 0 ? `${formatNumber((Math.abs(part) / whole) * 100, 1)}%` : '--');
 
 /** Chi tiết phí sàn theo nhóm + tình trạng đơn / quyết toán */
-export default function ProfitDetails({ result: r }: { result: ProfitResult }) {
+export default function ProfitDetails({
+  result: r,
+  platform,
+}: {
+  result: ProfitResult;
+  platform?: 'tiktok' | 'shopee';
+}) {
   const fees = [...r.feeLines].sort((a, b) => a.amount - b.amount);
   const maxFee = Math.max(1, ...fees.map((f) => Math.abs(f.amount)));
 
@@ -19,37 +26,41 @@ export default function ProfitDetails({ result: r }: { result: ProfitResult }) {
 
   return (
     <div className="space-y-6">
-      <Card className="p-5">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h3 className="font-semibold">Phí sàn & khấu trừ</h3>
-          <span className="text-sm text-muted">
-            {vnd(r.fees)} · {pct(r.fees, r.revenue)} doanh thu
-          </span>
-        </div>
-        {fees.length === 0 ? (
-          <p className="text-sm text-muted">Chưa có số phí — cần file quyết toán.</p>
-        ) : (
-          <ul className="space-y-2.5">
-            {fees.map((f) => (
-              <li key={f.key} className="text-sm">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-ink">{f.label}</span>
-                  <span className="shrink-0 tabular-nums">
-                    <b className={f.amount > 0 ? 'text-accent-green' : 'text-ink'}>{vnd(f.amount)}</b>
-                    <span className="ml-2 text-muted">{pct(f.amount, r.revenue)}</span>
-                  </span>
-                </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-canvas">
-                  <div
-                    className={`h-full rounded-full ${f.amount > 0 ? 'bg-accent-green/60' : 'bg-primary/70'}`}
-                    style={{ width: `${(Math.abs(f.amount) / maxFee) * 100}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {platform === 'shopee' && r.feeLines.length > 0 ? (
+        <ShopeeIncomeCard result={r} />
+      ) : (
+        <Card className="p-5">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3 className="font-semibold">Phí sàn & khấu trừ</h3>
+            <span className="text-sm text-muted">
+              {vnd(r.fees)} · {pct(r.fees, r.revenue)} doanh thu
+            </span>
+          </div>
+          {fees.length === 0 ? (
+            <p className="text-sm text-muted">Chưa có số phí — cần file quyết toán.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {fees.map((f) => (
+                <li key={f.key} className="text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink">{f.label}</span>
+                    <span className="shrink-0 tabular-nums">
+                      <b className={f.amount > 0 ? 'text-accent-green' : 'text-ink'}>{vnd(f.amount)}</b>
+                      <span className="ml-2 text-muted">{pct(f.amount, r.revenue)}</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-canvas">
+                    <div
+                      className={`h-full rounded-full ${f.amount > 0 ? 'bg-accent-green/60' : 'bg-primary/70'}`}
+                      style={{ width: `${(Math.abs(f.amount) / maxFee) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       {r.hasOrders && (
         <Card className="p-5">

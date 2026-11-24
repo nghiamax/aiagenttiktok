@@ -52,6 +52,33 @@ async function readEntry(buf: Uint8Array, entry: ZipEntry): Promise<string> {
   return new Response(stream).text();
 }
 
+async function readEntryBytes(buf: Uint8Array, entry: ZipEntry): Promise<Uint8Array> {
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const o = entry.localOffset;
+  const start = o + 30 + view.getUint16(o + 26, true) + view.getUint16(o + 28, true);
+  const data = buf.slice(start, start + entry.compSize);
+  if (entry.method === 0) return data;
+  if (entry.method !== 8) throw new Error('File nén dùng kiểu nén không hỗ trợ');
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/** Giải nén file .zip (vd Shopee gửi nhiều file Excel trong 1 zip) → các file bên trong (bỏ thư mục / file ẩn) */
+export async function readZip(data: ArrayBuffer): Promise<{ name: string; data: ArrayBuffer }[]> {
+  const buf = new Uint8Array(data);
+  const out: { name: string; data: ArrayBuffer }[] = [];
+  for (const [name, entry] of readZipEntries(buf)) {
+    const base = name.split('/').pop() ?? '';
+    if (!base || name.endsWith('/') || base.startsWith('.') || name.startsWith('__MACOSX')) continue;
+    const bytes = await readEntryBytes(buf, entry);
+    out.push({
+      name: base,
+      data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    });
+  }
+  return out;
+}
+
 function decodeXml(s: string): string {
   return s
     .replace(/&lt;/g, '<')

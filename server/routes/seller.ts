@@ -102,7 +102,7 @@ sellerRouter.post('/tiktok/fetch', requirePermission('finance'), (req, res) => {
   if (sellerState(req.user!.id, 'tiktok').status !== 'logged_in') {
     return res
       .status(409)
-      .json({ code: 'NOT_LOGGED_IN', error: 'Chưa đăng nhập TikTok Seller — vào Quản lý tài khoản → TikTok' });
+      .json({ code: 'NOT_LOGGED_IN', error: 'Chưa đăng nhập TikTok Seller — vào Quản lý shop → TikTok' });
   }
   res.json({ job: startTikTokFetch(req.user!.id, from, to) });
 });

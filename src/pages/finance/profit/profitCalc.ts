@@ -13,11 +13,43 @@ import { fold } from '../pricing/import/categoryImport';
 export type OrderState = 'completed' | 'returned' | 'cancelled' | 'in_progress';
 export type MoneySource = 'settled' | 'unsettled' | 'none';
 
+export type OtherCostKind = 'perOrder' | 'perReturn' | 'perCancel' | 'perUnit' | 'pctRevenue' | 'fixed';
+
+/** Cơ sở để tính chi phí khác (số đơn, số sản phẩm, doanh thu của kỳ) */
+export interface OtherCostBases {
+  orders: number;
+  returned: number;
+  cancelled: number;
+  units: number;
+  revenue: number;
+}
+
+/** Số tiền 1 khoản chi phí khác theo cơ sở của kỳ */
+export function otherCostAmount(c: Pick<OtherCost, 'kind' | 'value'>, b: OtherCostBases): number {
+  switch (c.kind) {
+    case 'perOrder':
+      return c.value * b.orders;
+    case 'perReturn':
+      return c.value * b.returned;
+    case 'perCancel':
+      return c.value * b.cancelled;
+    case 'perUnit':
+      return c.value * b.units;
+    case 'pctRevenue':
+      return (b.revenue * c.value) / 100;
+    default:
+      return c.value;
+  }
+}
+
 export interface OtherCost {
   id: string;
   label: string;
-  /** perOrder: đ / đơn (đơn không huỷ) · pctRevenue: % doanh thu · fixed: số tiền cả kỳ */
-  kind: 'perOrder' | 'pctRevenue' | 'fixed';
+  /**
+   * perOrder: đ / đơn bán (đơn không huỷ) · perReturn: đ / đơn hoàn (trả hàng) · perCancel: đ / đơn huỷ ·
+   * perUnit: đ / sản phẩm bán ra (đã trừ trả hàng) · pctRevenue: % doanh thu · fixed: số tiền cả kỳ
+   */
+  kind: OtherCostKind;
   value: number;
 }
 
@@ -26,7 +58,15 @@ export interface ProfitOptions {
   includeUnsettled: boolean;
   /** Phí GMV Max đã trừ trong quyết toán → bớt khỏi chi phí file quảng cáo để không tính 2 lần */
   dedupeGmvMax: boolean;
+  /**
+   * Kỳ tính: `order` = đơn đặt trong kỳ của file đơn hàng (mặc định) · `payment` = mọi đơn / khoản sàn ĐÃ TRẢ
+   * trong file quyết toán (khớp báo cáo thu nhập tháng của Shopee); không dùng số ước tính
+   */
+  basis?: ProfitBasis;
 }
+
+export type ProfitBasis = 'order' | 'payment';
+const ORDER_ROW = /(^|\s)(don hang|order)$/;
 
 export interface ProfitData {
   orders: OrderLine[];
@@ -63,6 +103,8 @@ export interface SkuResult {
   cogs: number;
   /** Lãi trước quảng cáo = tiền về − giá vốn */
   profit: number;
+  /** Quảng cáo chia cho SKU (chỉ khi file quảng cáo có chi tiết theo sản phẩm, vd Shopee) */
+  ads: number;
 }
 
 export interface FeeLineResult {
@@ -74,6 +116,18 @@ export interface FeeLineResult {
 export interface ProfitResult {
   hasOrders: boolean;
   hasIncome: boolean;
+  /** Có dòng tiền đã quyết toán / đã thanh toán thật (Shopee: file "Đã thanh toán") */
+  hasSettled: boolean;
+  /** Khoản điều chỉnh đã tính (không phải dòng đơn hàng) theo loại, vd "Trả hàng/ Hoàn tiền", "Chương trình Marketing" */
+  adjustmentLines: { label: string; count: number; amount: number }[];
+  /** Dòng đơn đã tính theo file nguồn (Shopee: Shop / Shopee Xử Lý) → đối chiếu từng báo cáo */
+  incomeBySource: SourceTotals[];
+  /** Kỳ tính thực tế (payment chỉ khi có dòng đã quyết toán) */
+  basis: ProfitBasis;
+  /** Theo ngày thanh toán: khoảng ngày sàn trả tiền */
+  paidPeriod: { from: string; to: string } | null;
+  /** Theo ngày thanh toán: đơn đã trả không có trong file đơn hàng → không có giá vốn */
+  paidNoOrder: { count: number; settlement: number };
   hasAds: boolean;
   period: { from: string; to: string } | null;
   counts: Record<OrderState, number> & { total: number; settled: number; unsettled: number; none: number };
@@ -91,7 +145,9 @@ export interface ProfitResult {
   gmvInSettlement: number;
   ads: number;
   other: number;
-  otherLines: { id: string; label: string; amount: number }[];
+  otherLines: { id: string; label: string; kind: OtherCostKind; value: number; amount: number }[];
+  /** Cơ sở tính chi phí khác (để hiện phép tính trên giao diện) */
+  otherBases: OtherCostBases;
   profit: number;
   /** Lợi nhuận / doanh thu (%) */
   marginPct: number | null;
@@ -104,6 +160,10 @@ export interface ProfitResult {
   outOfPeriod: { count: number; settlement: number };
   /** SKU đã bán nhưng chưa có giá vốn */
   missingCost: { skus: number; qty: number };
+  /** File quảng cáo có chi tiết theo sản phẩm → bảng SKU có cột quảng cáo */
+  adsBySku: boolean;
+  /** Quảng cáo của sản phẩm không có trong file đơn hàng (không chia được) */
+  adsUnmatched: number;
 }
 
 const has = (s: string, re: RegExp) => re.test(fold(s));
@@ -118,7 +178,7 @@ export function orderState(lines: OrderLine[]): OrderState {
   // Đơn huỷ: TikTok vẫn ghi "số lượng trả" = số lượng → xét huỷ trước số lượng trả
   if (has(text, /(da huy|huy don|cancel)/) || has(l.cancelType, /(cancel|huy)/)) return 'cancelled';
   if (ret > 0) return 'returned';
-  if (has(text, /(hoan tat|completed|da giao|delivered)/)) return 'completed';
+  if (has(text, /(hoan tat|hoan thanh|completed|da giao|giao thanh cong|delivered)/)) return 'completed';
   return qty > 0 ? 'in_progress' : 'cancelled';
 }
 
@@ -142,6 +202,61 @@ export function mergeData(parts: ProfitData[]): ProfitData {
   return { orders: [...orders.values()], income: [...income.values()], ads: [...ads.values()] };
 }
 
+function rangeOf(dates: (string | null)[]): { from: string; to: string } | null {
+  const d = dates.filter((x): x is string => !!x).sort();
+  return d.length ? { from: d[0], to: d[d.length - 1] } : null;
+}
+
+function adjustmentLinesOf(rows: IncomeRow[]) {
+  const m = new Map<string, { label: string; count: number; amount: number }>();
+  for (const r of rows) {
+    if (has(r.type, ORDER_ROW)) continue;
+    const label = r.type.trim() || 'Điều chỉnh';
+    const cur = m.get(label) ?? { label, count: 0, amount: 0 };
+    cur.count++;
+    cur.amount += r.settlement;
+    m.set(label, cur);
+  }
+  return [...m.values()].filter((x) => Math.abs(x.amount) >= 1).sort((a, b) => a.amount - b.amount);
+}
+
+/** Số của riêng 1 file quyết toán (Shopee: "Shop" / "Shopee Xử Lý") — để đối chiếu đúng từng báo cáo của sàn */
+export interface SourceTotals {
+  label: string;
+  /** Số đơn */
+  count: number;
+  revenue: number;
+  fees: number;
+  /** Tổng tiền các đơn (chưa gồm điều chỉnh) */
+  settlement: number;
+  feeParts: Record<string, number>;
+  adjustmentLines: { label: string; count: number; amount: number }[];
+}
+
+function incomeBySourceOf(rows: IncomeRow[]): SourceTotals[] {
+  const m = new Map<string, { t: SourceTotals; adj: IncomeRow[] }>();
+  for (const r of rows) {
+    const label = r.source ?? '';
+    const cur = m.get(label) ?? {
+      t: { label, count: 0, revenue: 0, fees: 0, settlement: 0, feeParts: {}, adjustmentLines: [] },
+      adj: [],
+    };
+    m.set(label, cur);
+    if (!has(r.type, ORDER_ROW)) {
+      cur.adj.push(r);
+      continue;
+    }
+    cur.t.count++;
+    cur.t.revenue += r.revenue;
+    cur.t.fees += r.fees;
+    cur.t.settlement += r.settlement;
+    for (const [k, v] of Object.entries(r.feeParts)) cur.t.feeParts[k] = (cur.t.feeParts[k] ?? 0) + v;
+  }
+  return [...m.values()]
+    .map(({ t, adj }) => ({ ...t, adjustmentLines: adjustmentLinesOf(adj) }))
+    .sort((a, b) => b.settlement - a.settlement);
+}
+
 const sumBy = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0);
 
 export function computeProfit(
@@ -152,6 +267,14 @@ export function computeProfit(
 ): ProfitResult {
   const hasOrders = data.orders.length > 0;
   const hasIncome = data.income.length > 0;
+  const hasSettled = data.income.some((r) => r.settled);
+  // Theo ngày thanh toán: chỉ dòng đã trả; chỉ đơn đã trả mới lấy dòng đơn hàng (để có giá vốn)
+  const payment = options.basis === 'payment' && hasSettled;
+  if (payment) {
+    const income = data.income.filter((r) => r.settled);
+    const paidIds = new Set(income.filter((r) => has(r.type, ORDER_ROW)).map((r) => r.orderId ?? r.id));
+    data = { ...data, income, orders: data.orders.filter((l) => paidIds.has(l.orderId)) };
+  }
   const hasAds = data.ads.length > 0;
 
   // Quyết toán theo đơn
@@ -177,12 +300,14 @@ export function computeProfit(
     const unsettledRows = rows.filter((r) => !r.settled);
     let source: MoneySource = 'none';
     let picked: IncomeRow[] = [];
-    if (settledRows.length) {
+    const settledOrderRows = settledRows.filter((r) => has(r.type, /(^|\s)(don hang|order)$/));
+    if (settledRows.length && (settledOrderRows.length || !unsettledRows.length)) {
       source = 'settled';
       picked = settledRows;
     } else if (unsettledRows.length) {
+      // Chỉ có khoản điều chỉnh đã trả (chưa có dòng đơn đã quyết toán) → ước tính + điều chỉnh
       source = 'unsettled';
-      picked = options.includeUnsettled ? unsettledRows : [];
+      picked = [...settledRows, ...(options.includeUnsettled ? unsettledRows : [])];
     }
     for (const r of rows) usedIncome.add(r);
     const revenue = sumBy(picked, (r) => r.revenue);
@@ -221,11 +346,14 @@ export function computeProfit(
   let outCount = 0;
   let outSettlement = 0;
   const adjustmentRows: IncomeRow[] = [];
+  // Theo ngày thanh toán: đơn đã trả nhưng không có trong file đơn hàng (đặt trước kỳ) → tính tiền, thiếu giá vốn
+  const paidNoOrder: IncomeRow[] = [];
   for (const r of data.income) {
     if (usedIncome.has(r)) continue;
     if (!r.settled && !options.includeUnsettled) continue;
-    const isOrderRow = has(r.type, /(^|\s)(don hang|order)$/);
-    if (hasOrders && isOrderRow) {
+    const isOrderRow = has(r.type, ORDER_ROW);
+    if (payment && isOrderRow) paidNoOrder.push(r);
+    else if (hasOrders && isOrderRow) {
       outCount++;
       outSettlement += r.settlement;
     } else adjustmentRows.push(r);
@@ -236,10 +364,11 @@ export function computeProfit(
   const moneyRows = [
     ...orderResults.flatMap((o) =>
       (incomeByOrder.get(o.orderId) ?? []).filter((r) =>
-        o.source === 'settled' ? r.settled : o.source === 'unsettled' && options.includeUnsettled,
+        o.source === 'settled' ? r.settled : o.source === 'unsettled' && (r.settled || options.includeUnsettled),
       ),
     ),
     ...adjustmentRows,
+    ...paidNoOrder,
   ];
   const revenue = sumBy(moneyRows, (r) => r.revenue);
   const fees = sumBy(moneyRows, (r) => r.fees);
@@ -264,21 +393,29 @@ export function computeProfit(
   if (Math.abs(rest) >= 1) feeLines.push({ key: 'other', label: 'Phí khác', amount: rest });
 
   // Quảng cáo
-  const adsFile = sumBy(data.ads, (a) => a.cost);
+  const adsFile = sumBy(
+    data.ads.filter((a) => !a.detail),
+    (a) => a.cost,
+  );
   const gmvInSettlement = -(feeLines.find((f) => f.key === 'gmvMax')?.amount ?? 0);
   const ads = options.dedupeGmvMax ? Math.max(0, adsFile - Math.max(0, gmvInSettlement)) : adsFile;
 
   // Chi phí khác
   const countedOrders =
     orderResults.filter((o) => o.state !== 'cancelled').length || (hasOrders ? 0 : moneyRows.length);
+  const otherBases: OtherCostBases = {
+    orders: countedOrders,
+    returned: orderResults.filter((o) => o.state === 'returned').length,
+    cancelled: orderResults.filter((o) => o.state === 'cancelled').length,
+    units: sumBy(
+      orderResults.filter((o) => o.state !== 'cancelled'),
+      (o) => sumBy(o.lines, (l) => Math.max(0, l.qty - l.returnQty)),
+    ),
+    revenue,
+  };
   const otherLines = otherCosts
     .filter((c) => c.value > 0)
-    .map((c) => ({
-      id: c.id,
-      label: c.label,
-      amount:
-        c.kind === 'perOrder' ? c.value * countedOrders : c.kind === 'pctRevenue' ? (revenue * c.value) / 100 : c.value,
-    }));
+    .map((c) => ({ id: c.id, label: c.label, kind: c.kind, value: c.value, amount: otherCostAmount(c, otherBases) }));
   const other = sumBy(otherLines, (l) => l.amount);
 
   const profit = settled + unsettled - cogs - ads - other;
@@ -306,6 +443,7 @@ export function computeProfit(
           cost: costs[k] ?? null,
           cogs: 0,
           profit: 0,
+          ads: 0,
           orderSet: new Set<string>(),
         } as SkuResult & { orderSet: Set<string> });
       s.orderSet.add(o.orderId);
@@ -322,6 +460,27 @@ export function computeProfit(
   const skus = [...skuMap.values()]
     .map(({ orderSet, ...s }) => ({ ...s, orders: orderSet.size, profit: s.settlement - s.cogs }))
     .sort((a, b) => b.revenue - a.revenue || b.qty - a.qty);
+
+  // Quảng cáo theo sản phẩm (file có dòng chi tiết): chia chi phí của sản phẩm cho các SKU theo doanh thu
+  const detailAds = data.ads.filter((a) => a.detail && a.product && a.cost > 0);
+  let adsUnmatched = 0;
+  if (detailAds.length) {
+    const byProduct = new Map<string, SkuResult[]>();
+    for (const s of skus) byProduct.set(fold(s.productName), [...(byProduct.get(fold(s.productName)) ?? []), s]);
+    for (const a of detailAds) {
+      const group = byProduct.get(fold(a.product!));
+      if (!group) {
+        adsUnmatched += a.cost;
+        continue;
+      }
+      const base = sumBy(group, (s) => Math.max(0, s.revenue));
+      const qtyBase = sumBy(group, (s) => s.qty);
+      for (const s of group) {
+        const share = base > 0 ? Math.max(0, s.revenue) / base : qtyBase > 0 ? s.qty / qtyBase : 1 / group.length;
+        s.ads += a.cost * share;
+      }
+    }
+  }
 
   const dates = [
     ...orderResults.map((o) => o.createdAt),
@@ -346,6 +505,12 @@ export function computeProfit(
   return {
     hasOrders,
     hasIncome,
+    hasSettled,
+    adjustmentLines: adjustmentLinesOf(moneyRows),
+    incomeBySource: incomeBySourceOf(moneyRows),
+    basis: payment ? 'payment' : 'order',
+    paidPeriod: payment ? rangeOf(data.income.map((r) => r.settledAt)) : null,
+    paidNoOrder: { count: paidNoOrder.length, settlement: sumBy(paidNoOrder, (r) => r.settlement) },
     hasAds,
     period: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null,
     counts,
@@ -360,6 +525,7 @@ export function computeProfit(
     ads,
     other,
     otherLines,
+    otherBases,
     profit,
     marginPct: revenue > 0 ? (profit / revenue) * 100 : null,
     feeLines: feeLines.filter((f) => Math.abs(f.amount) >= 1),
@@ -368,6 +534,8 @@ export function computeProfit(
     noMoney: { count: noMoneyOrders.length, goodsValue: sumBy(noMoneyOrders, (o) => o.goodsValue) },
     outOfPeriod: { count: outCount, settlement: outSettlement },
     missingCost: { skus: missingCostSkus.size, qty: missingCostQty },
+    adsBySku: detailAds.length > 0,
+    adsUnmatched,
   };
 }
 

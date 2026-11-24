@@ -7,6 +7,7 @@ interface ProfitStatementProps {
   options: ProfitOptions;
   hasUnsettledFile: boolean;
   onOptions: (o: ProfitOptions) => void;
+  platform?: 'tiktok' | 'shopee';
 }
 
 const vnd = (n: number) => `${n < 0 ? '−' : ''}${formatNumber(Math.abs(Math.round(n)))}đ`;
@@ -74,7 +75,13 @@ function Toggle({
 }
 
 /** Bảng lãi lỗ: doanh thu → phí sàn → tiền về → giá vốn → quảng cáo → chi phí khác → lợi nhuận */
-export default function ProfitStatement({ result: r, options, hasUnsettledFile, onOptions }: ProfitStatementProps) {
+export default function ProfitStatement({
+  result: r,
+  options,
+  hasUnsettledFile,
+  onOptions,
+  platform = 'tiktok',
+}: ProfitStatementProps) {
   const payout = r.settled + r.unsettled;
   const diff = payout - r.revenue - r.fees;
   const profitTone = r.profit < 0 ? 'text-danger' : 'text-accent-green';
@@ -83,13 +90,32 @@ export default function ProfitStatement({ result: r, options, hasUnsettledFile, 
     <Card className="overflow-hidden">
       <div className="px-5 pb-2 pt-5">
         <h3 className="font-semibold">Lãi lỗ thực tế</h3>
-        <p className="mt-0.5 text-sm text-muted">Số theo file quyết toán của TikTok, không ước lượng phí.</p>
+        <p className="mt-0.5 text-sm text-muted">
+          {platform === 'shopee'
+            ? r.basis === 'payment'
+              ? 'Theo file "Đã thanh toán": tổng số tiền của file Income + file Shopee Xử Lý − điều chỉnh (trang Adjustment) = tiền thực về tài khoản.'
+              : r.hasSettled
+                ? 'Đơn đặt trong kỳ: số Shopee thực trả; đơn chưa thanh toán dùng số ước tính từ file đơn hàng.'
+                : 'Ước tính từ file đơn hàng Shopee: tiền hàng − mã giảm giá của shop − các khoản phí ghi trong file.'
+            : 'Số theo file quyết toán của TikTok, không ước lượng phí.'}
+        </p>
       </div>
       <div className="divide-y divide-line">
         <Line sign="" label="Doanh thu hàng hoá" sub="Sau giảm giá của shop, đã trừ hoàn tiền" amount={r.revenue} />
         <Line sign="−" label="Phí sàn & khấu trừ" sub="Chi tiết ở khung bên cạnh" amount={r.fees} />
         {Math.abs(diff) >= 1 && (
-          <Line sign="+" label="Điều chỉnh khác" sub="Bồi hoàn, điều chỉnh của TikTok" amount={diff} />
+          <Line
+            sign="+"
+            label="Điều chỉnh khác"
+            sub={
+              platform === 'shopee' && r.adjustmentLines.length
+                ? r.adjustmentLines.map((a) => `${a.label} (${formatNumber(a.count)}): ${vnd(a.amount)}`).join(' · ')
+                : platform === 'shopee'
+                  ? 'Bồi hoàn, điều chỉnh'
+                  : 'Bồi hoàn, điều chỉnh của TikTok'
+            }
+            amount={diff}
+          />
         )}
         <Line
           sign="="
@@ -129,7 +155,7 @@ export default function ProfitStatement({ result: r, options, hasUnsettledFile, 
           <Line
             sign="−"
             label="Chi phí khác"
-            sub={r.otherLines.map((l) => `${l.label} ${vnd(l.amount)}`).join(' · ')}
+            sub={r.otherLines.map((l) => `${l.label || 'Khác'} ${vnd(l.amount)}`).join(' · ')}
             amount={-r.other}
           />
         )}
@@ -145,13 +171,44 @@ export default function ProfitStatement({ result: r, options, hasUnsettledFile, 
         </div>
       </div>
 
+      {platform === 'shopee' && r.hasSettled && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3 text-sm">
+          <span className="text-muted">Kỳ tính:</span>
+          <div className="inline-flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Kỳ tính">
+            {(
+              [
+                ['payment', 'Theo ngày Shopee trả tiền', 'Khớp báo cáo thu nhập tháng của Shopee'],
+                ['order', 'Theo ngày đặt đơn', 'Đơn đặt trong kỳ của file đơn hàng (đơn chưa trả dùng số ước tính)'],
+              ] as const
+            ).map(([v, label, hint]) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={r.basis === v}
+                title={hint}
+                onClick={() => onOptions({ ...options, basis: v })}
+                className={`rounded-md px-2.5 py-1 font-medium transition ${
+                  r.basis === v ? 'bg-primary-soft text-primary' : 'text-muted hover:bg-canvas hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {(hasUnsettledFile || (r.hasAds && r.gmvInSettlement > 0)) && (
         <div className="space-y-1 border-t border-line p-2">
           {hasUnsettledFile && (
             <Toggle
               on={options.includeUnsettled}
-              label="Tính cả đơn chờ quyết toán"
-              hint="Dùng số ước tính trong file chờ quyết toán cho đơn TikTok chưa trả tiền."
+              label={platform === 'shopee' ? 'Tính cả đơn chưa thanh toán (ước tính)' : 'Tính cả đơn chờ quyết toán'}
+              hint={
+                platform === 'shopee'
+                  ? 'Đơn chưa có trong file "Đã thanh toán" → dùng số ước tính từ file đơn hàng.'
+                  : 'Dùng số ước tính trong file chờ quyết toán cho đơn TikTok chưa trả tiền.'
+              }
               onChange={(v) => onOptions({ ...options, includeUnsettled: v })}
             />
           )}

@@ -6,6 +6,7 @@
 
 import { fold } from '../pricing/import/categoryImport';
 import { parseAmount } from '../pricing/bulk/bulkImport';
+import { parseShopeeRows } from './shopeeImport';
 
 export type ProfitFileKind = 'orders' | 'income' | 'ads';
 
@@ -50,6 +51,8 @@ export interface IncomeRow {
   feeParts: Record<string, number>;
   /** false = file chờ quyết toán (số ước tính) */
   settled: boolean;
+  /** Shopee: dòng thuộc file nào ("Shop" / "Shopee Xử Lý") — gắn lúc tính, không lưu */
+  source?: string;
 }
 
 /** 1 dòng báo cáo quảng cáo (theo ngày / chiến dịch) */
@@ -59,10 +62,20 @@ export interface AdsRow {
   cost: number;
   revenue: number | null;
   orders: number | null;
+  /** Dòng chi tiết theo sản phẩm (đã nằm trong dòng chiến dịch) → KHÔNG cộng vào tổng, chỉ để chia quảng cáo cho sản phẩm */
+  detail?: boolean;
+  /** Tên sản phẩm của dòng chi tiết (khớp với tên sản phẩm trong file đơn hàng) */
+  product?: string;
 }
 
 export interface ParsedFile {
   kind: ProfitFileKind;
+  /** Loại báo cáo quảng cáo Shopee: nhóm = "Tất cả dữ liệu chiến dịch nhóm", auto = "Chiến dịch Tự Động Chọn Sản phẩm" */
+  adsType?: 'group' | 'auto';
+  /** Sàn của file (mặc định TikTok) */
+  platform?: 'tiktok' | 'shopee';
+  /** Kỳ ghi trong file (vd báo cáo quảng cáo Shopee "Khoảng thời gian") — khi dòng dữ liệu không có ngày */
+  range?: { from: string; to: string } | null;
   orders?: OrderLine[];
   income?: IncomeRow[];
   ads?: AdsRow[];
@@ -118,17 +131,32 @@ export const FEE_GROUPS: { key: string; label: string; headers: string[] }[] = [
     label: 'Quảng cáo GMV Max (trừ vào quyết toán)',
     headers: ['voucher gmv max', 'thue ban hang cua voucher gmv max', 'phi quang cao gmv max'],
   },
+  // Shopee — điền từ file đơn hàng (shopeeImport.ts), không đọc theo tiêu đề cột quyết toán
+  { key: 'spFixed', label: 'Phí cố định (Shopee)', headers: [] },
+  { key: 'spService', label: 'Phí dịch vụ (Shopee)', headers: [] },
+  { key: 'spTransaction', label: 'Phí xử lý giao dịch (Shopee)', headers: [] },
+  { key: 'spReturnShip', label: 'Phí vận chuyển trả hàng (Shopee)', headers: [] },
+  { key: 'spInfra', label: 'Phí dịch vụ — Phí hạ tầng (Shopee)', headers: [] },
+  { key: 'spVoucherXtra', label: 'Phí dịch vụ — Voucher Xtra (Shopee)', headers: [] },
+  { key: 'spAffiliate', label: 'Hoa hồng Tiếp thị liên kết (Shopee)', headers: [] },
+  { key: 'spPiship', label: 'Phí dịch vụ PiShip (Shopee)', headers: [] },
+  { key: 'spShipping', label: 'Phí vận chuyển ròng (Shopee)', headers: [] },
+  { key: 'spTopup', label: 'Phí DVHT Nạp Tiền Tự Động (Shopee)', headers: [] },
+  { key: 'spInstall', label: 'Lắp đặt / Trade-in (Shopee)', headers: [] },
+  { key: 'spTax', label: 'Thuế GTGT + TNCN do Shopee khấu trừ', headers: [] },
+  { key: 'spVat', label: 'Thuế GTGT (Shopee khấu trừ)', headers: [] },
+  { key: 'spPit', label: 'Thuế TNCN (Shopee khấu trừ)', headers: [] },
 ];
 
-const norm = (s: string | undefined) =>
+export const norm = (s: string | undefined) =>
   fold(String(s ?? ''))
     .replace(/\s+/g, ' ')
     .trim();
-const clean = (s: string | undefined) =>
+export const clean = (s: string | undefined) =>
   String(s ?? '')
     .replace(/\t/g, '')
     .trim();
-const num = (s: string | undefined) => parseAmount(clean(s)) ?? 0;
+export const num = (s: string | undefined) => parseAmount(clean(s)) ?? 0;
 
 /** "28/10/2026 21:16:08" · "2026/11/07" · "2026-10-01 00:00:00" → "2026-10-28" */
 export function parseDate(raw: string | undefined): string | null {
@@ -145,10 +173,10 @@ export function parseDate(raw: string | undefined): string | null {
   return null;
 }
 
-type Cols = Map<string, number>;
+export type Cols = Map<string, number>;
 
 /** Tìm dòng tiêu đề (15 dòng đầu) thoả `test` → bảng tên cột (không dấu) → vị trí */
-function findHeader(rows: string[][], test: (cols: Cols) => boolean): { row: number; cols: Cols } | null {
+export function findHeader(rows: string[][], test: (cols: Cols) => boolean): { row: number; cols: Cols } | null {
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const cols: Cols = new Map();
     (rows[i] ?? []).forEach((c, j) => {
@@ -160,7 +188,7 @@ function findHeader(rows: string[][], test: (cols: Cols) => boolean): { row: num
   return null;
 }
 
-const pick = (cols: Cols, ...names: (string | RegExp)[]): number | undefined => {
+export const pick = (cols: Cols, ...names: (string | RegExp)[]): number | undefined => {
   for (const n of names) {
     if (typeof n === 'string') {
       const i = cols.get(n);
@@ -324,8 +352,10 @@ export function parseAds(rows: string[][]): AdsRow[] {
   return out;
 }
 
-/** Đọc 1 bảng (1 trang tính) → dữ liệu theo loại nhận được */
+/** Đọc 1 bảng (1 trang tính) → dữ liệu theo loại nhận được (file Shopee xét trước — tiêu đề riêng) */
 export function parseProfitRows(rows: string[][], fileName: string): ParsedFile | null {
+  const shopee = parseShopeeRows(rows);
+  if (shopee) return shopee;
   const kind = classifyRows(rows);
   if (kind === 'orders') return { kind, orders: parseOrders(rows) };
   if (kind === 'income') return { kind, income: parseIncome(rows, !isUnsettledFile(fileName, rows)) };

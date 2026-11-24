@@ -14,6 +14,7 @@ vi.mock('../server/config', async () => {
 
 const s = await import('../server/sellerBrowser/session');
 const { sellerRouter } = await import('../server/routes/seller');
+const ua = await import('../server/sellerBrowser/userAgent');
 
 describe('Nhận biết đã đăng nhập', () => {
   it('TikTok: trang người bán = đã đăng nhập; trang login / tên miền khác = chưa', () => {
@@ -54,6 +55,19 @@ describe('File tải về', () => {
       .map((l) => l.route!.stack.map((x) => x.handle.permission).find(Boolean));
     expect(perms.length).toBeGreaterThan(5);
     expect(new Set(perms)).toEqual(new Set(['finance']));
+  });
+});
+
+describe('Chrome ẩn xưng như Chrome thường', () => {
+  it('bỏ "HeadlessChrome" khỏi User-Agent; Client Hints = Google Chrome cùng phiên bản', () => {
+    expect(ua.normalUserAgent('Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/157.0.0.0 Safari/537.36')).toBe(
+      'Mozilla/5.0 (Windows NT 10.0) Chrome/157.0.0.0 Safari/537.36',
+    );
+    const m = ua.chromeMetadata('157.0.8103.79', 'win32');
+    expect(m.brands.map((b) => b.brand)).toContain('Google Chrome');
+    expect(JSON.stringify(m)).not.toContain('Headless');
+    expect(m).toMatchObject({ platform: 'Windows', fullVersion: '157.0.8103.79', mobile: false });
+    expect(m.brands[0].version).toBe('157');
   });
 });
 

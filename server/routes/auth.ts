@@ -3,6 +3,8 @@ import { permissionsOf } from '../../shared/permissions.js';
 import { clearFails, lockedFor, recordFail, requireAuth } from '../auth/middleware.js';
 import { clearCookie, createSession, destroySession, destroyUserSessions, readCookie, sessionCookie } from '../auth/sessions.js';
 import { checkPassword, findUserById, publicUser, setPassword, UserError, verifyLogin } from '../auth/users.js';
+import { SignupLimitError, signup, signupEnabled } from '../auth/signup.js';
+import { TRIAL_DAYS } from '../../shared/plans.js';
 
 /** /api/auth — đăng nhập web (cookie phiên HttpOnly) */
 export const authRouter = Router();
@@ -26,6 +28,28 @@ authRouter.post('/login', (req, res) => {
   clearFails(ip, username);
   res.setHeader('Set-Cookie', sessionCookie(createSession(user.id, req.get('user-agent'))));
   res.json({ user: publicUser(user), permissions: permissionsOf(user.role) });
+});
+
+/** Web hỏi trước khi hiện nút Đăng ký dùng thử */
+authRouter.get('/options', (_req, res) => {
+  res.json({ signup: signupEnabled(), trialDays: TRIAL_DAYS });
+});
+
+/** Tự đăng ký dùng thử → tài khoản khách riêng + Pro TRIAL_DAYS ngày, đăng nhập luôn */
+authRouter.post('/register', (req, res) => {
+  if (!signupEnabled()) return res.status(403).json({ code: 'SIGNUP_DISABLED', error: 'Hiện chưa mở đăng ký — liên hệ quản trị viên để được cấp tài khoản' });
+  try {
+    const user = signup(
+      { username: str(req.body?.username).trim(), name: str(req.body?.name), password: str(req.body?.password) },
+      req.ip ?? 'unknown',
+    );
+    res.setHeader('Set-Cookie', sessionCookie(createSession(user.id, req.get('user-agent'))));
+    res.status(201).json({ user: publicUser(user), permissions: permissionsOf(user.role) });
+  } catch (e) {
+    if (e instanceof SignupLimitError) return res.status(429).json({ code: 'SIGNUP_LIMIT', error: e.message });
+    if (e instanceof UserError) return res.status(400).json({ code: 'BAD_SIGNUP', error: e.message });
+    throw e;
+  }
 });
 
 authRouter.post('/logout', (req, res) => {

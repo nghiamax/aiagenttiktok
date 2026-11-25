@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { diffCosts, pushCosts } from '../../costSync';
+import { useAuth } from '../../../../auth/authContext';
 import type { Platform } from '../calc';
 import type { BulkItem } from './bulkImport';
 
@@ -120,9 +121,14 @@ export function replaceBulkCosts(p: Platform, costs: Record<string, number>) {
 
 /** Danh sách tính hàng loạt theo từng sàn, lưu trên trình duyệt này (giá vốn đồng bộ lên server theo tài khoản) */
 export function useBulkStore(platform: Platform) {
-  const [all, setAll] = useState<Record<Platform, BulkState>>(loadAll);
+  // Chế độ khách: danh sách trống, không đọc / ghi trình duyệt, không đẩy giá vốn lên server
+  const { guest } = useAuth();
+  const [all, setAll] = useState<Record<Platform, BulkState>>(() =>
+    guest ? { tiktok: normalize(null), shopee: normalize(null) } : loadAll(),
+  );
   const prevCosts = useRef({ tiktok: all.tiktok.costs, shopee: all.shopee.costs });
   useEffect(() => {
+    if (guest) return;
     try {
       for (const p of ['tiktok', 'shopee'] as const) localStorage.setItem(keyOf(p), JSON.stringify(all[p]));
     } catch {
@@ -133,7 +139,7 @@ export function useBulkStore(platform: Platform) {
       if (all[p].costs !== prevCosts.current[p]) pushCosts(p, diffCosts(prevCosts.current[p], all[p].costs));
     }
     prevCosts.current = { tiktok: all.tiktok.costs, shopee: all.shopee.costs };
-  }, [all]);
+  }, [all, guest]);
 
   /** Sửa danh sách của 1 sàn bất kỳ (tải file TikTok khi đang ở tab Shopee → vào danh sách TikTok) */
   const setFor = useCallback(

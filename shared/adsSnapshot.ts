@@ -117,3 +117,30 @@ export interface AdsSnapshot {
   products: AdsProduct[];
   videos: AdsVideo[];
 }
+
+/**
+ * Snapshot rỗng (không có số liệu nào) — dùng khi chưa đăng nhập web (chế độ khách).
+ * KHÔNG dùng src/data/ads-snapshot.json cho khách: file đó là số liệu thật của shop.
+ */
+export function emptySnapshot(): AdsSnapshot {
+  return {
+    updatedAt: null,
+    range: null,
+    advertiser: null,
+    summary: {
+      totalCost: null,
+      totalRevenue: null,
+      totalOrders: null,
+      roi: null,
+      videosWithSpend7d: null,
+      boostedVideos: null,
+      pendingSuggestions: null,
+      activeRules: null,
+      totalRules: null,
+    },
+    previousSummary: null,
+    campaigns: [],
+    products: [],
+    videos: [],
+  };
+}

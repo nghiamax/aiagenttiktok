@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../lib/api';
+import { useAuth } from '../auth/AuthProvider';
 
 /* Shop của tài khoản đang đăng nhập (GET /api/shops): mỗi shop có kết nối TikTok + dữ liệu ADS riêng */
 
@@ -25,9 +26,12 @@ const ShopContext = createContext<ShopValue | null>(null);
 export function ShopProvider({ children }: { children: ReactNode }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const { guest } = useAuth();
+  // Chưa đăng nhập → không có shop, không gọi API
+  const [loaded, setLoaded] = useState(guest);
 
   useEffect(() => {
+    if (guest) return;
     api<{ shops: Shop[]; currentShopId: string | null }>('/shops')
       .then((r) => {
         setShops(r.shops);
@@ -40,7 +44,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => undefined)
       .finally(() => setLoaded(true));
-  }, []);
+  }, [guest]);
 
   const switchShop = useCallback(async (id: string) => {
     try {

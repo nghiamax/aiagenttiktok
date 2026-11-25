@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
+import { useAuth } from '../../auth/authContext';
 
 /* Đăng nhập Seller Center (TikTok Shop / Shopee) bằng trình duyệt trên máy chạy server — xem server/sellerBrowser/session.ts */
 
@@ -28,6 +29,7 @@ export const SELLER_LABEL: Record<SellerPlatform, string> = {
 
 /** Trạng thái 1 sàn; cửa sổ đang mở / chờ đăng nhập → hỏi lại mỗi 2 giây */
 export function useSeller(platform: SellerPlatform) {
+  const { guest } = useAuth();
   const [state, setState] = useState<SellerState | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -45,10 +47,11 @@ export function useSeller(platform: SellerPlatform) {
 
   const active = !!state?.open || state?.status === 'waiting_login';
   useEffect(() => {
+    if (guest) return; // chế độ khách: không hỏi server
     void load();
     const t = setInterval(() => void load(), active ? 2000 : 10_000);
     return () => clearInterval(t);
-  }, [load, active]);
+  }, [load, active, guest]);
 
   const run = useCallback(
     async (path: string, body: unknown = {}) => {

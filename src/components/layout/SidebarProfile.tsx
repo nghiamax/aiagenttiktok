@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Crown, KeyRound, LogOut, ShieldCheck, Sparkles } from 'lucide-react';
+import { ChevronRight, Crown, KeyRound, LogIn, LogOut, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { effectivePlan } from '../../../shared/plans';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -29,9 +29,9 @@ const iconBtn =
  *  2. Nâng cấp gói  3. Đổi mật khẩu  4. Đăng xuất
  */
 export default function SidebarProfile({ collapsed, onNavigate }: SidebarProfileProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, promptLogin, promptRegister } = useAuth();
   const [changing, setChanging] = useState(false);
-  if (!user) return null;
+  if (!user) return <GuestProfile collapsed={collapsed} onLogin={() => promptLogin()} onRegister={promptRegister} />;
 
   const admin = user.role === 'owner';
   const pro = effectivePlan(user) === 'pro';
@@ -159,6 +159,60 @@ export default function SidebarProfile({ collapsed, onNavigate }: SidebarProfile
       </div>
 
       {changing && <ChangePasswordModal onClose={() => setChanging(false)} />}
+    </div>
+  );
+}
+
+/** Chưa đăng nhập: "Chưa đăng nhập" + nút Đăng ký dùng thử + Đăng nhập (thay thẻ hồ sơ) */
+function GuestProfile({ collapsed, onLogin, onRegister }: { collapsed: boolean; onLogin: () => void; onRegister: () => void }) {
+  return (
+    <div className="shrink-0 border-t border-line p-3">
+      <div className={`hidden flex-col items-center gap-1 ${collapsed ? 'lg:flex' : ''}`}>
+        <button
+          type="button"
+          onClick={onLogin}
+          title="Đăng nhập"
+          aria-label="Đăng nhập"
+          className="flex size-10 items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-hover"
+        >
+          <LogIn className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onRegister}
+          title="Đăng ký dùng thử"
+          aria-label="Đăng ký dùng thử"
+          className={`${iconBtn} text-accent-violet hover:bg-accent-violet/10 hover:text-accent-violet`}
+        >
+          <Sparkles className="size-4" />
+        </button>
+      </div>
+      <div className={`rounded-2xl border border-line bg-white p-3 ${collapsed ? 'lg:hidden' : ''}`}>
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-canvas text-muted">
+            <UserRound className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Chưa đăng nhập</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRegister}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-violet px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+        >
+          <Sparkles className="size-4" />
+          Đăng ký dùng thử
+        </button>
+        <button
+          type="button"
+          onClick={onLogin}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-line px-3 py-2 text-sm font-semibold text-ink transition hover:bg-canvas"
+        >
+          <LogIn className="size-4" />
+          Đăng nhập
+        </button>
+      </div>
     </div>
   );
 }

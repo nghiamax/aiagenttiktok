@@ -25,13 +25,15 @@ const WatchContext = createContext<WatchValue | null>(null);
 
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<WatchItem[]>([]);
-  const canEdit = useAuth().can('configure');
+  const { can, guest } = useAuth();
+  const canEdit = can('configure');
 
   useEffect(() => {
+    if (guest) return; // chế độ khách: danh sách trống, không gọi API
     api<{ items: WatchItem[] }>('/watchlist')
       .then((r) => setItems(r.items))
       .catch(() => undefined);
-  }, []);
+  }, [guest]);
 
   const add = useCallback(async (video: string, note?: string) => {
     try {

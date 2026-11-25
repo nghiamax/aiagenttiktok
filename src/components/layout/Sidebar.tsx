@@ -1,10 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChevronsLeft, ChevronsRight, Sparkles, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, X } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { effectivePlan } from '../../../shared/plans';
 import { APP_NAME, APP_TAGLINE, NAV_ANCHOR_EVENT, NAV_ITEMS, type NavItem } from '../../config/navigation';
 import { useScrollSpy } from '../../lib/useScrollSpy';
 import SidebarProfile from './SidebarProfile';
+import BrandLogo from '../ui/BrandLogo';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -25,9 +26,10 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
     .filter((c) => c.anchor && c.path === location.pathname)
     .map((c) => c.anchor!);
   const spy = useScrollSpy(anchors, anchors.length > 0);
-  const { can, user } = useAuth();
+  const { can, user, guest } = useAuth();
   const isPro = !!user && effectivePlan(user) === 'pro';
-  const items = NAV_ITEMS.filter((n) => can(n.permission));
+  // Chưa đăng nhập: thấy các mục chung để xem thử (ẩn trang quản trị)
+  const items = NAV_ITEMS.filter((n) => !n.permission || (guest ? n.permission !== 'manage_users' : can(n.permission)));
 
   return (
     <>
@@ -52,13 +54,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
             collapsed ? 'lg:flex-col lg:justify-center lg:gap-1 lg:px-0' : ''
           }`}
         >
-          <div
-            className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent-violet text-white shadow-sm ${
-              collapsed ? 'lg:size-9' : ''
-            }`}
-          >
-            <Sparkles className="size-5" strokeWidth={2} />
-          </div>
+          <BrandLogo className={`size-10 shrink-0 ${collapsed ? 'lg:size-9' : ''}`} />
           <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
             <p className="truncate text-lg font-bold leading-tight">{APP_NAME}</p>
             <p className="truncate text-xs text-muted">{APP_TAGLINE}</p>

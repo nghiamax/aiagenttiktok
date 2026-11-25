@@ -20,6 +20,9 @@ export const FREE_PRICING_CALCS = 100;
 /** Số đơn hàng Tính lợi nhuận miễn phí (đếm theo mã đơn khác nhau) */
 export const FREE_PROFIT_ORDERS = 100;
 
+/** Tự đăng ký dùng thử: được gói Pro trong ngần này ngày, hết hạn tự về Miễn phí */
+export const TRIAL_DAYS = 7;
+
 export interface PlanHolder {
   role: Role;
   plan?: Plan;

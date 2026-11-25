@@ -60,7 +60,8 @@ export default function AgentStatusBar({
   activeRules,
 }: AgentStatusBarProps) {
   const [result, setResult] = useState<string | null>(null);
-  const canConfigure = useAuth().can('configure');
+  const { can, guest } = useAuth();
+  const canConfigure = can('configure');
   // Đề xuất hôm nay (còn hiệu lực) + thao tác thật hôm nay (không tính nhắc việc) — cùng cách đếm với server
   const todayProposals = proposals.filter((p) => isToday(p.createdAt) && (p.status === 'pending' || p.status === 'approved'));
   const todayActions = actions.filter((a) => isToday(a.executedAt) && a.status !== 'failed' && a.actionType !== 'remind');
@@ -81,7 +82,9 @@ export default function AgentStatusBar({
   ];
 
   const on = connected && !paused;
-  const subtitle = !connected
+  const subtitle = guest
+    ? 'Đăng nhập để xem BOT AI của shop'
+    : !connected
     ? 'Chưa kết nối server — chạy npm run server'
     : paused
       ? 'Đã tắt — Agent không tự quét. Bật lại để Agent xét quy tắc mỗi giờ.'

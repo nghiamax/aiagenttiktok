@@ -4,6 +4,8 @@ import type { AdsSnapshot } from './types';
 import { annotateCrossProduct } from '../../../shared/videoStatus';
 import type { TrendSnaps } from '../../../shared/trend';
 import { notifyAuthRequired } from '../../lib/api';
+import { useAuth } from '../../auth/AuthProvider';
+import { emptySnapshot } from '../../../shared/adsSnapshot';
 
 export interface DateRange {
   from: string;
@@ -37,6 +39,8 @@ interface AdsDataValue {
 }
 
 const STATIC = annotateCrossProduct(staticSnapshot as AdsSnapshot);
+/** Chưa đăng nhập web → không có số liệu nào (không dùng file lưu sẵn — đó là số thật của shop) */
+const EMPTY = emptySnapshot();
 const STORAGE_KEY = 'ads-range';
 /** Đợi một chút sau khi đổi ngày rồi mới tải, để khỏi gọi khi đang chọn dở */
 const DEBOUNCE_MS = 500;
@@ -102,10 +106,11 @@ const AdsDataContext = createContext<AdsDataValue | null>(null);
 
 /** Nguồn số liệu ADS dùng chung cho Tổng quan + AI Agent (bọc trong AdsLayout) */
 export function AdsDataProvider({ children }: { children: ReactNode }) {
+  const { guest } = useAuth();
   const [range, setRangeState] = useState<DateRange>(() => readStoredRange() ?? lastDays(7));
-  const [snapshot, setSnapshot] = useState<AdsSnapshot>(STATIC);
-  const [source, setSource] = useState<AdsDataSource>('static');
-  const [status, setStatus] = useState<AdsDataStatus>('loading');
+  const [snapshot, setSnapshot] = useState<AdsSnapshot>(guest ? EMPTY : STATIC);
+  const [source, setSource] = useState<AdsDataSource>(guest ? 'live' : 'static');
+  const [status, setStatus] = useState<AdsDataStatus>(guest ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
   const [loginRequired, setLoginRequired] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -122,6 +127,8 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Chế độ khách: không gọi API (provider được dựng lại khi đăng nhập)
+    if (guest) return;
     const controller = new AbortController();
     const force = forceRef.current;
     forceRef.current = false;
@@ -155,14 +162,14 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [range.from, range.to, reloadKey]);
+  }, [guest, range.from, range.to, reloadKey]);
 
   // Số liệu cố định 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
   // không thì tải nền (server có cache). Dùng cho Gợi ý, nhóm đã xác nhận ở các bảng / hộp Tổng quan
   const live = source === 'live' && status === 'ready' ? snapshot : null;
-  const d7 = useFixedSnapshot(7, range, live, reloadKey);
-  const d14 = useFixedSnapshot(14, range, live, reloadKey);
-  const d30 = useFixedSnapshot(30, range, live, reloadKey);
+  const d7 = useFixedSnapshot(7, range, live, reloadKey, guest);
+  const d14 = useFixedSnapshot(14, range, live, reloadKey, guest);
+  const d30 = useFixedSnapshot(30, range, live, reloadKey, guest);
   const baseline = d7 ?? snapshot;
   const trendSnaps = useMemo<TrendSnaps>(() => ({ d7: baseline, d14, d30 }), [baseline, d14, d30]);
 
@@ -190,12 +197,18 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
  * Snapshot n ngày đến hôm qua. Khoảng đang xem trùng → dùng snapshot đang xem (đã tải xong); không thì tải nền.
  * null = chưa có (đang tải / lỗi) — nơi dùng tự quay về cách cũ.
  */
-function useFixedSnapshot(n: number, viewing: DateRange, live: AdsSnapshot | null, reloadKey: number): AdsSnapshot | null {
+function useFixedSnapshot(
+  n: number,
+  viewing: DateRange,
+  live: AdsSnapshot | null,
+  reloadKey: number,
+  guest: boolean,
+): AdsSnapshot | null {
   const want = lastDays(n);
   const same = viewing.from === want.from && viewing.to === want.to;
   const [snap, setSnap] = useState<AdsSnapshot | null>(null);
   useEffect(() => {
-    if (same) return;
+    if (same || guest) return;
     const controller = new AbortController();
     fetch(`/api/ads/snapshot?${new URLSearchParams({ from: want.from, to: want.to })}`, { signal: controller.signal })
       .then((res) => (res.ok ? (res.json() as Promise<{ snapshot?: AdsSnapshot }>) : null))
@@ -203,7 +216,8 @@ function useFixedSnapshot(n: number, viewing: DateRange, live: AdsSnapshot | nul
       .catch(() => undefined);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [same, want.from, want.to, reloadKey]);
+  }, [same, guest, want.from, want.to, reloadKey]);
+  if (guest) return EMPTY;
   return same ? (live ?? snap) : snap;
 }
 

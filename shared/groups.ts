@@ -141,6 +141,8 @@ export function groupDescription(group: GroupDef, level: GroupLevel = 'video'): 
   }
   if (group.kind === 'fallback') return FALLBACK_TEXT[level];
   const own = productConditionCount(group);
+  // Điều kiện chung tắt → chỉ sản phẩm có điều kiện riêng
+  if (group.conditionSets.length === 0 && own) return `Chỉ ${own} sản phẩm có điều kiện riêng`;
   return conditionSetsText(group.conditionSets) + (own ? ` · riêng ${own} sản phẩm` : '');
 }
 

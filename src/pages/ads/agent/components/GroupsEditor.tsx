@@ -29,11 +29,14 @@ const INTRO: Record<GroupLevel, string> = {
     'Chiến dịch được xét từ nhóm trên cùng xuống, khớp nhóm nào trước thì thuộc nhóm đó. Mức tiêu ngân sách (%) = chi trung bình mỗi ngày ÷ ngân sách ngày × 100.',
 };
 
-function validate(g: GroupDef): string[] {
+function validate(g: GroupDef, level: GroupLevel): string[] {
   const errors: string[] = [];
   if (g.name.trim() === '') errors.push('Nhập tên nhóm');
   if (g.kind === 'custom') {
-    if (g.conditionSets.length === 0) errors.push('Cần ít nhất 1 cách nhận diện');
+    const ownCount = Object.keys(g.productConditions ?? {}).length;
+    // Cấp video / sản phẩm: tắt điều kiện chung được nếu có ≥ 1 sản phẩm riêng (Sếp chốt 25/11)
+    if (g.conditionSets.length === 0 && (level === 'campaign' || ownCount === 0))
+      errors.push(level === 'campaign' ? 'Cần ít nhất 1 cách nhận diện' : 'Bật điều kiện chung hoặc thêm ít nhất 1 sản phẩm riêng');
     if (g.conditionSets.some((s) => s.clauses.length === 0)) errors.push('Mỗi cách cần ít nhất 1 điều kiện');
     // Điều kiện riêng: [] = không xét sản phẩm (hợp lệ); có cách thì mỗi cách phải có điều kiện
     if (Object.values(g.productConditions ?? {}).some((sets) => sets.some((s) => s.clauses.length === 0)))
@@ -115,7 +118,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
     [trends.snaps, trends.confirmOn, level, draft, settings],
   );
 
-  const errors = new Map(draft.map((g) => [g.id, validate(g)]));
+  const errors = new Map(draft.map((g) => [g.id, validate(g, level)]));
   const hasErrors = [...errors.values()].some((e) => e.length > 0);
   const fallbackIndex = draft.findIndex((g) => g.kind === 'fallback');
   const lastMovable = (fallbackIndex === -1 ? draft.length : fallbackIndex) - 1;

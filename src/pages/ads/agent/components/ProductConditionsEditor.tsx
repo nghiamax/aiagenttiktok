@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Package, Pencil, X } from 'lucide-react';
 import FilterSelect from '../../../../components/ui/FilterSelect';
-import { conditionSetsText, type ClauseValue, type ConditionSet, type Metric } from '../../groups';
+import { conditionSetsText, newClause, type ClauseValue, type ConditionSet, type Metric } from '../../groups';
 import type { AdsProduct } from '../../types';
 import MediaThumb from '../../components/MediaThumb';
 import ConditionSetsEditor from './ConditionSetsEditor';
@@ -39,6 +39,8 @@ export default function ProductConditionsEditor({
   const [open, setOpen] = useState<string | null>(focusProductId && value[focusProductId] ? focusProductId : null);
   const focusRef = useRef<HTMLLIElement>(null);
   const byId = new Map(products.map((p) => [p.id, p]));
+  // Điểm bắt đầu: chép điều kiện chung; điều kiện chung đang tắt (rỗng) → 1 điều kiện mặc định
+  const seed = () => (general.length ? clone(general) : [{ clauses: [newClause()] }]);
   const ids = Object.keys(value);
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function ProductConditionsEditor({
   };
   const add = (id: string | null) => {
     if (!id || value[id]) return;
-    onChange({ ...value, [id]: clone(general) });
+    onChange({ ...value, [id]: seed() });
     setOpen(id);
   };
 
@@ -122,7 +124,7 @@ export default function ProductConditionsEditor({
                       <input
                         type="checkbox"
                         checked={off}
-                        onChange={(e) => set(id, e.target.checked ? [] : clone(general))}
+                        onChange={(e) => set(id, e.target.checked ? [] : seed())}
                         className="size-4 accent-primary"
                       />
                       Không xét sản phẩm này vào nhóm

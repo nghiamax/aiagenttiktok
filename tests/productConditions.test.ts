@@ -66,4 +66,12 @@ describe('Điều kiện riêng theo sản phẩm', () => {
     // pB không xét vào Cắt lỗ → bộ điều kiện rỗng, không có ngưỡng chi → không vào cửa lỗ âm thầm
     expect(trendOf('video', S, g, w, true, ctx('pB')).slowLoss).toBeUndefined();
   });
+
+  it('tắt điều kiện chung (rỗng) → chỉ sản phẩm có điều kiện riêng vào nhóm', () => {
+    const base = withOverrides({ pA: [costAtLeast(300_000)] });
+    const s: AdsSettings = { ...base, groups: base.groups.map((g) => (g.id === 'cut' ? { ...g, conditionSets: [] } : g)) };
+    expect(classifyVideo(loss('pA', 320_000), C, s)?.action).toBe('cut');
+    expect(classifyVideo(loss('pC', 5_000_000), C, s)?.action).not.toBe('cut');
+    expect(groupDescription(s.groups.find((g) => g.id === 'cut')!)).toBe('Chỉ 1 sản phẩm có điều kiện riêng');
+  });
 });

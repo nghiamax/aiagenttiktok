@@ -9,6 +9,7 @@ import {
   groupMeta,
   type ConditionSet,
   LEVEL_UNIT,
+  newClause,
   type GroupDef,
   type GroupIcon,
   type GroupLevel,
@@ -89,6 +90,15 @@ export default function GroupCard({
   const sets = group.conditionSets;
   // Điều kiện riêng theo sản phẩm: nhóm có điều kiện, cấp video / sản phẩm (Sếp chốt 25/11)
   const perProduct = editable && level !== 'campaign';
+  // Điều kiện chung bật / tắt (Sếp chốt 25/11): tắt = conditionSets rỗng → nhóm chỉ xét sản phẩm có điều kiện riêng
+  const generalOn = sets.length > 0;
+  const lastGeneral = useRef<ConditionSet[] | null>(null);
+  const toggleGeneral = () => {
+    if (generalOn) {
+      lastGeneral.current = sets;
+      setSets([]);
+    } else setSets(lastGeneral.current ?? [{ clauses: [newClause()] }]);
+  };
 
   const setSets = (next: ConditionSet[]) => onChange({ conditionSets: next });
 
@@ -220,14 +230,38 @@ export default function GroupCard({
           </p>
         ) : (
           <>
-            {perProduct && <p className="mb-2 text-sm font-semibold">Điều kiện chung (mọi sản phẩm)</p>}
-            <ConditionSetsEditor
-              sets={sets}
-              onChange={setSets}
-              subject={SUBJECT[level]}
-              metrics={METRICS_BY_LEVEL[level]}
-              valueTypes={VALUE_TYPES_BY_LEVEL[level]}
-            />
+            {perProduct && (
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Điều kiện chung{generalOn && ' (mọi sản phẩm)'}</p>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={generalOn}
+                  aria-label="Bật/tắt điều kiện chung"
+                  title={generalOn ? 'Tắt: nhóm chỉ xét các sản phẩm có điều kiện riêng' : 'Bật: sản phẩm khác xét theo điều kiện chung'}
+                  onClick={toggleGeneral}
+                  className="flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+                >
+                  <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${generalOn ? 'bg-accent-green' : 'bg-muted/40'}`}>
+                    <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all ${generalOn ? 'left-[18px]' : 'left-0.5'}`} />
+                  </span>
+                  {generalOn ? 'Bật' : 'Tắt'}
+                </button>
+              </div>
+            )}
+            {!perProduct || generalOn ? (
+              <ConditionSetsEditor
+                sets={sets}
+                onChange={setSets}
+                subject={SUBJECT[level]}
+                metrics={METRICS_BY_LEVEL[level]}
+                valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+              />
+            ) : (
+              <p className="rounded-xl bg-canvas/70 px-3 py-2.5 text-sm text-muted">
+                Không dùng — sản phẩm không có điều kiện riêng sẽ không vào nhóm này.
+              </p>
+            )}
           </>
         )}
         {perProduct && (

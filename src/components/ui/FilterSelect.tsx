@@ -19,8 +19,6 @@ interface FilterSelectProps {
   value: string | null;
   onChange: (value: string | null) => void;
   searchPlaceholder: string;
-  /** Không có mục "Tất cả" trong danh sách (dùng làm ô chọn để thêm) */
-  hideAll?: boolean;
 }
 
 /** Ô chọn có tìm kiếm: bấm mở danh sách, gõ để lọc, ✕ để bỏ chọn */
@@ -32,7 +30,6 @@ export default function FilterSelect({
   value,
   onChange,
   searchPlaceholder,
-  hideAll = false,
 }: FilterSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -46,7 +43,7 @@ export default function FilterSelect({
     ? options.filter((o) => o.label.toLowerCase().includes(q) || o.description?.toLowerCase().includes(q))
     : options;
   // Mục 0 là "Tất cả" (chỉ khi không gõ tìm)
-  const items: (FilterOption | null)[] = q || hideAll ? filtered : [null, ...filtered];
+  const items: (FilterOption | null)[] = q ? filtered : [null, ...filtered];
 
   // Đóng khi bấm ra ngoài
   useEffect(() => {

@@ -236,8 +236,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
 
       {focusProduct && level !== 'campaign' && (
         <p className="rounded-xl bg-primary-soft px-4 py-3 text-sm text-primary">
-          Đang chỉnh riêng cho <b>{focusProduct.name}</b> — ở nhóm muốn đổi, bấm <b>+ Riêng cho {focusProduct.name}</b> rồi sửa điều kiện.
-          Sản phẩm này sẽ chỉ xét theo điều kiện riêng ở nhóm đó.
+          Đang xem điều kiện cho <b>{focusProduct.name}</b> ở mọi nhóm — sửa ở nhóm nào thì sản phẩm này chỉ xét theo điều kiện riêng ở nhóm đó.
         </p>
       )}
 

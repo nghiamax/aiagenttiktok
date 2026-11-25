@@ -14,7 +14,8 @@ import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import { classifyProduct } from '../classify';
 import EmptyTableState from './EmptyTableState';
-import ReEnableCell, { reEnableVerdict } from './ReEnableCell';
+import { reEnableVerdict } from '../reEnable';
+import ReEnableCell from './ReEnableCell';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
 import { LINK_BTN, TD, TD_NUM, TH, TOOLBAR } from './tableStyles';
@@ -147,7 +148,7 @@ export default function ProductTable({
                 to="/care-ads/product?view=groups&level=product"
                 className="font-medium text-primary transition-colors hover:text-primary-hover"
               >
-                Sửa nhóm sản phẩm
+                Sửa phân nhóm sản phẩm
               </Link>
             </>
           )}

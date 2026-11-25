@@ -34,7 +34,7 @@ describe('ineligibleReason — sản phẩm', () => {
 });
 
 describe('reEnableVerdict — ô "Cần bật lại"', async () => {
-  const { reEnableVerdict } = await import('../src/pages/ads/components/ReEnableCell');
+  const { reEnableVerdict } = await import('../src/pages/ads/reEnable');
   const w = (cost: number, orders: number, roi: number | null) => ({ cost, revenue: null, orders, roi });
   const t = (w30: ReturnType<typeof w> | null, w14: ReturnType<typeof w> | null = null) => ({ w30, w14 }) as never;
   it('có lời ≥ 3 đơn → suggest; ít đơn → few; lỗ → keep_off; thiếu hoà vốn / không có số', () => {

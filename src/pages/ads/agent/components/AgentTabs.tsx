@@ -12,8 +12,8 @@ const TABS: { value: AgentView; label: string; icon: LucideIcon }[] = [
   { value: 'pending', label: 'Chờ duyệt', icon: Inbox },
   { value: 'log', label: 'Nhật ký', icon: History },
   { value: 'impact', label: 'Hiệu quả', icon: Gauge },
+  { value: 'groups', label: 'Phân nhóm', icon: Layers },
   { value: 'rules', label: 'Quy tắc', icon: SlidersHorizontal },
-  { value: 'groups', label: 'Nhóm', icon: Layers },
 ];
 
 /** Các tab của trang BOT AI (cùng kiểu với ListViewTabs) */

@@ -179,7 +179,7 @@ export default function RuleFormModal({
               onClick={onClose}
               className="font-medium text-primary hover:text-primary-hover"
             >
-              Sửa định nghĩa nhóm {LEVEL_UNIT[level]} →
+              Sửa phân nhóm {LEVEL_UNIT[level]} →
             </Link>
           </p>
           <p className="mt-2 text-sm">

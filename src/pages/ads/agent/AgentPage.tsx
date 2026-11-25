@@ -108,7 +108,7 @@ export default function AgentPage() {
                 pending: `${pending.length}${signals.length ? ` · ${signals.length} dấu hiệu` : ''}`,
                 log: String(agentState.actions.length),
                 rules: `${active}/${config.rules.length}`,
-                groups: String(settings.groups.length + settings.productGroups.length + settings.campaignGroups.length),
+                groups: '',
                 impact: '',
               }}
             />
@@ -145,7 +145,7 @@ export default function AgentPage() {
                   <p className="max-w-2xl text-sm text-muted">
                     Quy tắc chạy theo các nhóm video / sản phẩm / chiến dịch Sếp định nghĩa ở tab{' '}
                     <button type="button" onClick={() => setView('groups')} className="font-medium text-primary hover:text-primary-hover">
-                      Nhóm
+                      Phân nhóm
                     </button>
                     . Thay đổi được lưu trên server.
                   </p>

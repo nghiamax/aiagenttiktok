@@ -16,6 +16,7 @@ import RuleCard from './components/RuleCard';
 import RuleFormModal from './components/RuleFormModal';
 import GroupsEditor from './components/GroupsEditor';
 import BreakEvenModal from '../components/BreakEvenModal';
+import { useAllProducts } from '../allProducts';
 import type { AgentView } from './types';
 import { useAgentStore } from './agentStore';
 import { activeRuleCount, pendingProposals, useAgentConfig } from './useAgentConfig';
@@ -29,6 +30,7 @@ const LEVELS: readonly GroupLevel[] = ['video', 'product', 'campaign'];
 export default function AgentPage() {
   const [params, setParams] = useSearchParams();
   const { snapshot } = useAdsData();
+  const allProducts = useAllProducts();
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   const rawView = params.get('view');
   const setView = (v: AgentView) => setParams({ view: v });
@@ -187,7 +189,7 @@ export default function AgentPage() {
 
       {breakEvenOpen && (
         <BreakEvenModal
-          products={snapshot.products}
+          products={allProducts.breakEven}
           campaignById={campaignById}
           settings={settings}
           onSave={saveSettings}

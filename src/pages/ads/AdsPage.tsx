@@ -8,6 +8,7 @@ import { useAgentStore } from './agent/agentStore';
 import { activeRuleCount, pendingProposals, ruleForTrigger } from './agent/useAgentConfig';
 import { shortVnd } from './classify';
 import { useTrend } from './trend';
+import { useAllProducts } from './allProducts';
 import type { TrendInfo } from '../../../shared/trend';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
@@ -96,6 +97,7 @@ export default function AdsPage() {
   // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét, không đổi theo ô chọn ngày).
   // Chưa xác nhận (7 ngày khác 14 ngày) → không tính, chỉ ghi chú dưới ô của nhóm 7 ngày
   const trends = useTrend();
+  const allProducts = useAllProducts();
   const inbox = useMemo(() => {
     const d7 = trends.snaps.d7;
     const campaigns7 = new Map(d7.campaigns.map((c) => [c.id, c]));
@@ -149,21 +151,8 @@ export default function AdsPage() {
   const inCampaign = (id: string) => !campaignId || id === campaignId;
 
   const campaigns = snapshot.campaigns.filter((c) => inCampaign(c.id));
-  // Sản phẩm đã loại trừ không có số trong khoảng đang xem (vd tắt từ 10 ngày trước) vẫn phải hiện ở ô "Đã loại trừ":
-  // lấy thêm từ snapshot 30 / 14 ngày (Sếp chốt 25/11) — số khoảng đang xem = 0, đánh giá bật lại dùng số 30 ngày
-  const products = useMemo(() => {
-    const have = new Set(snapshot.products.map((p) => `${p.campaignId}/${p.id}`));
-    const extra: AdsProduct[] = [];
-    for (const s of [trends.snaps.d30, trends.snaps.d14]) {
-      for (const p of s?.products ?? []) {
-        const k = `${p.campaignId}/${p.id}`;
-        if (!p.excluded || have.has(k)) continue;
-        have.add(k);
-        extra.push({ ...p, cost: 0, revenue: 0, orders: 0, roi: null, videoCount: 0 });
-      }
-    }
-    return [...snapshot.products, ...extra];
-  }, [snapshot.products, trends.snaps.d30, trends.snaps.d14]).filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
+  // + sản phẩm đã loại trừ chỉ có số trong 30 / 14 ngày (useAllProducts)
+  const products = allProducts.table.filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
   const videos = snapshot.videos.filter(
     (v) =>
       inCampaign(v.campaignId) && (!productId || v.productId === productId) && matches(v.title, v.id, v.identityName),
@@ -323,7 +312,7 @@ export default function AdsPage() {
 
       {settingsOpen && (
         <BreakEvenModal
-          products={snapshot.products}
+          products={allProducts.breakEven}
           campaignById={campaignById}
           settings={settings}
           onSave={save}

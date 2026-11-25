@@ -19,7 +19,13 @@ vi.mock('../server/config', async () => {
       cookieSecure: false,
       root: process.cwd(),
       allowedOrigins: [],
-      tiktok: { mcpUrl: 'https://example.invalid/mcp', advertiserId: 'adv', storeId: 'store', advertiserName: 'shop', currency: 'VND' },
+      tiktok: {
+        mcpUrl: 'https://example.invalid/mcp',
+        advertiserId: 'adv',
+        storeId: 'store',
+        advertiserName: 'shop',
+        currency: 'VND',
+      },
     },
   };
 });
@@ -30,10 +36,22 @@ const sessions = await import('../server/auth/sessions');
 const mw = await import('../server/auth/middleware');
 
 function fakeRes() {
-  const res = { statusCode: 200, body: null as unknown, status(c: number) { res.statusCode = c; return res; }, json(b: unknown) { res.body = b; return res; } };
+  const res = {
+    statusCode: 200,
+    body: null as unknown,
+    status(c: number) {
+      res.statusCode = c;
+      return res;
+    },
+    json(b: unknown) {
+      res.body = b;
+      return res;
+    },
+  };
   return res;
 }
-const fakeReq = (cookie?: string) => ({ get: (h: string) => (h.toLowerCase() === 'cookie' ? cookie : undefined) }) as unknown as Request;
+const fakeReq = (cookie?: string) =>
+  ({ get: (h: string) => (h.toLowerCase() === 'cookie' ? cookie : undefined) }) as unknown as Request;
 
 function run(handler: (req: Request, res: Response, next: NextFunction) => void, req: Request) {
   const res = fakeRes();
@@ -120,7 +138,10 @@ describe('requireAuth / requirePermission', () => {
   it('nhân viên gọi thao tác chạy thật / sửa thiết lập → 403; chủ shop → qua', () => {
     const staff = { user: { id: '1', username: 'nv', name: 'NV', role: 'staff' } } as unknown as Request;
     const owner = { user: { id: '2', username: 'sep', name: 'Sếp', role: 'owner' } } as unknown as Request;
-    expect(run(mw.requirePermission('execute'), staff).res).toMatchObject({ statusCode: 403, body: { code: 'FORBIDDEN' } });
+    expect(run(mw.requirePermission('execute'), staff).res).toMatchObject({
+      statusCode: 403,
+      body: { code: 'FORBIDDEN' },
+    });
     expect(run(mw.requirePermission('configure'), staff).res.statusCode).toBe(403);
     expect(run(mw.requirePermission('view'), staff).nexted).toBe(true);
     expect(run(mw.requirePermission('execute'), owner).nexted).toBe(true);
@@ -161,10 +182,21 @@ describe('Mọi route đều có kiểm tra quyền', () => {
     // Trang Tài khoản: mọi route cần manage_users · Tài chính: mọi route cần finance
     expect(permsOf(usersRouter).length).toBeGreaterThan(3);
     expect(new Set(permsOf(usersRouter))).toEqual(new Set(['manage_users']));
-    expect(new Set(permsOf(financeRouter))).toEqual(new Set(['finance']));
+    // Tài chính: mọi route cần finance, riêng sửa biểu phí cố định của sàn chỉ Quản trị viên (manage_users)
+    const financeRoutes = (financeRouter.stack as { route?: { path: string; methods: Record<string, boolean> } }[])
+      .filter((l) => l.route)
+      .map((l) => `${Object.keys(l.route!.methods)[0]} ${l.route!.path}`);
+    permsOf(financeRouter).forEach((p, i) =>
+      expect(p).toBe(financeRoutes[i] === 'put /platform-fees' ? 'manage_users' : 'finance'),
+    );
+    expect(financeRoutes).toContain('put /platform-fees');
     const { watchlistRouter } = await import('../server/routes/watchlist');
     const routes = [agentRouter, settingsRouter, adsRouter, watchlistRouter].flatMap((r) =>
-      (r.stack as { route?: { path: string; methods: Record<string, boolean>; stack: { handle: { permission?: string } }[] } }[])
+      (
+        r.stack as {
+          route?: { path: string; methods: Record<string, boolean>; stack: { handle: { permission?: string } }[] };
+        }[]
+      )
         .filter((l) => l.route)
         .map((l) => ({
           path: l.route!.path,

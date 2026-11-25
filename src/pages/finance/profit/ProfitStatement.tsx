@@ -8,6 +8,8 @@ interface ProfitStatementProps {
   hasUnsettledFile: boolean;
   onOptions: (o: ProfitOptions) => void;
   platform?: 'tiktok' | 'shopee';
+  /** TikTok: so sánh có / không đăng ký chương trình Hoàn phí vận chuyển (file có khoản của chương trình) */
+  sfrCompare?: { fee: number; refund: number; orders: number; enrolledProfit: number; notEnrolledProfit: number };
 }
 
 const vnd = (n: number) => `${n < 0 ? '−' : ''}${formatNumber(Math.abs(Math.round(n)))}đ`;
@@ -81,6 +83,7 @@ export default function ProfitStatement({
   hasUnsettledFile,
   onOptions,
   platform = 'tiktok',
+  sfrCompare,
 }: ProfitStatementProps) {
   const payout = r.settled + r.unsettled;
   const diff = payout - r.revenue - r.fees;
@@ -108,7 +111,7 @@ export default function ProfitStatement({
             sign="+"
             label="Điều chỉnh khác"
             sub={
-              platform === 'shopee' && r.adjustmentLines.length
+              r.adjustmentLines.length
                 ? r.adjustmentLines.map((a) => `${a.label} (${formatNumber(a.count)}): ${vnd(a.amount)}`).join(' · ')
                 : platform === 'shopee'
                   ? 'Bồi hoàn, điều chỉnh'
@@ -122,10 +125,24 @@ export default function ProfitStatement({
           strong
           label="Tiền về"
           sub={
-            r.unsettled ? `Đã về ${vnd(r.settled)} · chờ về ${vnd(r.unsettled)} (ước tính)` : 'Tổng số tiền quyết toán'
+            r.unsettled
+              ? `Đã về ${vnd(r.settled)} · chờ về ${vnd(r.unsettled)} (ước tính)`
+              : r.adsTopup.count && !r.adsTopup.counted
+                ? 'Tiền bán hàng, chưa trừ khoản nạp ví quảng cáo bên dưới'
+                : 'Tổng số tiền quyết toán'
           }
           amount={payout}
         />
+        {r.adsTopup.count > 0 && !r.adsTopup.counted && (
+          <div className="flex items-start gap-3 bg-canvas/60 px-5 py-2.5 text-sm text-muted">
+            <span className="w-3 shrink-0 text-center">i</span>
+            <span className="min-w-0 flex-1">
+              Nạp ví quảng cáo từ số dư ("GMV thanh toán cho Quảng cáo TikTok", {formatNumber(r.adsTopup.count)} lần):{' '}
+              <b className="text-ink tabular-nums">{vnd(r.adsTopup.amount)}</b> — không trừ thêm, vì chi phí quảng cáo
+              đã lấy theo file quảng cáo (tránh tính 2 lần).
+            </span>
+          </div>
+        )}
         <Line
           sign="−"
           label="Giá vốn hàng bán"
@@ -198,7 +215,44 @@ export default function ProfitStatement({
           </div>
         </div>
       )}
-      {(hasUnsettledFile || (r.hasAds && r.gmvInSettlement > 0)) && (
+      {sfrCompare && (
+        <div className="border-t border-line p-2">
+          <Toggle
+            on={options.sfrEnrolled !== false}
+            label="Đăng ký chương trình Hoàn phí vận chuyển"
+            hint={`Phí SFR ${vnd(sfrCompare.fee)} (${formatNumber(sfrCompare.orders)} đơn) · được hoàn ${vnd(sfrCompare.refund)} cho đơn trả / giao không thành công. Tắt = tính thử nếu không đăng ký.`}
+            onChange={(v) => onOptions({ ...options, sfrEnrolled: v })}
+          />
+          <div className="mx-3 mb-1 mt-1 grid grid-cols-2 gap-2 text-sm">
+            {(
+              [
+                ['Có đăng ký', sfrCompare.enrolledProfit, options.sfrEnrolled !== false],
+                ['Không đăng ký', sfrCompare.notEnrolledProfit, options.sfrEnrolled === false],
+              ] as const
+            ).map(([label, profit, active]) => (
+              <div
+                key={label}
+                className={`rounded-lg border px-3 py-2 ${active ? 'border-primary bg-primary-soft/40' : 'border-line'}`}
+              >
+                <span className="block text-muted">{label}</span>
+                <b className={`tabular-nums ${profit < 0 ? 'text-danger' : 'text-ink'}`}>{vnd(profit)}</b>
+              </div>
+            ))}
+          </div>
+          <p className="mx-3 mb-1 text-sm text-muted">
+            {(() => {
+              const d = sfrCompare.enrolledProfit - sfrCompare.notEnrolledProfit;
+              return Math.abs(d) < 1
+                ? 'Đăng ký hay không, lợi nhuận như nhau.'
+                : d > 0
+                  ? `Đăng ký lời hơn ${vnd(d)} (tiền hoàn lớn hơn phí).`
+                  : `Không đăng ký lời hơn ${vnd(-d)} (phí lớn hơn tiền được hoàn).`;
+            })()}{' '}
+            Tính trên số thật trong file — chưa tính rủi ro đơn trả hàng tăng / giảm sau này.
+          </p>
+        </div>
+      )}
+      {(hasUnsettledFile || (r.hasAds && (r.gmvInSettlement > 0 || r.adsTopup.count > 0))) && (
         <div className="space-y-1 border-t border-line p-2">
           {hasUnsettledFile && (
             <Toggle
@@ -212,11 +266,19 @@ export default function ProfitStatement({
               onChange={(v) => onOptions({ ...options, includeUnsettled: v })}
             />
           )}
-          {r.hasAds && r.gmvInSettlement > 0 && (
+          {r.hasAds && (r.gmvInSettlement > 0 || r.adsTopup.count > 0) && (
             <Toggle
               on={options.dedupeGmvMax}
-              label="Không tính 2 lần phí GMV Max"
-              hint={`Quyết toán đã trừ ${vnd(r.gmvInSettlement)} phí GMV Max → bớt phần này khỏi chi phí file quảng cáo. Tắt nếu shop trả quảng cáo bằng thẻ / số dư riêng.`}
+              label="Không tính 2 lần chi phí quảng cáo"
+              hint={[
+                r.gmvInSettlement > 0 &&
+                  `Quyết toán đã trừ ${vnd(r.gmvInSettlement)} phí GMV Max → bớt khỏi chi phí file quảng cáo.`,
+                r.adsTopup.count > 0 &&
+                  `Tiền nạp ví quảng cáo từ số dư (${vnd(r.adsTopup.amount)}) không trừ thêm — chi phí lấy theo file quảng cáo.`,
+                'Tắt nếu muốn trừ cả 2.',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               onChange={(v) => onOptions({ ...options, dedupeGmvMax: v })}
             />
           )}

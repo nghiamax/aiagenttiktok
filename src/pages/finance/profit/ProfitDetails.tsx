@@ -15,7 +15,11 @@ export default function ProfitDetails({
   platform?: 'tiktok' | 'shopee';
 }) {
   const fees = [...r.feeLines].sort((a, b) => a.amount - b.amount);
-  const maxFee = Math.max(1, ...fees.map((f) => Math.abs(f.amount)));
+  // Nhóm theo `section`, giữ thứ tự nhóm trong FEE_GROUPS; trong nhóm khoản lớn trước
+  const sections = [...new Set(r.feeLines.map((f) => f.section ?? 'Khác'))].map((name) => {
+    const lines = fees.filter((f) => (f.section ?? 'Khác') === name);
+    return { name, lines, total: lines.reduce((x, f) => x + f.amount, 0) };
+  });
 
   const states: { label: string; n: number; tone: string }[] = [
     { label: 'Hoàn tất', n: r.counts.completed, tone: 'bg-accent-green' },
@@ -39,25 +43,59 @@ export default function ProfitDetails({
           {fees.length === 0 ? (
             <p className="text-sm text-muted">Chưa có số phí — cần file quyết toán.</p>
           ) : (
-            <ul className="space-y-2.5">
-              {fees.map((f) => (
-                <li key={f.key} className="text-sm">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-ink">{f.label}</span>
+            // Mỗi cột phí trong file = 1 dòng, xếp theo nhóm + tổng nhóm (không bỏ sót khoản nào)
+            <div className="space-y-3">
+              {sections.map((sec) => (
+                <div key={sec.name}>
+                  <div className="flex items-baseline justify-between gap-3 border-b border-line pb-1 text-sm">
+                    <span className="font-semibold text-ink">{sec.name}</span>
                     <span className="shrink-0 tabular-nums">
-                      <b className={f.amount > 0 ? 'text-accent-green' : 'text-ink'}>{vnd(f.amount)}</b>
-                      <span className="ml-2 text-muted">{pct(f.amount, r.revenue)}</span>
+                      <b className={sec.total > 0 ? 'text-accent-green' : 'text-ink'}>{vnd(sec.total)}</b>
+                      <span className="ml-2 inline-block w-11 text-right text-muted">{pct(sec.total, r.revenue)}</span>
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-canvas">
-                    <div
-                      className={`h-full rounded-full ${f.amount > 0 ? 'bg-accent-green/60' : 'bg-primary/70'}`}
-                      style={{ width: `${(Math.abs(f.amount) / maxFee) * 100}%` }}
-                    />
-                  </div>
-                </li>
+                  <ul className="mt-1 space-y-0.5">
+                    {sec.lines.map((f) => (
+                      <li key={f.key} className="flex items-baseline justify-between gap-3 pl-3 text-sm">
+                        <span className="text-muted">{f.label}</span>
+                        <span className="shrink-0 tabular-nums">
+                          <span className={f.amount > 0 ? 'text-accent-green' : 'text-ink'}>{vnd(f.amount)}</span>
+                          <span className="ml-2 inline-block w-11 text-right text-muted">
+                            {pct(f.amount, r.revenue)}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
+              {r.adjustmentLines.length > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between gap-3 border-b border-line pb-1 text-sm">
+                    <span className="font-semibold text-ink">Điều chỉnh (ngoài Tổng phí)</span>
+                    <b className="shrink-0 tabular-nums text-ink">
+                      {vnd(r.adjustmentLines.reduce((x, a) => x + a.amount, 0))}
+                    </b>
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {r.adjustmentLines.map((a) => (
+                      <li key={a.label} className="flex items-baseline justify-between gap-3 pl-3 text-sm">
+                        <span className="text-muted">
+                          {a.label} · {formatNumber(a.count)} lần
+                        </span>
+                        <span className="shrink-0 tabular-nums text-ink">{vnd(a.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {r.adsTopup.count > 0 && !r.adsTopup.counted && (
+                <p className="rounded-lg bg-canvas px-3 py-2 text-sm text-muted">
+                  Nạp ví quảng cáo từ số dư: <b className="tabular-nums text-ink">{vnd(r.adsTopup.amount)}</b> (
+                  {formatNumber(r.adsTopup.count)} lần) — không trừ, chi phí quảng cáo lấy theo file quảng cáo.
+                </p>
+              )}
+            </div>
           )}
         </Card>
       )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ReceiptText, ShieldCheck } from 'lucide-react';
+import { ChevronDown, Lock, Pencil, ReceiptText, ShieldCheck } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import { formatNumber } from '../../../lib/format';
 import NumberField from './NumberField';
@@ -7,11 +7,19 @@ import FeeLinesEditor from './FeeLinesEditor';
 import type { FeeLine, Platform, ShopType } from './calc';
 import { PLATFORM_LABEL, SHOP_TYPE_LABEL, type FeeProfile } from './config';
 import type { CategoryTable } from './categoryTables';
+import type { SystemFeeLine } from '../../../../shared/platformFees';
 
 interface FeeScheduleCardProps {
   platform: Platform;
   shopType: ShopType;
   profile: FeeProfile;
+  /** Phí cố định của sàn do hệ thống cung cấp (chỉ Quản trị viên sửa) */
+  systemFees: SystemFeeLine[];
+  canEditSystem: boolean;
+  /** ID phí hệ thống tuỳ chọn mà shop có đăng ký */
+  optIn: Set<string>;
+  onOptIn: (id: string, on: boolean) => void;
+  onSaveSystem: (lines: SystemFeeLine[]) => Promise<unknown>;
   /** Bảng phí ngành của hệ thống cho 2 loại shop của sàn đang chọn */
   tables: Record<ShopType, CategoryTable>;
   tablesLoading: boolean;
@@ -38,6 +46,11 @@ export default function FeeScheduleCard({
   platform,
   shopType,
   profile,
+  systemFees,
+  canEditSystem,
+  optIn,
+  onOptIn,
+  onSaveSystem,
   tables,
   tablesLoading,
   taxPct,
@@ -47,7 +60,25 @@ export default function FeeScheduleCard({
   const shopLabels = SHOP_TYPE_LABEL[platform];
   const table = tables[shopType];
   const latest = [tables.standard.updatedAt, tables.mall.updatedAt].filter(Boolean).sort().pop() ?? null;
-  const [open, setOpen] = useState(profile.fees.every((f) => f.value <= 0));
+  const [open, setOpen] = useState([...systemFees, ...profile.fees].every((f) => f.value <= 0));
+  const [draft, setDraft] = useState<SystemFeeLine[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveSystem = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSaveSystem(draft.filter((f) => f.label.trim()));
+      setDraft(null);
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const valueText = (f: FeeLine) =>
+    f.kind === 'pct' ? `${formatNumber(f.value, 2)}%` : `${formatNumber(f.value)}đ / đơn`;
 
   return (
     <Card>
@@ -65,7 +96,8 @@ export default function FeeScheduleCard({
             Biểu phí {PLATFORM_LABEL[platform]} · {shopLabels[shopType]}
           </span>
           <span className="block truncate text-sm text-muted">
-            {summary(profile.fees)} · thuế {formatNumber(taxPct, 2)}% ·{' '}
+            {summary([...systemFees.filter((f) => !f.optional || optIn.has(f.id)), ...profile.fees])} · thuế{' '}
+            {formatNumber(taxPct, 2)}% ·{' '}
             {tablesLoading
               ? 'đang tải bảng phí ngành…'
               : table.categories.length
@@ -79,9 +111,89 @@ export default function FeeScheduleCard({
 
       {open && (
         <div className="space-y-3 border-t border-line p-4 md:px-5">
+          {/* Phí cố định của sàn — hệ thống cung cấp, chỉ Quản trị viên sửa */}
+          <div className="rounded-xl border border-line p-3">
+            <div className="mb-1.5 flex items-center gap-2">
+              <ShieldCheck className="size-4 shrink-0 text-accent-green" />
+              <span className="min-w-0 flex-1 text-sm font-medium text-ink">
+                Phí cố định của {PLATFORM_LABEL[platform]} · {shopLabels[shopType]}
+                <span className="block text-xs font-normal text-muted">
+                  Hệ thống cập nhật{canEditSystem ? ' · chỉ Quản trị viên sửa' : ''}
+                </span>
+              </span>
+              {canEditSystem && !draft && (
+                <button
+                  type="button"
+                  onClick={() => setDraft(systemFees.map((f) => ({ ...f })))}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-primary transition hover:bg-primary-soft"
+                >
+                  <Pencil className="size-3.5" /> Sửa
+                </button>
+              )}
+            </div>
+            {draft ? (
+              <>
+                <FeeLinesEditor fees={draft} onChange={(f) => setDraft(f as SystemFeeLine[])} optionalToggle />
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  {saveError && <span className="mr-auto text-sm text-danger">{saveError}</span>}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraft(null);
+                      setSaveError(null);
+                    }}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted transition hover:bg-canvas hover:text-ink"
+                  >
+                    Huỷ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void saveSystem()}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-50"
+                  >
+                    {saving ? 'Đang lưu…' : 'Lưu cho mọi tài khoản'}
+                  </button>
+                </div>
+              </>
+            ) : systemFees.length ? (
+              <ul className="space-y-1">
+                {systemFees.map((f) => {
+                  const on = !f.optional || optIn.has(f.id);
+                  return (
+                    <li key={f.id} className={`flex items-center gap-2 px-2 py-1 text-sm ${on ? '' : 'opacity-60'}`}>
+                      <span className="min-w-0 flex-1 text-ink">
+                        {f.label}
+                        {f.note && <span className="text-muted"> · {f.note}</span>}
+                        {f.optional && (
+                          <label className="mt-0.5 flex w-fit cursor-pointer items-center gap-1.5 text-xs text-muted">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={(e) => onOptIn(f.id, e.target.checked)}
+                              className="size-3.5 accent-primary"
+                            />
+                            Shop có đăng ký chương trình này
+                          </label>
+                        )}
+                      </span>
+                      <span className={`font-semibold tabular-nums ${on ? 'text-ink' : 'text-muted line-through'}`}>
+                        {valueText(f)}
+                      </span>
+                      <Lock className="size-3.5 shrink-0 text-muted" aria-label="Hệ thống cung cấp" />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="px-2 py-1 text-sm text-muted">Chưa có khoản phí cố định nào cho sàn này.</p>
+            )}
+          </div>
+
           <div>
             <p className="mb-1 text-sm text-muted">
-              Các khoản phí của {shopLabels[shopType]} <span className="text-muted/70">(ngoài phí ngành)</span>
+              Khoản phí riêng của shop{' '}
+              <span className="text-muted/70">(chương trình shop tự đăng ký: Voucher Xtra, Freeship Xtra…)</span>
             </p>
             <FeeLinesEditor fees={profile.fees} onChange={onFees} />
             <div className="mt-3 flex items-center gap-2 border-t border-dashed border-line pt-3">

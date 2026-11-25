@@ -10,7 +10,15 @@ import ProfitStatement from './ProfitStatement';
 import ProfitDetails from './ProfitDetails';
 import OtherCostsEditor from './OtherCostsEditor';
 import SkuProfitTable from './SkuProfitTable';
-import { computeProfit, limitOrders, mergeData, profitOrderIds, type ProfitResult } from './profitCalc';
+import {
+  computeProfit,
+  limitOrders,
+  mergeData,
+  profitOrderIds,
+  sfrTotals,
+  withoutSfr,
+  type ProfitResult,
+} from './profitCalc';
 import { useProfitAllowance } from './useProfitAllowance';
 import { useProfitStore, useSharedCosts, type ProfitPlatform } from './useProfitStore';
 import type { ProfitFile } from './useProfitStore';
@@ -191,9 +199,18 @@ function ProfitWorkspace({ platform }: { platform: ProfitPlatform }) {
     }),
     [state.options, platform],
   );
+  // TikTok — chương trình Hoàn phí vận chuyển: so sánh có / không đăng ký (chỉ khi file có khoản của chương trình)
+  const sfr = useMemo(() => (platform === 'tiktok' ? sfrTotals(data) : null), [data, platform]);
+  const hasSfr = !!sfr && (sfr.fee !== 0 || sfr.refund !== 0);
+  const sfrOff = hasSfr && options.sfrEnrolled === false;
   const result = useMemo(
-    () => computeProfit(data, costs, state.otherCosts, options),
-    [data, costs, state.otherCosts, options],
+    () => computeProfit(sfrOff ? withoutSfr(data) : data, costs, state.otherCosts, options),
+    [data, sfrOff, costs, state.otherCosts, options],
+  );
+  // Lợi nhuận của trường hợp còn lại (để hiện 2 cột so sánh)
+  const altProfit = useMemo(
+    () => (hasSfr ? computeProfit(sfrOff ? data : withoutSfr(data), costs, state.otherCosts, options).profit : null),
+    [hasSfr, sfrOff, data, costs, state.otherCosts, options],
   );
   const notes = notesOf(result, state.files, platform);
   const addFiles = useCallback(
@@ -319,6 +336,17 @@ function ProfitWorkspace({ platform }: { platform: ProfitPlatform }) {
               hasUnsettledFile={hasUnsettledFile}
               platform={platform}
               onOptions={(options) => setState((s) => ({ ...s, options }))}
+              sfrCompare={
+                hasSfr && sfr && altProfit != null
+                  ? {
+                      fee: sfr.fee,
+                      refund: sfr.refund,
+                      orders: sfr.orders,
+                      enrolledProfit: sfrOff ? altProfit : result.profit,
+                      notEnrolledProfit: sfrOff ? result.profit : altProfit,
+                    }
+                  : undefined
+              }
             />
             <ProfitDetails result={result} platform={platform} />
           </div>

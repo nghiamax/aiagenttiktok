@@ -64,7 +64,25 @@ export interface GroupDef {
   showInInbox: boolean;
   /** Các cách nhận diện, nối bằng HOẶC */
   conditionSets: ConditionSet[];
+  /**
+   * Điều kiện riêng theo ID sản phẩm (Sếp chốt 25/11): sản phẩm có ở đây chỉ xét bộ này, bỏ điều kiện chung.
+   * Mảng rỗng = không xét sản phẩm đó vào nhóm. Chỉ nhóm custom cấp video / sản phẩm.
+   */
+  productConditions?: Record<string, ConditionSet[]>;
 }
+
+/** Điều kiện áp cho đối tượng: riêng sản phẩm nếu có, không thì chung */
+export function setsFor(group: GroupDef, ctx: Pick<EvalContext, 'productId'>): ConditionSet[] {
+  const own = ctx.productId ? group.productConditions?.[ctx.productId] : undefined;
+  return own ?? group.conditionSets;
+}
+
+/** Đối tượng đang dùng điều kiện riêng của nhóm */
+export const usesProductConditions = (group: GroupDef, ctx: Pick<EvalContext, 'productId'>) =>
+  !!ctx.productId && !!group.productConditions?.[ctx.productId];
+
+/** Số sản phẩm có điều kiện riêng */
+export const productConditionCount = (group: GroupDef) => Object.keys(group.productConditions ?? {}).length;
 
 export const METRIC_LABEL: Record<Metric, string> = {
   cost: 'Chi phí',
@@ -122,7 +140,8 @@ export function groupDescription(group: GroupDef, level: GroupLevel = 'video'): 
     return 'Theo trạng thái TikTok: video cần ủy quyền nhưng đã có chi phí, đơn hoặc doanh thu';
   }
   if (group.kind === 'fallback') return FALLBACK_TEXT[level];
-  return conditionSetsText(group.conditionSets);
+  const own = productConditionCount(group);
+  return conditionSetsText(group.conditionSets) + (own ? ` · riêng ${own} sản phẩm` : '');
 }
 
 /** Mô tả các cách (HOẶC) gồm điều kiện (VÀ) bằng lời */
@@ -146,6 +165,8 @@ export interface EvalContext {
   target: number | null;
   /** Mức tiêu ngân sách (%) — chỉ cấp chiến dịch, còn lại null */
   budgetUse: number | null;
+  /** ID sản phẩm (cấp video / sản phẩm) — để lấy điều kiện riêng theo sản phẩm */
+  productId?: string;
 }
 
 function metricOf(metric: Metric, ctx: EvalContext): number | null {
@@ -220,7 +241,7 @@ export function normalizeGroups(groups: GroupDef[]): GroupDef[] {
 
 /** Nhóm có điều kiện so với ROI hoà vốn (thiếu hoà vốn thì nhóm luôn trống) */
 export function groupUsesBreakEven(group: GroupDef): boolean {
-  return group.conditionSets.some((s) => s.clauses.some((c) => c.value.type === 'breakEven'));
+  return [...group.conditionSets, ...Object.values(group.productConditions ?? {}).flat()].some((s) => s.clauses.some((c) => c.value.type === 'breakEven'));
 }
 
 /** Nhóm gợi ý khi tạo quy tắc: nhóm tự định nghĩa đầu tiên, không có thì nhóm đầu */

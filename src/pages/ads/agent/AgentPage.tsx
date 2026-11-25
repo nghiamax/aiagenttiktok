@@ -36,7 +36,11 @@ export default function AgentPage() {
   const setView = (v: AgentView) => setParams({ view: v });
   // Tab Nhóm: cấp đang xem nằm trên URL (?view=groups&level=product)
   const groupLevel = LEVELS.find((l) => l === params.get('level')) ?? 'video';
-  const setGroupLevel = (l: GroupLevel) => setParams(l === 'video' ? { view: 'groups' } : { view: 'groups', level: l });
+  // Giữ ?product= (đang chỉnh riêng 1 sản phẩm) khi đổi cấp
+  const setGroupLevel = (l: GroupLevel) => {
+    const product = params.get('product');
+    setParams({ view: 'groups', ...(l !== 'video' && { level: l }), ...(product && { product }) });
+  };
 
   const { config, updateRule, addRule, removeRule, updateGuardrails, reset } = useAgentConfig();
   const [adding, setAdding] = useState(false);

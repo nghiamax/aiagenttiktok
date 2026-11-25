@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
@@ -34,6 +35,9 @@ function validate(g: GroupDef): string[] {
   if (g.kind === 'custom') {
     if (g.conditionSets.length === 0) errors.push('Cần ít nhất 1 cách nhận diện');
     if (g.conditionSets.some((s) => s.clauses.length === 0)) errors.push('Mỗi cách cần ít nhất 1 điều kiện');
+    // Điều kiện riêng: [] = không xét sản phẩm (hợp lệ); có cách thì mỗi cách phải có điều kiện
+    if (Object.values(g.productConditions ?? {}).some((sets) => sets.some((s) => s.clauses.length === 0)))
+      errors.push('Điều kiện riêng: mỗi cách cần ít nhất 1 điều kiện');
   }
   return errors;
 }
@@ -59,6 +63,9 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   // Mọi sản phẩm có số trong 7 / 14 / 30 ngày (nhập ROI hoà vốn đủ, kể cả sản phẩm đã loại trừ)
   const uniqueProducts = useAllProducts().breakEven;
+  // ?product=<id> (link "Phân nhóm riêng" ở bảng Sản phẩm) → mở sẵn / gợi ý thêm điều kiện riêng cho sản phẩm đó
+  const focusProductId = useSearchParams()[0].get('product');
+  const focusProduct = focusProductId ? uniqueProducts.find((p) => p.id === focusProductId) : undefined;
   const saved = groupsOf(settings, level);
   const [draft, setDraft] = useState<GroupDef[]>(saved);
   /** Nhóm vừa bấm "Thêm nhóm" → cuộn tới + nổi bật */
@@ -227,6 +234,13 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
         </div>
       </div>
 
+      {focusProduct && level !== 'campaign' && (
+        <p className="rounded-xl bg-primary-soft px-4 py-3 text-sm text-primary">
+          Đang chỉnh riêng cho <b>{focusProduct.name}</b> — ở nhóm muốn đổi, bấm <b>+ Riêng cho {focusProduct.name}</b> rồi sửa điều kiện.
+          Sản phẩm này sẽ chỉ xét theo điều kiện riêng ở nhóm đó.
+        </p>
+      )}
+
       <ul className="space-y-4">
         {draft.map((g, i) => (
           <GroupCard
@@ -244,6 +258,8 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             onRemove={() => setDraft(draft.filter((x) => x.id !== g.id))}
             justAdded={g.id === justAdded}
             unsaved={isUnsaved(g)}
+            products={uniqueProducts}
+            focusProductId={focusProduct ? focusProductId : null}
           />
         ))}
       </ul>

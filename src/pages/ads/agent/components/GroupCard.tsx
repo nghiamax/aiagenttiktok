@@ -16,6 +16,8 @@ import {
 } from '../../groups';
 import { METRICS_BY_LEVEL, VALUE_TYPES_BY_LEVEL } from '../meta';
 import ConditionSetsEditor from './ConditionSetsEditor';
+import ProductConditionsEditor from './ProductConditionsEditor';
+import type { AdsProduct } from '../../types';
 
 const SUBJECT: Record<GroupLevel, string> = {
   video: 'Video thuộc nhóm',
@@ -43,6 +45,10 @@ interface GroupCardProps {
   justAdded?: boolean;
   /** Nhóm mới / đã sửa nhưng chưa lưu */
   unsaved?: boolean;
+  /** Sản phẩm để đặt điều kiện riêng (cấp video / sản phẩm) */
+  products?: AdsProduct[];
+  /** Mở sẵn điều kiện riêng của sản phẩm này */
+  focusProductId?: string | null;
 }
 
 const TONES = Object.keys(GROUP_TONES) as GroupTone[];
@@ -63,6 +69,8 @@ export default function GroupCard({
   onRemove,
   justAdded = false,
   unsaved = false,
+  products = [],
+  focusProductId = null,
 }: GroupCardProps) {
   const [styling, setStyling] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -79,6 +87,8 @@ export default function GroupCard({
   const meta = groupMeta(group);
   const editable = group.kind === 'custom';
   const sets = group.conditionSets;
+  // Điều kiện riêng theo sản phẩm: nhóm có điều kiện, cấp video / sản phẩm (Sếp chốt 25/11)
+  const perProduct = editable && level !== 'campaign';
 
   const setSets = (next: ConditionSet[]) => onChange({ conditionSets: next });
 
@@ -209,12 +219,27 @@ export default function GroupCard({
             {group.kind === 'platform' && ' (quy tắc của sàn, không sửa được)'}
           </p>
         ) : (
-          <ConditionSetsEditor
-            sets={sets}
-            onChange={setSets}
+          <>
+            {perProduct && <p className="mb-2 text-sm font-semibold">Điều kiện chung (mọi sản phẩm)</p>}
+            <ConditionSetsEditor
+              sets={sets}
+              onChange={setSets}
+              subject={SUBJECT[level]}
+              metrics={METRICS_BY_LEVEL[level]}
+              valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+            />
+          </>
+        )}
+        {perProduct && (
+          <ProductConditionsEditor
+            value={group.productConditions ?? {}}
+            onChange={(next) => onChange({ productConditions: Object.keys(next).length ? next : undefined })}
+            general={sets}
+            products={products}
             subject={SUBJECT[level]}
             metrics={METRICS_BY_LEVEL[level]}
             valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+            focusProductId={focusProductId}
           />
         )}
       </div>

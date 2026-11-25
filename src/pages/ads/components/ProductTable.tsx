@@ -208,7 +208,20 @@ export default function ProductTable({
                               Đã loại trừ
                             </span>
                           )}
-                          ID {p.id}
+                          <span className="truncate">ID {p.id}</span>
+                          {(() => {
+                            // Điều kiện riêng theo sản phẩm ở nhóm video / sản phẩm (Sếp chốt 25/11)
+                            const own = [...settings.groups, ...settings.productGroups].filter((g) => g.productConditions?.[p.id]).length;
+                            return (
+                              <Link
+                                to={`/care-ads/product?view=groups&product=${p.id}`}
+                                title="Đặt điều kiện nhóm riêng cho sản phẩm này (vd Cắt lỗ / Nhân rộng ngưỡng khác)"
+                                className="shrink-0 font-medium text-primary hover:text-primary-hover"
+                              >
+                                · {own ? `Phân nhóm riêng (${own})` : 'Phân nhóm riêng'}
+                              </Link>
+                            );
+                          })()}
                         </p>
                       </div>
                     </div>

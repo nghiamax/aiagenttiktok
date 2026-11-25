@@ -6,7 +6,7 @@
  */
 import type { AdsSnapshot, AdsVideo } from './adsSnapshot.js';
 import { classifyCampaign, classifyProduct, classifyVideo, contextForCampaign, contextForProduct, contextForVideo } from './classify.js';
-import { matchSet, type Clause, type EvalContext, type GroupDef } from './groups.js';
+import { matchSet, setsFor, type Clause, type EvalContext, type GroupDef } from './groups.js';
 import { findGroup, type AdsSettings } from './settings.js';
 import type { RuleLevel } from './agentTypes.js';
 
@@ -75,12 +75,15 @@ function needsConfirm(settings: AdsSettings, level: RuleLevel, group: string): b
 const isSpendGate = (c: Clause) => c.metric === 'cost' && (c.op === 'gte' || c.op === 'gt');
 
 /** Nhóm có ngưỡng chi tối thiểu (vd Cắt lỗ "Chi ≥ 100k và 0 đơn") → video tiêu ít có thể lọt ở khung 7 ngày */
-export const isSpendGated = (g: GroupDef | undefined) =>
-  !!g && g.kind === 'custom' && g.conditionSets.some((s) => s.clauses.some(isSpendGate));
+export const isSpendGated = (g: GroupDef | undefined, ctx?: Pick<EvalContext, 'productId'>) =>
+  !!g &&
+  g.kind === 'custom' &&
+  // Có ctx → đúng bộ điều kiện của đối tượng; không có → bất kỳ bộ nào (chung + riêng sản phẩm)
+  (ctx ? setsFor(g, ctx) : [...g.conditionSets, ...Object.values(g.productConditions ?? {}).flat()]).some((s) => s.clauses.some(isSpendGate));
 
 /** Khớp nhóm khi bỏ riêng ngưỡng chi tối thiểu (dùng đúng điều kiện Sếp đặt, không thêm ngưỡng mới) */
 export function matchesIgnoringSpend(g: GroupDef, ctx: EvalContext): boolean {
-  return g.conditionSets.some((s) => matchSet({ clauses: s.clauses.filter((c) => !isSpendGate(c)) }, ctx));
+  return setsFor(g, ctx).some((s) => matchSet({ clauses: s.clauses.filter((c) => !isSpendGate(c)) }, ctx));
 }
 
 /**
@@ -95,7 +98,7 @@ export function slowCheck(
 ): 'slowLoss' | 'recovering' | null {
   if (!g.g14 || g.g14 !== g.g30 || g.g7 === g.g14 || !ctx7 || ctx7.cost <= 0) return null;
   const G = findGroup(settings, g.g14, level);
-  if (!G || !isSpendGated(G)) return null;
+  if (!G || !isSpendGated(G, ctx7)) return null;
   return matchesIgnoringSpend(G, ctx7) ? 'slowLoss' : 'recovering';
 }
 

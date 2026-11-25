@@ -1,6 +1,6 @@
 /** Phân loại video / sản phẩm / chiến dịch vào nhóm. Dùng chung web + server. */
 import { formatNumber, shortVnd } from './format.js';
-import { matchesPlatform, matchSet, reasonFor, type EvalContext, type GroupDef } from './groups.js';
+import { matchesPlatform, matchSet, reasonFor, setsFor, usesProductConditions, type EvalContext, type GroupDef } from './groups.js';
 import { breakEvenOf, type AdsSettings } from './settings.js';
 import type { AdsProduct, AdsVideo, Campaign } from './adsSnapshot.js';
 import { effectiveStatus } from './videoStatus.js';
@@ -51,6 +51,7 @@ export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined,
     breakEven: breakEvenOf(settings, p.id),
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
+    productId: p.id,
   };
 }
 
@@ -67,6 +68,7 @@ export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined,
     breakEven: breakEvenOf(settings, video.productId),
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
+    productId: video.productId,
   };
 }
 
@@ -81,10 +83,17 @@ function classifyByGroups(
   for (const group of groups) {
     if (group.kind === 'fallback') return { action: group.id, reason: fallbackReason() };
     if (group.kind !== 'custom') continue;
-    const set = group.conditionSets.find((s) => matchSet(s, ctx));
-    if (set) return { action: group.id, reason: reasonFor(set, ctx) };
+    const hit = matchGroup(group, ctx);
+    if (hit) return hit;
   }
   return null;
+}
+
+/** Khớp 1 nhóm custom (điều kiện riêng sản phẩm nếu có) → kết quả kèm lý do */
+function matchGroup(group: GroupDef, ctx: EvalContext): VideoClassification | null {
+  const set = setsFor(group, ctx).find((s) => matchSet(s, ctx));
+  if (!set) return null;
+  return { action: group.id, reason: reasonFor(set, ctx) + (usesProductConditions(group, ctx) ? ' (riêng SP)' : '') };
 }
 
 const roiText = (ctx: EvalContext) => (ctx.roi == null ? '--' : formatNumber(ctx.roi, 2));
@@ -126,8 +135,8 @@ export function classifyVideo(
       };
     }
 
-    const set = group.conditionSets.find((s) => matchSet(s, ctx));
-    if (set) return { action: group.id, reason: reasonFor(set, ctx) };
+    const hit = matchGroup(group, ctx);
+    if (hit) return hit;
   }
   return null;
 }

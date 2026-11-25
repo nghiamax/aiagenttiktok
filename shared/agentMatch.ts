@@ -316,6 +316,7 @@ function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: A
     breakEven: level === 'campaign' ? null : breakEvenOf(settings, t.productId),
     target: campaign?.targetRoi ?? null,
     budgetUse: level === 'campaign' && campaign?.budget && campaign.cost != null ? (cost / snapshotDays(d7) / campaign.budget) * 100 : null,
+    ...(level !== 'campaign' && { productId: t.productId }),
   };
 }
 
@@ -346,6 +347,7 @@ export function matchRuleTrend(
     if (in7.has(k) || !in30.has(k)) continue;
     const ctx = context7(level, t14.target, d7, settings);
     if (!ctx || ctx.cost <= 0) continue; // 7 ngày không còn chi → không cần làm gì
+    if (!isSpendGated(G, ctx)) continue; // điều kiện riêng của sản phẩm này không có ngưỡng chi
     const main = t14.target.videoId
       ? d7.videos.find((v) => v.campaignId === t14.target.campaignId && v.id === t14.target.videoId && v.productId === t14.target.productId) ??
         d7.videos.find((v) => v.campaignId === t14.target.campaignId && v.id === t14.target.videoId)

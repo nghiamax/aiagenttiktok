@@ -16,6 +16,8 @@ interface TrendGroupCellProps {
    * Khoảng chọn trùng 7 / 14 / 30 ngày → chấm khung đó có viền; khác → thêm dòng "Khoảng chọn: ● nhóm".
    */
   current?: CurrentRange | null;
+  /** Thay "--" khi 7 ngày không có chi / đơn (vd bảng Sản phẩm: "Chưa chi tiêu") */
+  empty?: { label: string; title: string };
 }
 
 /** Nhóm + số của dòng theo khoảng ngày đang chọn */
@@ -39,7 +41,7 @@ const statText = (s: Pick<WindowStat, 'cost' | 'orders' | 'roi'> | null) =>
  * Ô Nhóm theo 3 khung 7 · 14 · 30 ngày đến hôm qua (Sếp chốt 22/11): badge nhóm đã xác nhận (7 = 14 ngày),
  * 3 chấm màu nhóm từng khung (rê chuột xem số), câu ngắn "kéo dài 30 ngày" / "2 tuần gần đây" / "dấu hiệu".
  */
-export default function TrendGroupCell({ level, trend, extra, current }: TrendGroupCellProps) {
+export default function TrendGroupCell({ level, trend, extra, current, empty }: TrendGroupCellProps) {
   const { settings } = useAdsSettings();
   const { viewing } = useTrend();
   const compare = current !== undefined;
@@ -65,8 +67,8 @@ export default function TrendGroupCell({ level, trend, extra, current }: TrendGr
   if (!trend || (!trend.group && !trend.unconfirmed)) {
     return (
       <div className="flex flex-col items-start gap-1">
-        <span className="text-muted" title="Không có chi phí / đơn trong 7 ngày gần nhất">
-          --
+        <span className={empty ? 'cursor-help whitespace-nowrap text-xs text-muted' : 'text-muted'} title={empty?.title ?? 'Không có chi phí / đơn trong 7 ngày gần nhất'}>
+          {empty?.label ?? '--'}
         </span>
         {currentLine}
       </div>

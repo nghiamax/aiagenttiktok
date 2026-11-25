@@ -36,6 +36,12 @@ interface ProductTableProps {
 const PAGE_SIZE = 20;
 /** Sản phẩm đã tắt khỏi chiến dịch: ô lọc riêng, không thuộc nhóm nào (Sếp chốt 25/11, như video Đã gỡ) */
 const EXCLUDED_FILTER = 'excluded';
+/** Sản phẩm đang bật nhưng 7 ngày không có chi / đơn → chưa xếp nhóm (để các ô lọc cộng lại đủ Tất cả) */
+const NO_SPEND_FILTER = 'no_spend';
+const NO_SPEND_CELL = {
+  label: 'Chưa chi tiêu',
+  title: '7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm. Sản phẩm vẫn đang bật trong chiến dịch.',
+};
 
 export default function ProductTable({
   products,
@@ -57,6 +63,8 @@ export default function ProductTable({
   const isPausedRow = (r: Row) => campaignById.get(r.p.campaignId)?.status !== 'running';
   /** Đã tắt khỏi chiến dịch */
   const isExcludedRow = (r: Row) => !!r.p.excluded;
+  /** Đang bật nhưng 7 ngày không có chi / đơn → chưa thuộc nhóm nào */
+  const isNoSpendRow = (r: Row) => !isExcludedRow(r) && !r.trend?.group && !r.trend?.unconfirmed;
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
   const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter && !isPausedRow(r);
   const filtered =
@@ -64,6 +72,8 @@ export default function ProductTable({
       ? rows
       : filter === EXCLUDED_FILTER
         ? rows.filter(isExcludedRow)
+        : filter === NO_SPEND_FILTER
+          ? rows.filter(isNoSpendRow)
         : rows.filter((r) => !isExcludedRow(r) && (r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter)));
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
@@ -76,12 +86,14 @@ export default function ProductTable({
     else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
   }
   const excludedCount = rows.filter(isExcludedRow).length;
+  const noSpendCount = rows.filter(isNoSpendRow).length;
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     ...settings.productGroups.map((g) => ({
       value: g.id,
       label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
     })),
+    ...(noSpendCount > 0 || filter === NO_SPEND_FILTER ? [{ value: NO_SPEND_FILTER, label: `Chưa chi tiêu (${noSpendCount})` }] : []),
     ...(excludedCount > 0 || filter === EXCLUDED_FILTER ? [{ value: EXCLUDED_FILTER, label: `Đã loại trừ (${excludedCount})` }] : []),
   ];
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
@@ -105,6 +117,8 @@ export default function ProductTable({
             groupDescription(activeGroup, 'product')
           ) : filter === EXCLUDED_FILTER ? (
             'Sản phẩm đã tắt khỏi chiến dịch — đánh giá theo số lúc còn chạy (30 ngày) so với ROI hoà vốn'
+          ) : filter === NO_SPEND_FILTER ? (
+            'Sản phẩm đang bật nhưng 7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm'
           ) : (
             <>
               {filtered.length} sản phẩm ·{' '}
@@ -187,7 +201,7 @@ export default function ProductTable({
                     {p.excluded ? (
                       <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} />
                     ) : (
-                      <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                      <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                     )}
                   </td>
                   <td className={TD}>

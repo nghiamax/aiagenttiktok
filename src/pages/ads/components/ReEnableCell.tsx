@@ -1,6 +1,8 @@
 import { RotateCcw } from 'lucide-react';
 import { formatNumber, shortVnd } from '../../../../shared/format';
 import type { TrendInfo, WindowStat } from '../../../../shared/trend';
+import { formatDm } from '../../../lib/dates';
+import { useTrend } from '../trend';
 
 interface ReEnableCellProps {
   trend: TrendInfo | undefined;
@@ -14,28 +16,32 @@ interface ReEnableCellProps {
 export const MIN_ORDERS_TO_SUGGEST = 3;
 
 /**
- * Sản phẩm đã loại trừ / thuộc chiến dịch đã tắt: thay cột Nhóm bằng đánh giá có nên bật lại — theo số lúc còn chạy
- * (khung 30 ngày đến hôm qua, không có thì 14 ngày) so với ROI hoà vốn. Chỉ gợi ý, không tự bật (Sếp chốt 25/11).
+ * Sản phẩm đã loại trừ / thuộc chiến dịch đã tắt: thay cột Nhóm bằng đánh giá có nên bật lại — theo số khung 30 ngày
+ * cố định đến hôm qua (không có thì 14 ngày; ngày sau khi tắt chi = 0 nên chỉ phản ánh phần đã chạy) so với ROI hoà vốn. Chỉ gợi ý, không tự bật (Sếp chốt 25/11).
  */
 export default function ReEnableCell({ trend, breakEven, kind }: ReEnableCellProps) {
+  const { snaps } = useTrend();
   const what = kind === 'paused' ? 'Chiến dịch đã tắt' : 'Đã loại trừ';
+  // Khung cố định theo lịch, đến hôm qua (cùng khung cột Nhóm) — ghi rõ ngày, không phải "lúc còn chạy"
+  const span = (r: { from: string; to: string } | null | undefined, n: number) => (r ? `${n} ngày qua (${formatDm(r.from)}–${formatDm(r.to)})` : `${n} ngày qua`);
+  const label30 = span(snaps.d30?.range, 30);
   const pick: { label: string; s: WindowStat } | null =
     trend?.w30 && (trend.w30.cost ?? 0) > 0
-      ? { label: '30N', s: trend.w30 }
+      ? { label: label30, s: trend.w30 }
       : trend?.w14 && (trend.w14.cost ?? 0) > 0
-        ? { label: '14N', s: trend.w14 }
+        ? { label: span(snaps.d14?.range, 14), s: trend.w14 }
         : null;
 
   if (!pick) {
     return (
-      <span className="text-muted" title={`${what} — 30 ngày gần nhất không có chi phí để đánh giá`}>
+      <span className="text-muted" title={`${what} — ${label30} không có chi phí: tắt trước đó, không đủ số để đánh giá`}>
         --
       </span>
     );
   }
   const { s } = pick;
   const roi = s.roi;
-  const stat = `${pick.label} lúc còn chạy: chi ${shortVnd(s.cost ?? 0)} · ${formatNumber(s.orders ?? 0)} đơn · ROI ${roi == null ? '--' : formatNumber(roi, 2)}`;
+  const stat = `${pick.label}: chi ${shortVnd(s.cost ?? 0)} · ${formatNumber(s.orders ?? 0)} đơn · ROI ${roi == null ? '--' : formatNumber(roi, 2)}`;
   if (breakEven == null || roi == null) {
     return (
       <span className="cursor-help text-xs text-muted" title={`${what}\n${stat}\nChưa nhập ROI hoà vốn — chưa đánh giá được`}>

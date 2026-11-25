@@ -41,7 +41,6 @@ const NO_SPEND_FILTER = 'no_spend';
  * Không thuộc nhóm nào. Mỗi chiến dịch 1 dòng; nhãn từng dòng: "CD đã tắt" (ưu tiên) / "Đã loại trừ" (+ đánh giá bật lại).
  */
 const OFF_FILTER = 'off';
-const PAUSED_CELL = { label: 'Chiến dịch đã tắt', title: 'Chiến dịch đang tắt — sản phẩm không chạy ở chiến dịch này, Agent không làm gì' };
 const NO_SPEND_CELL = {
   label: 'Chưa chi tiêu',
   title: '7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm. Sản phẩm vẫn đang bật trong chiến dịch.',
@@ -207,10 +206,10 @@ export default function ProductTable({
                     </button>
                   </td>
                   <td className={TD}>
-                    {isExcludedRow(row) ? (
-                      <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} />
+                    {isPausedRow(row) || isExcludedRow(row) ? (
+                      <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} kind={isPausedRow(row) ? 'paused' : 'excluded'} />
                     ) : (
-                      <TrendGroupCell level="product" trend={trend} empty={isPausedRow(row) ? PAUSED_CELL : NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                      <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                     )}
                   </td>
                   <td className={TD}>

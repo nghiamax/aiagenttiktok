@@ -130,7 +130,9 @@ export function buildTrendIndex(level: RuleLevel, snaps: TrendSnaps, settings: A
   const list = [snaps.d7, snaps.d14, snaps.d30];
   const perSnap = list.map((s) => (s ? classifyAll(level, s, settings) : null));
   const out = new Map<string, TrendInfo>();
-  const keys = new Set<string>(perSnap[0]?.keys() ?? []);
+  // Mọi đối tượng có ở 7, 14 hoặc 30 ngày (Sếp chốt 25/11): đối tượng không có số 7 ngày (vd sản phẩm đã loại trừ) có g7 = null
+  // → không thuộc nhóm, không thành dấu hiệu, không đổi số đếm — chỉ thêm số 14 / 30 ngày để đánh giá bật lại
+  const keys = new Set<string>(perSnap.flatMap((m) => (m ? [...m.keys()] : [])));
   for (const key of keys) {
     const [a, b, c] = perSnap.map((m) => m?.get(key) ?? null);
     out.set(

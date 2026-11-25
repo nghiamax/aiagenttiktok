@@ -67,6 +67,15 @@ describe('buildTrendIndex', () => {
     const idx = buildTrendIndex('video', { d7: snap(200_000, 0, 0, '2026-11-11'), d14: null, d30: null }, S);
     expect([...idx.values()][0].group).toBe('cut');
   });
+
+  it('đối tượng chỉ có ở 30 ngày (vd sản phẩm đã loại trừ) → có số 30 ngày để đánh giá, nhưng không thuộc nhóm / không là dấu hiệu', () => {
+    const empty = snapshot({ range: { from: '2026-11-11', to: '2026-11-17' }, campaigns: [c], products: [], videos: [] });
+    const idx = buildTrendIndex('product', { d7: empty, d14: empty, d30: snap(800_000, 4_000_000, 8, '2026-10-19') }, S);
+    const t = idx.get('c1/p1')!;
+    expect(t.w30).toMatchObject({ cost: p.cost });
+    expect(t.group).toBeNull();
+    expect(t.unconfirmed).toBe(false);
+  });
 });
 
 describe('Lỗ âm thầm / đang hồi phục (cửa vào 14 + 30 ngày)', () => {

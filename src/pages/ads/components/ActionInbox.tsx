@@ -104,7 +104,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
             className="flex w-fit items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-sm font-medium transition-colors hover:bg-canvas"
           >
             <SlidersHorizontal className="size-4 text-muted" />
-            Sửa định nghĩa nhóm
+            Sửa phân nhóm
           </Link>
           <Link
             to="/care-ads/product"

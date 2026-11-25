@@ -10,6 +10,7 @@ import { useAdsData } from '../../data';
 import type { TrendSnaps } from '../../../../../shared/trend';
 import { LEVEL_OPTIONS, ruleLevel } from '../meta';
 import type { AgentRule } from '../types';
+import { useAllProducts } from '../../allProducts';
 import GroupCard from './GroupCard';
 
 interface GroupsEditorProps {
@@ -56,7 +57,8 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   const { settings, saveGroups, resetGroups } = useAdsSettings();
   const { snapshot } = useAdsData();
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
-  const uniqueProducts = useMemo(() => [...new Map(snapshot.products.map((p) => [p.id, p])).values()], [snapshot]);
+  // Mọi sản phẩm có số trong 7 / 14 / 30 ngày (nhập ROI hoà vốn đủ, kể cả sản phẩm đã loại trừ)
+  const uniqueProducts = useAllProducts().breakEven;
   const saved = groupsOf(settings, level);
   const [draft, setDraft] = useState<GroupDef[]>(saved);
   /** Nhóm vừa bấm "Thêm nhóm" → cuộn tới + nổi bật */

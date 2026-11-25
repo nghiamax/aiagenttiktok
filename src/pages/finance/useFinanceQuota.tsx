@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../../lib/api';
+import { useAuth } from '../../auth/AuthProvider';
 import type { FinanceQuota } from '../../../shared/plans';
 
 /* Gói + lượt Tính giá bán của tài khoản đang đăng nhập (server đếm, web chỉ hiển thị) */
@@ -16,8 +17,10 @@ interface QuotaValue {
 const QuotaContext = createContext<QuotaValue | null>(null);
 
 export function FinanceQuotaProvider({ children }: { children: ReactNode }) {
+  const { guest } = useAuth();
   const [quota, setQuota] = useState<FinanceQuota | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Chế độ khách: không có lượt, không gọi API (quota null → không đếm lượt)
+  const [loading, setLoading] = useState(!guest);
 
   const reload = useCallback(async () => {
     try {
@@ -30,8 +33,8 @@ export function FinanceQuotaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (!guest) void reload();
+  }, [reload, guest]);
 
   const consume = useCallback(async () => {
     try {

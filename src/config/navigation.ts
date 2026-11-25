@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BookOpen,
   Bot,
   Calculator,
   Eye,
@@ -12,7 +13,6 @@ import {
   ShoppingBag,
   TrendingUp,
   UserCog,
-  Users,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -39,16 +39,16 @@ export interface NavItem {
   label: string;
   path: string;
   icon: LucideIcon;
-  /** Quyền cần có để thấy mục này (xem shared/permissions.ts) */
-  permission: Permission;
+  /** Quyền cần có để thấy mục này (xem shared/permissions.ts); không ghi = mọi người, kể cả chưa đăng nhập */
+  permission?: Permission;
   /** Không dùng làm trang mở đầu sau khi đăng nhập */
   notHome?: boolean;
   /** Mục con hiện dưới mục cha (ẩn khi sidebar thu gọn) */
   children?: NavChild[];
 }
 
-export const APP_NAME = 'Shop Agent';
-export const APP_TAGLINE = 'Vận hành TikTok Shop';
+export const APP_NAME = 'NECOTOO';
+export const APP_TAGLINE = 'Quảng Cáo Tự Động';
 
 /** Nguồn duy nhất cho danh sách tab trên sidebar. Thêm tab mới tại đây. */
 export const NAV_ITEMS: NavItem[] = [
@@ -73,8 +73,6 @@ export const NAV_ITEMS: NavItem[] = [
       { label: 'GMV Max Livestream', path: '/care-ads/live', icon: Radio },
     ],
   },
-  { label: 'Đơn hàng', path: '/orders', icon: ShoppingBag, permission: 'view' },
-  { label: 'Booking KOC', path: '/koc-booking', icon: Users, permission: 'view' },
   {
     label: 'Tài chính',
     path: '/finance',
@@ -97,9 +95,11 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: 'Tài khoản', path: '/admin/users', icon: UserCog, permission: 'manage_users' },
+  // Ai cũng xem được (cả khi chưa đăng nhập)
+  { label: 'Hướng dẫn sử dụng', path: '/guide', icon: BookOpen, notHome: true },
 ];
 
 /** Trang mở đầu tiên sau khi đăng nhập: mục đầu tiên tài khoản được thấy */
 export function homePath(can: (p: Permission) => boolean): string {
-  return NAV_ITEMS.find((n) => !n.notHome && can(n.permission))?.path ?? '/finance';
+  return NAV_ITEMS.find((n) => !n.notHome && (!n.permission || can(n.permission)))?.path ?? '/finance';
 }

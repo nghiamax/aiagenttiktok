@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '../../../auth/AuthProvider';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, CircleDashed, Download, Loader2, LogIn, MinusCircle } from 'lucide-react';
 import Card from '../../../components/ui/Card';
@@ -57,6 +58,7 @@ const ICON: Record<StepStatus, JSX.Element> = {
  * Chờ quyết toán, Đơn hàng cho kỳ đã chọn → file về tự đọc và đưa vào trang tính.
  */
 export default function SellerFetchCard({ onAdd }: { onAdd: (files: ProfitFile[]) => void }) {
+  const { guest } = useAuth();
   const { state, enabled, reload } = useSeller('tiktok');
   const [range, setRange] = useState(lastMonth);
   const [job, setJob] = useState<FetchJob | null>(null);
@@ -88,10 +90,11 @@ export default function SellerFetchCard({ onAdd }: { onAdd: (files: ProfitFile[]
 
   // Mở trang: có lần lấy đang chạy (vd tải lại trang giữa chừng) → theo dõi tiếp
   useEffect(() => {
+    if (guest) return; // chế độ khách: không hỏi server
     void api<{ job: FetchJob | null }>('/seller/tiktok/fetch')
       .then((r) => r.job?.running && setJob(r.job))
       .catch(() => undefined);
-  }, []);
+  }, [guest]);
 
   useEffect(() => {
     if (!job?.running) return;

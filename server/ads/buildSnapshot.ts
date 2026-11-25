@@ -19,8 +19,9 @@ interface ReportData {
 /**
  * Phiên bản cách dựng snapshot. ĐỔI CÁCH DỰNG / LỌC / ĐỐI CHIẾU → TĂNG SỐ NÀY để cache cũ (kể cả cache "giữ mãi") tự dựng lại.
  * 2 (21/11/2026): đối chiếu dòng "cần ủy quyền" giả trước khi lọc dòng 0 chi.
+ * 3 (25/11/2026): đánh dấu sản phẩm đã loại trừ (`excluded`) theo danh sách sản phẩm đang bật của chiến dịch.
  */
-export const SNAPSHOT_BUILD = 2;
+export const SNAPSHOT_BUILD = 3;
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 20;
@@ -92,6 +93,31 @@ async function fetchVideos(range: DateRange, campaignId: string, productId: stri
   return rows.map((r) => rowToVideo(r, campaignId, productId));
 }
 
+/**
+ * Sản phẩm đang bật của chiến dịch chọn sản phẩm thủ công (CUSTOMIZED_PRODUCTS) → Set item_group_id.
+ * Chiến dịch tự chọn sản phẩm / không đọc được → null (không đánh dấu loại trừ — không đoán).
+ */
+async function fetchEnabledProducts(campaignId: string): Promise<Set<string> | null> {
+  try {
+    const info = await callReadTool<{ product_specific_type?: string; item_group_ids?: string[] }>('campaign_gmv_max_info_get', {
+      advertiser_id: requireAccount().advertiserId,
+      campaign_id: campaignId,
+    });
+    if (info.product_specific_type !== 'CUSTOMIZED_PRODUCTS' || !Array.isArray(info.item_group_ids)) return null;
+    return new Set(info.item_group_ids.map(String));
+  } catch {
+    return null;
+  }
+}
+
+/** Đánh dấu sản phẩm đã loại trừ theo danh sách đang bật của từng chiến dịch (thuần — để test) */
+export function markExcluded<T extends Pick<AdsProduct, 'id' | 'campaignId'>>(products: T[], enabled: Map<string, Set<string> | null>): (T & { excluded?: boolean })[] {
+  return products.map((p) => {
+    const set = enabled.get(p.campaignId);
+    return set && !set.has(p.id) ? { ...p, excluded: true } : p;
+  });
+}
+
 /** Dựng snapshot số liệu GMV Max sản phẩm cho khoảng ngày (chỉ gọi tool đọc) */
 export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const acct = requireAccount();
@@ -102,8 +128,12 @@ export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const baseCampaigns = campaignRows.map(toCampaign);
 
   // Sản phẩm của từng chiến dịch
-  const productLists = await Promise.all(baseCampaigns.map((c) => fetchProducts(range, c.id)));
-  const baseProducts = productLists.flat();
+  const [productLists, enabledLists] = await Promise.all([
+    Promise.all(baseCampaigns.map((c) => fetchProducts(range, c.id))),
+    Promise.all(baseCampaigns.map((c) => fetchEnabledProducts(c.id))),
+  ]);
+  const enabled = new Map(baseCampaigns.map((c, i) => [c.id, enabledLists[i]] as const));
+  const baseProducts = markExcluded(productLists.flat(), enabled);
 
   // Video của từng (chiến dịch, sản phẩm). Đối chiếu dòng "cần ủy quyền" giả trên MỌI dòng (kể cả dòng không hoạt động)
   // rồi mới bỏ dòng không hoạt động — nếu lọc trước, dòng thật 0 chi ở sản phẩm khác bị mất, dòng giả bị coi là thật.

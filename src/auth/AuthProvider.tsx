@@ -1,22 +1,19 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import LoginModal, { type AuthMode } from './LoginModal';
 import { api, ApiError, AUTH_REQUIRED_EVENT } from '../lib/api';
 import { can as roleCan, type Permission, type PublicUser } from '../../shared/permissions';
+import { AuthContext, type AuthStatus, type AuthValue } from './authContext';
 
-/* Phiên đăng nhập web: tải /api/auth/me lúc mở trang; API trả AUTH_REQUIRED → về trang đăng nhập */
+export { useAuth, useNoPermission } from './authContext';
 
-type AuthStatus = 'loading' | 'signedIn' | 'signedOut' | 'offline';
+/*
+ * Phiên đăng nhập web: tải /api/auth/me lúc mở trang.
+ * Chưa đăng nhập = CHẾ ĐỘ KHÁCH: vẫn ở trong app, các ô không có dữ liệu (provider không gọi API), bấm chức năng → hộp đăng nhập.
+ * API trả AUTH_REQUIRED (phiên hết hạn) → về chế độ khách + mở hộp đăng nhập.
+ */
 
-interface AuthValue {
-  status: AuthStatus;
-  user: PublicUser | null;
-  /** Kiểm tra quyền — dùng để mờ nút; server vẫn kiểm tra lại */
-  can: (p: Permission) => boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  refresh: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthValue | null>(null);
+const DEFAULT_PROMPT = 'Đăng nhập để dùng chức năng này và xem số liệu shop.';
+const EXPIRED_TEXT = 'Phiên đăng nhập đã hết — đăng nhập lại để tiếp tục.';
 
 interface MeResponse {
   user: PublicUser;
@@ -25,7 +22,11 @@ interface MeResponse {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const [user, setUser] = useState<PublicUser | null>(null);
+  /** Hộp đăng nhập / đăng ký đang mở; null = đóng */
+  const [prompt, setPrompt] = useState<{ mode: AuthMode; reason: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,6 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const onRequired = () => {
+      // Đang đăng nhập mà server báo hết phiên → về chế độ khách + mở hộp đăng nhập lại
+      if (statusRef.current === 'signedIn') setPrompt({ mode: 'login', reason: EXPIRED_TEXT });
       setUser(null);
       setStatus('signedOut');
     };
@@ -61,27 +64,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signedIn');
   }, []);
 
+  const register = useCallback(async (input: { name: string; username: string; password: string }) => {
+    const me = await api<MeResponse>('/auth/register', { method: 'POST', body: input });
+    setUser(me.user);
+    setStatus('signedIn');
+  }, []);
+
   const logout = useCallback(async () => {
     await api('/auth/logout', { method: 'POST', body: {} }).catch(() => undefined);
     setUser(null);
     setStatus('signedOut');
   }, []);
 
+  const promptLogin = useCallback((reason?: string) => setPrompt({ mode: 'login', reason: reason ?? DEFAULT_PROMPT }), []);
+  const promptRegister = useCallback(() => setPrompt({ mode: 'register', reason: DEFAULT_PROMPT }), []);
+  const closePrompt = useCallback(() => setPrompt(null), []);
+
   const value = useMemo<AuthValue>(
-    () => ({ status, user, can: (p) => roleCan(user?.role, p), login, logout, refresh }),
-    [status, user, login, logout, refresh],
+    () => ({
+      status,
+      user,
+      guest: status !== 'signedIn',
+      promptLogin,
+      promptRegister,
+      can: (p) => roleCan(user?.role, p),
+      login,
+      register,
+      logout,
+      refresh,
+    }),
+    [status, user, promptLogin, promptRegister, login, register, logout, refresh],
   );
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthValue {
-  const v = useContext(AuthContext);
-  if (!v) throw new Error('useAuth cần nằm trong AuthProvider');
-  return v;
-}
-
-/** Lý do không bấm được vì thiếu quyền (null = được) — dùng cho tooltip nút */
-export function useNoPermission(p: Permission): string | null {
-  const { can } = useAuth();
-  return can(p) ? null : 'Tài khoản không có quyền';
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {prompt && status !== 'signedIn' && (
+        <LoginModal mode={prompt.mode} reason={prompt.reason} onClose={closePrompt} />
+      )}
+    </AuthContext.Provider>
+  );
 }

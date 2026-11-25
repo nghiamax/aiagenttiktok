@@ -16,6 +16,7 @@ import RuleCard from './components/RuleCard';
 import RuleFormModal from './components/RuleFormModal';
 import GroupsEditor from './components/GroupsEditor';
 import BreakEvenModal from '../components/BreakEvenModal';
+import { useAllProducts } from '../allProducts';
 import type { AgentView } from './types';
 import { useAgentStore } from './agentStore';
 import { activeRuleCount, pendingProposals, useAgentConfig } from './useAgentConfig';
@@ -29,6 +30,7 @@ const LEVELS: readonly GroupLevel[] = ['video', 'product', 'campaign'];
 export default function AgentPage() {
   const [params, setParams] = useSearchParams();
   const { snapshot } = useAdsData();
+  const allProducts = useAllProducts();
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   const rawView = params.get('view');
   const setView = (v: AgentView) => setParams({ view: v });
@@ -106,7 +108,7 @@ export default function AgentPage() {
                 pending: `${pending.length}${signals.length ? ` · ${signals.length} dấu hiệu` : ''}`,
                 log: String(agentState.actions.length),
                 rules: `${active}/${config.rules.length}`,
-                groups: String(settings.groups.length + settings.productGroups.length + settings.campaignGroups.length),
+                groups: '',
                 impact: '',
               }}
             />
@@ -143,7 +145,7 @@ export default function AgentPage() {
                   <p className="max-w-2xl text-sm text-muted">
                     Quy tắc chạy theo các nhóm video / sản phẩm / chiến dịch Sếp định nghĩa ở tab{' '}
                     <button type="button" onClick={() => setView('groups')} className="font-medium text-primary hover:text-primary-hover">
-                      Nhóm
+                      Phân nhóm
                     </button>
                     . Thay đổi được lưu trên server.
                   </p>
@@ -187,7 +189,7 @@ export default function AgentPage() {
 
       {breakEvenOpen && (
         <BreakEvenModal
-          products={snapshot.products}
+          products={allProducts.breakEven}
           campaignById={campaignById}
           settings={settings}
           onSave={saveSettings}

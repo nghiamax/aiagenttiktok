@@ -13,7 +13,7 @@ const iconButton =
 export default function Header({ onOpenMobileMenu, onOpenTikTok }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-white/90 px-4 backdrop-blur md:px-8">
-      <button type="button" onClick={onOpenMobileMenu} className={`${iconButton} lg:hidden`} aria-label="Mở menu">
+      <button type="button" data-guest-allow onClick={onOpenMobileMenu} className={`${iconButton} lg:hidden`} aria-label="Mở menu">
         <Menu className="size-5" />
       </button>
 

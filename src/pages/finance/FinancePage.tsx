@@ -20,9 +20,10 @@ const DESCRIPTION: Record<string, string> = {
 export default function FinancePage() {
   const { pathname } = useLocation();
   const section = pathname.includes('/finance/profit') ? 'profit' : 'pricing';
-  const userId = useAuth().user?.id;
-  // Tải giá vốn đã nhớ của tài khoản trước khi mở trang con (tối đa 4 giây; lỗi → dùng bản trên máy)
-  const [costsReady, setCostsReady] = useState(false);
+  const { user, guest } = useAuth();
+  const userId = user?.id;
+  // Tải giá vốn đã nhớ của tài khoản trước khi mở trang con (tối đa 4 giây; lỗi → dùng bản trên máy); khách: không tải
+  const [costsReady, setCostsReady] = useState(guest);
   useEffect(() => {
     if (!userId) return;
     let done = false;

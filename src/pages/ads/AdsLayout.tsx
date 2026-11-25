@@ -3,7 +3,9 @@ import { Bot, Megaphone } from 'lucide-react';
 import ConnectTikTokCard from '../../components/ui/ConnectTikTokCard';
 import ChooseAccountCard from '../../components/ui/ChooseAccountCard';
 import CreateShopCard from '../../components/ui/CreateShopCard';
+import GuideVideoCard from '../../components/ui/GuideVideoCard';
 import { useShop } from '../../shop/ShopProvider';
+import { useAuth } from '../../auth/AuthProvider';
 import PageHeader from '../../components/ui/PageHeader';
 import { useTikTok } from '../../tiktok/TikTokProvider';
 import { AgentStoreProvider } from './agent/agentStore';
@@ -14,16 +16,19 @@ import { WatchlistProvider } from './watchlist';
 
 /**
  * Khung chung của Quản lí chiến dịch (/ads) + Care Ads 24/7 (/care-ads, BOT AI): số liệu theo ngày + thiết lập phân loại + dữ liệu Agent (server).
- * Chưa kết nối TikTok lần nào → chỉ hiện thẻ "Kết nối TikTok để bắt đầu" (không hiện số liệu lưu sẵn, không có Agent).
+ * Chưa đăng nhập / chưa có tài khoản quảng cáo / chưa kết nối / chưa chọn tài khoản → chỉ hiện thẻ hướng dẫn bước đó
+ * + Video hướng dẫn sử dụng (không hiện bảng số liệu rỗng, không có Agent).
  */
 export default function AdsLayout() {
   const { status, checked } = useTikTok();
   const shop = useShop();
   const care = useLocation().pathname.startsWith('/care-ads');
+  const { guest } = useAuth();
   // Chờ đọc shop + trạng thái kết nối (rất nhanh) để không nháy số liệu lưu sẵn trước thẻ chào
-  if (!shop.loaded || (shop.current && !checked)) return null;
+  if (!guest && (!shop.loaded || (shop.current && !checked))) return null;
   // Thứ tự: chưa có shop → tạo shop; shop chưa kết nối TikTok → kết nối; đã kết nối mà chưa chọn tài khoản → chọn
-  const gate = !shop.current
+  // Chưa đăng nhập = như chưa có tài khoản quảng cáo (bấm nút → hộp đăng nhập)
+  const gate = guest || !shop.current
     ? <CreateShopCard />
     : status?.state === 'never'
       ? <ConnectTikTokCard />
@@ -39,6 +44,7 @@ export default function AdsLayout() {
           <PageHeader icon={Megaphone} title="Quản lí chiến dịch" description="Theo dõi và tối ưu chiến dịch GMV Max sản phẩm trên TikTok Ads." />
         )}
         {gate}
+        <GuideVideoCard />
       </>
     );
   }

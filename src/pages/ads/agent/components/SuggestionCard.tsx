@@ -65,7 +65,7 @@ export default function SuggestionCard({ suggestion: s, onApply, onDismiss, onOp
           ) : s.action.kind === 'info' ? null : s.action.groupMissing ? (
             <Link
               to={`/care-ads/product?view=groups&level=${s.action.level}`}
-              title="Shop đã xoá nhóm dùng cho quy tắc này — tạo lại nhóm ở tab Nhóm để bật quy tắc"
+              title="Shop đã xoá nhóm dùng cho quy tắc này — tạo lại nhóm ở tab Phân nhóm để bật quy tắc"
               className="flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-muted transition hover:bg-canvas hover:text-ink"
             >
               Chưa có nhóm phù hợp

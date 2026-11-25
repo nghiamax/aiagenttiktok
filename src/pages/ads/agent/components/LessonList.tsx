@@ -15,7 +15,7 @@ const TONE = {
 } as const;
 
 const TARGET_LABEL: Record<LessonTarget, string> = {
-  groups: 'Sửa nhóm video',
+  groups: 'Sửa phân nhóm video',
   rules: 'Mở Quy tắc',
   breakEven: 'Nhập ROI hoà vốn',
 };

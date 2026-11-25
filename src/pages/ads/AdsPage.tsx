@@ -8,6 +8,7 @@ import { useAgentStore } from './agent/agentStore';
 import { activeRuleCount, pendingProposals, ruleForTrigger } from './agent/useAgentConfig';
 import { shortVnd } from './classify';
 import { useTrend } from './trend';
+import { useAllProducts } from './allProducts';
 import type { TrendInfo } from '../../../shared/trend';
 import ActionInbox, { type ActionSummary, type InboxSummary } from './components/ActionInbox';
 import AdsStatsGrid from './components/AdsStatsGrid';
@@ -96,6 +97,7 @@ export default function AdsPage() {
   // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét, không đổi theo ô chọn ngày).
   // Chưa xác nhận (7 ngày khác 14 ngày) → không tính, chỉ ghi chú dưới ô của nhóm 7 ngày
   const trends = useTrend();
+  const allProducts = useAllProducts();
   const inbox = useMemo(() => {
     const d7 = trends.snaps.d7;
     const campaigns7 = new Map(d7.campaigns.map((c) => [c.id, c]));
@@ -130,7 +132,7 @@ export default function AdsPage() {
       }
     }
     for (const p of d7.products) {
-      if (!running(p.campaignId)) continue;
+      if (!running(p.campaignId) || p.excluded) continue; // sản phẩm đã tắt khỏi chiến dịch → không tính (ô lọc riêng ở bảng)
       const group = confirmedGroup(summary.product, trends.product(p), `${p.campaignId}/${p.id}`);
       if (group) addTo(summary.product, group, p.cost, p.revenue);
     }
@@ -149,7 +151,8 @@ export default function AdsPage() {
   const inCampaign = (id: string) => !campaignId || id === campaignId;
 
   const campaigns = snapshot.campaigns.filter((c) => inCampaign(c.id));
-  const products = snapshot.products.filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
+  // + sản phẩm đã loại trừ chỉ có số trong 30 / 14 ngày (useAllProducts)
+  const products = allProducts.table.filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
   const videos = snapshot.videos.filter(
     (v) =>
       inCampaign(v.campaignId) && (!productId || v.productId === productId) && matches(v.title, v.id, v.identityName),
@@ -309,7 +312,7 @@ export default function AdsPage() {
 
       {settingsOpen && (
         <BreakEvenModal
-          products={snapshot.products}
+          products={allProducts.breakEven}
           campaignById={campaignById}
           settings={settings}
           onSave={save}

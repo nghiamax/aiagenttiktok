@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import defaultsJson from '../../data/ads-settings.json';
 import { api } from '../../lib/api';
+import { useAuth } from '../../auth/AuthProvider';
 import {
   GROUP_KEY,
   groupsOf,
@@ -67,8 +68,11 @@ const RETRY_MS = 5000;
 
 /** Bọc các trang ADS 24/7 để Tổng quan và AI Agent dùng chung một bản thiết lập (lưu trên server) */
 export function AdsSettingsProvider({ children }: { children: ReactNode }) {
-  // Chưa tải xong thì dùng bản cũ trong trình duyệt (nếu có) để không bị nháy về mặc định
-  const [settings, setSettings] = useState<AdsSettings>(() => normalizeSettings(readLegacy(), DEFAULT_SETTINGS));
+  const { guest } = useAuth();
+  // Chưa tải xong thì dùng bản cũ trong trình duyệt (nếu có) để không bị nháy về mặc định; khách = mặc định
+  const [settings, setSettings] = useState<AdsSettings>(() =>
+    guest ? DEFAULT_SETTINGS : normalizeSettings(readLegacy(), DEFAULT_SETTINGS),
+  );
   const [syncError, setSyncError] = useState<string | null>(null);
   /** Đã tải được thiết lập từ server — chưa tải thì KHÔNG cho lưu (tránh ghi đè ROI hoà vốn / nhóm bằng mặc định) */
   const [loaded, setLoaded] = useState(false);
@@ -76,6 +80,8 @@ export function AdsSettingsProvider({ children }: { children: ReactNode }) {
 
   // Tải thiết lập; server chưa chạy thì thử lại mỗi 5 giây tới khi được
   useEffect(() => {
+    // Chế độ khách: không gọi API, không lưu (loaded = false chặn apply)
+    if (guest) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
@@ -103,7 +109,7 @@ export function AdsSettingsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [guest]);
 
   const apply = useCallback((next: AdsSettings) => {
     if (!loadedRef.current) {

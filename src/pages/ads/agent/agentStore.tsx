@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import agentJson from '../../../data/agent.json';
 import { api } from '../../../lib/api';
+import { useAuth } from '../../../auth/AuthProvider';
 import type { ActionStatus, AgentActionType, AgentConfig, AgentGuardrails, AgentRule, AgentRuleParams, AgentState, AgentTarget } from './types';
 
 /** Mặc định khi chưa kết nối server (src/data/agent.json) */
@@ -89,6 +90,8 @@ function clearLegacy() {
 
 /** Dữ liệu Agent dùng chung (Tổng quan + AI Agent), lưu trên server */
 export function AgentStoreProvider({ children }: { children: ReactNode }) {
+  // Chế độ khách: giữ mặc định, không gọi API (provider dựng lại khi đăng nhập)
+  const { guest } = useAuth();
   const [state, setState] = useState<AgentState>(DEFAULT_STATE);
   const [running, setRunning] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -108,6 +111,7 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
 
   // Lần đầu: tải từ server; server chưa có cấu hình mà trình duyệt còn bản cũ → đẩy lên
   useEffect(() => {
+    if (guest) return;
     let cancelled = false;
     (async () => {
       try {
@@ -129,17 +133,17 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [accept, fail]);
+  }, [guest, accept, fail]);
 
   // Có dòng nhật ký đang chờ TikTok xác nhận, hoặc chưa kết nối được server → tải lại mỗi 5 giây
   const hasRunning = state.actions.some((a) => a.status === 'running');
   useEffect(() => {
-    if (!hasRunning && connected) return;
+    if (guest || (!hasRunning && connected)) return;
     const timer = setInterval(() => {
       api<ServerState>('/agent/state').then(accept, () => undefined);
     }, FAST_POLL_MS);
     return () => clearInterval(timer);
-  }, [hasRunning, connected, accept]);
+  }, [guest, hasRunning, connected, accept]);
 
   /** Lưu cấu hình. Chưa tải được từ server thì KHÔNG lưu (tránh ghi đè quy tắc / giới hạn bằng mặc định) */
   const saveConfig = useCallback(

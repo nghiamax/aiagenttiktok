@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../../../auth/authContext';
 import { readBulkCosts, writeBulkCost } from '../pricing/bulk/useBulkStore';
 import { pushCosts } from '../costSync';
 import type { OtherCost, ProfitData, ProfitOptions } from './profitCalc';
@@ -63,22 +64,26 @@ function load(key: string): ProfitState {
 /** File + chi phí khác + tuỳ chọn của trang Tính lợi nhuận, lưu trên trình duyệt này */
 export function useProfitStore(platform: ProfitPlatform = 'tiktok') {
   const key = keyOf(platform);
-  const [state, setState] = useState<ProfitState>(() => load(key));
+  // Chế độ khách: không đọc / ghi file đã tải trên trình duyệt này
+  const { guest } = useAuth();
+  const [state, setState] = useState<ProfitState>(() => (guest ? DEFAULT : load(key)));
   const [saveError, setSaveError] = useState(false);
   useEffect(() => {
+    if (guest) return;
     try {
       localStorage.setItem(key, JSON.stringify(state));
       setSaveError(false);
     } catch {
       setSaveError(true); // file quá lớn so với bộ nhớ trình duyệt → vẫn tính được, chỉ không nhớ khi tải lại trang
     }
-  }, [state, key]);
+  }, [state, key, guest]);
   return { state, setState, saveError };
 }
 
 /** Giá vốn theo SKU của từng sàn — dùng chung với Tính giá bán → Tính hàng loạt cùng sàn */
 export function useSharedCosts(platform: ProfitPlatform = 'tiktok') {
-  const [costs, setCosts] = useState<Record<string, number>>(() => readBulkCosts(platform));
+  const { guest } = useAuth();
+  const [costs, setCosts] = useState<Record<string, number>>(() => (guest ? {} : readBulkCosts(platform)));
   const setCost = useCallback(
     (key: string, value: number) => {
       writeBulkCost(platform, key, value);

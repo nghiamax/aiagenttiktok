@@ -16,7 +16,7 @@ import {
 } from '../../groups';
 import { METRICS_BY_LEVEL, VALUE_TYPES_BY_LEVEL } from '../meta';
 import ConditionSetsEditor from './ConditionSetsEditor';
-import ConditionScopeEditor from './ConditionScopeEditor';
+import ProductConditionsEditor from './ProductConditionsEditor';
 import type { AdsProduct } from '../../types';
 
 const SUBJECT: Record<GroupLevel, string> = {
@@ -218,25 +218,28 @@ export default function GroupCard({
             {groupDescription(group, level)}
             {group.kind === 'platform' && ' (quy tắc của sàn, không sửa được)'}
           </p>
-        ) : perProduct ? (
-          <ConditionScopeEditor
+        ) : (
+          <>
+            {perProduct && <p className="mb-2 text-sm font-semibold">Điều kiện chung (mọi sản phẩm)</p>}
+            <ConditionSetsEditor
+              sets={sets}
+              onChange={setSets}
+              subject={SUBJECT[level]}
+              metrics={METRICS_BY_LEVEL[level]}
+              valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+            />
+          </>
+        )}
+        {perProduct && (
+          <ProductConditionsEditor
+            value={group.productConditions ?? {}}
+            onChange={(next) => onChange({ productConditions: Object.keys(next).length ? next : undefined })}
             general={sets}
-            onGeneralChange={setSets}
-            own={group.productConditions ?? {}}
-            onOwnChange={(next) => onChange({ productConditions: Object.keys(next).length ? next : undefined })}
             products={products}
             subject={SUBJECT[level]}
             metrics={METRICS_BY_LEVEL[level]}
             valueTypes={VALUE_TYPES_BY_LEVEL[level]}
-            initialProductId={focusProductId}
-          />
-        ) : (
-          <ConditionSetsEditor
-            sets={sets}
-            onChange={setSets}
-            subject={SUBJECT[level]}
-            metrics={METRICS_BY_LEVEL[level]}
-            valueTypes={VALUE_TYPES_BY_LEVEL[level]}
+            focusProductId={focusProductId}
           />
         )}
       </div>

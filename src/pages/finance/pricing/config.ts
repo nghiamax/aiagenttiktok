@@ -24,6 +24,8 @@ export interface PricingConfig {
   profiles: Record<ProfileKey, FeeProfile>;
   /** Thuế sàn khấu trừ của hộ kinh doanh (% giá bán) */
   taxPct: number;
+  /** Chương trình tuỳ chọn của sàn shop có đăng ký: "<sàn:loại shop>|<id phí hệ thống>" */
+  optIn: string[];
 }
 
 export const PLATFORM_LABEL: Record<Platform, string> = { tiktok: 'TikTok Shop', shopee: 'Shopee' };
@@ -35,16 +37,12 @@ export const SHOP_TYPE_LABEL: Record<Platform, Record<ShopType, string>> = {
 export const profileKey = (p: Platform, s: ShopType): ProfileKey => `${p}:${s}`;
 
 /**
- * Mặc định để trống (0) — biểu phí của sàn đổi thường xuyên, Sếp tự nhập theo thông báo mới nhất.
- * Không tự điền tỷ lệ phí.
+ * Khoản phí RIÊNG của shop (khách tự nhập, mặc định 0) — phí cố định của sàn (phí giao dịch, phí xử lý đơn…)
+ * do hệ thống cung cấp ở `shared/platformFees.ts`, không nằm ở đây.
  */
 function emptyProfile(): FeeProfile {
   return {
-    fees: [
-      { id: 'payment', label: 'Phí thanh toán / giao dịch', kind: 'pct', value: 0 },
-      { id: 'service', label: 'Phí dịch vụ (Freeship, Voucher…)', kind: 'pct', value: 0 },
-      { id: 'fixed', label: 'Phí cố định mỗi đơn', kind: 'fixed', value: 0 },
-    ],
+    fees: [{ id: 'service', label: 'Phí dịch vụ (Freeship, Voucher…)', kind: 'pct', value: 0 }],
     categories: [],
   };
 }
@@ -58,6 +56,7 @@ export function defaultConfig(): PricingConfig {
       'shopee:mall': emptyProfile(),
     },
     taxPct: 1.5,
+    optIn: [],
   };
 }
 
@@ -76,6 +75,8 @@ export function normalizeConfig(raw: unknown): PricingConfig {
     if (Array.isArray(p.fees)) {
       base.profiles[key].fees = p.fees
         .filter((f) => f && typeof f.id === 'string' && typeof f.label === 'string')
+        // Dòng mẫu cũ chưa nhập (phí giao dịch / phí cố định) → nay hệ thống cung cấp, bỏ để không trùng
+        .filter((f) => !((f.id === 'payment' || f.id === 'fixed') && !(Number(f.value) > 0)))
         .map((f) => ({ id: f.id, label: f.label, kind: f.kind === 'fixed' ? 'fixed' : 'pct', value: num(f.value) }));
     }
     // Bản cũ: bảng phí ngành khách tự tải lên (có categoriesSource) → bỏ, nay dùng bảng của hệ thống
@@ -92,6 +93,7 @@ export function normalizeConfig(raw: unknown): PricingConfig {
     }
   }
   base.taxPct = num(r.taxPct, base.taxPct);
+  base.optIn = Array.isArray(r.optIn) ? r.optIn.filter((x): x is string => typeof x === 'string').slice(0, 50) : [];
   return base;
 }
 

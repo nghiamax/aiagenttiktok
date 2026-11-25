@@ -59,6 +59,11 @@ export interface ProfitOptions {
   /** Phí GMV Max đã trừ trong quyết toán → bớt khỏi chi phí file quảng cáo để không tính 2 lần */
   dedupeGmvMax: boolean;
   /**
+   * TikTok: shop có tham gia chương trình Hoàn phí vận chuyển (mặc định = như file). false = tính thử "nếu không đăng ký":
+   * bỏ "Phí dịch vụ SFR" và cả "Hoàn tiền chương trình đảm bảo" (`withoutSfr`)
+   */
+  sfrEnrolled?: boolean;
+  /**
    * Kỳ tính: `order` = đơn đặt trong kỳ của file đơn hàng (mặc định) · `payment` = mọi đơn / khoản sàn ĐÃ TRẢ
    * trong file quyết toán (khớp báo cáo thu nhập tháng của Shopee); không dùng số ước tính
    */
@@ -67,6 +72,13 @@ export interface ProfitOptions {
 
 export type ProfitBasis = 'order' | 'payment';
 const ORDER_ROW = /(^|\s)(don hang|order)$/;
+/** Phí GMV Max trừ thẳng trong từng đơn (đã nằm trong chi phí file quảng cáo) */
+const GMV_KEYS = new Set(['gmvMax', 'gmvVoucher', 'gmvVoucherTax', 'gmvAds']);
+/**
+ * Dòng TikTok "GMV thanh toán cho Quảng cáo TikTok" = tiền trích từ số dư đã quyết toán để NẠP ví quảng cáo
+ * (không phải phí). Có file quảng cáo → chi phí quảng cáo lấy theo file, dòng nạp tiền không trừ thêm (tránh tính 2 lần).
+ */
+const ADS_TOPUP = /(thanh toan cho quang (cao|ba)|nap tien quang cao)/;
 
 export interface ProfitData {
   orders: OrderLine[];
@@ -111,6 +123,8 @@ export interface FeeLineResult {
   key: string;
   label: string;
   amount: number;
+  /** Nhóm hiển thị (Phí sàn, Vận chuyển, Hoa hồng liên kết…) */
+  section?: string;
 }
 
 export interface ProfitResult {
@@ -122,6 +136,11 @@ export interface ProfitResult {
   adjustmentLines: { label: string; count: number; amount: number }[];
   /** Dòng đơn đã tính theo file nguồn (Shopee: Shop / Shopee Xử Lý) → đối chiếu từng báo cáo */
   incomeBySource: SourceTotals[];
+  /**
+   * TikTok "GMV thanh toán cho Quảng cáo TikTok" (nạp ví quảng cáo từ số dư, số âm). counted = false → không trừ vào
+   * tiền về / lợi nhuận vì chi phí quảng cáo đã lấy theo file quảng cáo
+   */
+  adsTopup: { count: number; amount: number; counted: boolean };
   /** Kỳ tính thực tế (payment chỉ khi có dòng đã quyết toán) */
   basis: ProfitBasis;
   /** Theo ngày thanh toán: khoảng ngày sàn trả tiền */
@@ -185,21 +204,62 @@ export function orderState(lines: OrderLine[]): OrderState {
 const skuKey = (l: OrderLine) => l.skuId ?? `${fold(l.productName)}|${fold(l.variation ?? '')}`;
 
 /** Gộp dữ liệu nhiều file: dòng trùng khoá lấy file sau */
+/** Khoản của chương trình Hoàn phí vận chuyển (TikTok) trong dữ liệu: phí SFR (âm) + tiền hoàn (dương) */
+export function sfrTotals(data: ProfitData): { fee: number; refund: number; orders: number } {
+  let fee = 0;
+  let refund = 0;
+  let orders = 0;
+  for (const r of data.income) {
+    const f = r.feeParts.sfr ?? 0;
+    fee += f;
+    refund += r.feeParts.sfrRefund ?? 0;
+    if (f) orders++;
+  }
+  return { fee, refund, orders };
+}
+
+/**
+ * Tính thử "nếu KHÔNG đăng ký chương trình Hoàn phí vận chuyển": mỗi dòng quyết toán bỏ phí SFR (được giữ lại tiền) và
+ * bỏ tiền hoàn của chương trình (đơn trả / giao không thành công tự chịu phí ship) → tiền về đổi đúng phần đó
+ */
+export function withoutSfr(data: ProfitData): ProfitData {
+  return {
+    ...data,
+    income: data.income.map((r) => {
+      const delta = (r.feeParts.sfr ?? 0) + (r.feeParts.sfrRefund ?? 0);
+      if (!delta) return r;
+      const feeParts = { ...r.feeParts };
+      delete feeParts.sfr;
+      delete feeParts.sfrRefund;
+      return { ...r, feeParts, fees: r.fees - delta, settlement: r.settlement - delta };
+    }),
+  };
+}
+
 export function mergeData(parts: ProfitData[]): ProfitData {
   const orders = new Map<string, OrderLine>();
   const income = new Map<string, IncomeRow>();
   const ads = new Map<string, AdsRow>();
   for (const p of parts) {
     for (const o of p.orders) orders.set(`${o.orderId}|${o.skuId ?? o.productName}|${o.variation ?? ''}`, o);
+    // 1 đơn có thể được quyết toán nhiều lần (TikTok: −3.255đ ngày 14, −40.000đ ngày 15, +40.000đ ngày 18…) →
+    // khoá gồm thời gian + số tiền + thứ tự lặp trong file: dòng thật khác nhau đều giữ, chỉ bỏ dòng trùng do tải 2 file chồng kỳ
+    const seen = new Map<string, number>();
     // dòng đã quyết toán không bị dòng "chờ quyết toán" cũ đè
     for (const r of p.income) {
-      const k = `${r.id}|${r.type}`;
+      const base = r.settled ? `${r.id}|${r.type}|${r.settledAt ?? ''}|${r.settlement}` : `${r.id}|${r.type}`;
+      const n = (seen.get(base) ?? 0) + 1;
+      seen.set(base, n);
+      const k = r.settled ? `${base}|${n}` : base;
       const prev = income.get(k);
       if (!prev || r.settled || !prev.settled) income.set(k, r);
     }
     for (const a of p.ads) ads.set(a.key, a);
   }
-  return { orders: [...orders.values()], income: [...income.values()], ads: [...ads.values()] };
+  // Đơn đã có dòng quyết toán thật → bỏ dòng "chờ quyết toán" / ước tính của chính đơn đó
+  const settledKeys = new Set([...income.values()].filter((r) => r.settled).map((r) => `${r.id}|${r.type}`));
+  const kept = [...income.values()].filter((r) => r.settled || !settledKeys.has(`${r.id}|${r.type}`));
+  return { orders: [...orders.values()], income: kept, ads: [...ads.values()] };
 }
 
 function rangeOf(dates: (string | null)[]): { from: string; to: string } | null {
@@ -348,9 +408,17 @@ export function computeProfit(
   const adjustmentRows: IncomeRow[] = [];
   // Theo ngày thanh toán: đơn đã trả nhưng không có trong file đơn hàng (đặt trước kỳ) → tính tiền, thiếu giá vốn
   const paidNoOrder: IncomeRow[] = [];
+  // Nạp ví quảng cáo từ số dư (TikTok): có file quảng cáo + bật "không tính 2 lần" → không trừ (chi phí lấy theo file QC)
+  const topupRows: IncomeRow[] = [];
+  const topupCounted = !(hasAds && options.dedupeGmvMax);
   for (const r of data.income) {
     if (usedIncome.has(r)) continue;
     if (!r.settled && !options.includeUnsettled) continue;
+    if (has(r.type, ADS_TOPUP)) {
+      topupRows.push(r);
+      if (topupCounted) adjustmentRows.push(r);
+      continue;
+    }
     const isOrderRow = has(r.type, ORDER_ROW);
     if (payment && isOrderRow) paidNoOrder.push(r);
     else if (hasOrders && isOrderRow) {
@@ -387,17 +455,22 @@ export function computeProfit(
   const feeLines: FeeLineResult[] = FEE_GROUPS.map((g) => ({
     key: g.key,
     label: g.label,
+    section: g.section,
     amount: sumBy(moneyRows, (r) => r.feeParts[g.key] ?? 0),
   }));
   const rest = fees - sumBy(feeLines, (f) => f.amount);
-  if (Math.abs(rest) >= 1) feeLines.push({ key: 'other', label: 'Phí khác', amount: rest });
+  if (Math.abs(rest) >= 1)
+    feeLines.push({ key: 'other', label: 'Phí khác (cột chưa phân loại)', section: 'Khác', amount: rest });
 
   // Quảng cáo
   const adsFile = sumBy(
     data.ads.filter((a) => !a.detail),
     (a) => a.cost,
   );
-  const gmvInSettlement = -(feeLines.find((f) => f.key === 'gmvMax')?.amount ?? 0);
+  const gmvInSettlement = -sumBy(
+    feeLines.filter((f) => GMV_KEYS.has(f.key)),
+    (f) => f.amount,
+  );
   const ads = options.dedupeGmvMax ? Math.max(0, adsFile - Math.max(0, gmvInSettlement)) : adsFile;
 
   // Chi phí khác
@@ -507,6 +580,11 @@ export function computeProfit(
     hasIncome,
     hasSettled,
     adjustmentLines: adjustmentLinesOf(moneyRows),
+    adsTopup: {
+      count: topupRows.length,
+      amount: sumBy(topupRows, (r) => r.settlement),
+      counted: topupCounted,
+    },
     incomeBySource: incomeBySourceOf(moneyRows),
     basis: payment ? 'payment' : 'order',
     paidPeriod: payment ? rangeOf(data.income.map((r) => r.settledAt)) : null,

@@ -39,6 +39,8 @@ import { useCategoryTables } from './useCategoryTables';
 import { tableOf } from './categoryTables';
 import { usePricingConfig, usePricingForm } from './usePricingStore';
 import { usePricingMeter } from './usePricingMeter';
+import { useSystemFees } from './useSystemFees';
+import { useAuth } from '../../../auth/AuthProvider';
 import UpgradeCard from '../UpgradeCard';
 import { useFinanceQuota } from '../useFinanceQuota';
 
@@ -50,6 +52,19 @@ export default function PriceCalculator() {
 
   const key = profileKey(form.platform, form.shopType);
   const profile = config.profiles[key];
+  // Phí cố định của sàn (hệ thống, chỉ Quản trị viên sửa) + khoản phí riêng của shop (tự nhập)
+  const system = useSystemFees();
+  const canEditSystem = useAuth().can('manage_users');
+  const systemFees = system.fees.tables[key];
+  const optIn = useMemo(
+    () => new Set(config.optIn.filter((k) => k.startsWith(`${key}|`)).map((k) => k.slice(key.length + 1))),
+    [config.optIn, key],
+  );
+  // Chương trình tuỳ chọn (Hoàn phí vận chuyển…) chỉ tính khi shop có đăng ký
+  const allFees = useMemo(
+    () => [...systemFees.filter((f) => !f.optional || optIn.has(f.id)), ...profile.fees],
+    [systemFees, optIn, profile.fees],
+  );
   // Bảng phí ngành do hệ thống cung cấp (khách không tự tải) + ngành Sếp tự lưu
   const { tables, loading: tablesLoading } = useCategoryTables();
   const platformTables = {
@@ -84,13 +99,13 @@ export default function PriceCalculator() {
     () => ({
       cost: form.cost,
       categoryPct,
-      fees: profile.fees,
+      fees: allFees,
       adsPct: 0,
       taxPct: config.taxPct,
       weightKg: form.weightKg,
       applyLogistics,
     }),
-    [form.cost, categoryPct, profile.fees, config.taxPct, form.weightKg, applyLogistics],
+    [form.cost, categoryPct, allFees, config.taxPct, form.weightKg, applyLogistics],
   );
   const input = useMemo(() => applySource(baseInput, form.orderSource, rates), [baseInput, form.orderSource, rates]);
   const target: ProfitTarget = useMemo(
@@ -147,14 +162,14 @@ export default function PriceCalculator() {
     const w: string[] = [];
     if (missingCategory) w.push(`Ngành đã chọn không có trong bảng phí ${profileLabel} — chọn lại ngành.`);
     else if (categoryPct <= 0) w.push('Chưa chọn ngành hàng / chưa nhập phí ngành.');
-    if (profile.fees.every((f) => f.value <= 0))
+    if (allFees.every((f) => f.value <= 0))
       w.push(`Chưa nhập các khoản phí của ${profileLabel} (phí thanh toán, dịch vụ…) ở phần Biểu phí.`);
     if (source.affiliate === 'standard' && form.affiliatePct <= 0)
       w.push(`Nguồn "${source.label}" chưa nhập % hoa hồng tiêu chuẩn cho KOC.`);
     if (source.affiliate === 'shopAds' && form.shopAdsAffiliatePct <= 0)
       w.push(`Nguồn "${source.label}" chưa nhập % hoa hồng quảng cáo cửa hàng.`);
     return w;
-  }, [missingCategory, categoryPct, profile.fees, profileLabel, source, form.affiliatePct, form.shopAdsAffiliatePct]);
+  }, [missingCategory, categoryPct, allFees, profileLabel, source, form.affiliatePct, form.shopAdsAffiliatePct]);
 
   const updateProfile = (k: typeof key, fn: (p: FeeProfile) => FeeProfile) =>
     setConfig((cfg) => ({ ...cfg, profiles: { ...cfg.profiles, [k]: fn(cfg.profiles[k]) } }));
@@ -215,6 +230,17 @@ export default function PriceCalculator() {
         platform={form.platform}
         shopType={form.shopType}
         profile={profile}
+        systemFees={systemFees}
+        canEditSystem={canEditSystem}
+        optIn={optIn}
+        onOptIn={(id, on) =>
+          setConfig((cfg) => {
+            const k = `${key}|${id}`;
+            const rest = cfg.optIn.filter((x) => x !== k);
+            return { ...cfg, optIn: on ? [...rest, k] : rest };
+          })
+        }
+        onSaveSystem={(lines) => system.save({ ...system.fees, tables: { ...system.fees.tables, [key]: lines } })}
         tables={platformTables}
         tablesLoading={tablesLoading}
         taxPct={config.taxPct}
@@ -239,7 +265,7 @@ export default function PriceCalculator() {
             profileLabel={`${profileLabel}${usingPromo ? ' (ưu đãi người bán mới)' : ''} · nguồn ${source.label}`}
             categories={categories}
             defaultCategoryPct={defaultCategoryPct}
-            fees={profile.fees}
+            fees={allFees}
             taxPct={config.taxPct}
             applyLogistics={applyLogistics}
             adsEnabled={source.ads}

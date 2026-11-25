@@ -2,16 +2,20 @@ import { Plus, X } from 'lucide-react';
 import NumberField from './NumberField';
 import type { FeeLine } from './calc';
 
+type EditableLine = FeeLine & { optional?: boolean };
+
 interface FeeLinesEditorProps {
-  fees: FeeLine[];
-  onChange: (fees: FeeLine[]) => void;
+  fees: EditableLine[];
+  onChange: (fees: EditableLine[]) => void;
+  /** Quản trị viên sửa phí hệ thống: hiện ô "Tuỳ chọn" (chương trình shop tự đăng ký) */
+  optionalToggle?: boolean;
 }
 
 const newId = () => `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 /** Các khoản phí của sàn (ngoài phí ngành), sửa trực tiếp — lưu ngay */
-export default function FeeLinesEditor({ fees, onChange }: FeeLinesEditorProps) {
-  const set = (id: string, patch: Partial<FeeLine>) =>
+export default function FeeLinesEditor({ fees, onChange, optionalToggle }: FeeLinesEditorProps) {
+  const set = (id: string, patch: Partial<EditableLine>) =>
     onChange(fees.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
   return (
@@ -42,6 +46,20 @@ export default function FeeLinesEditor({ fees, onChange }: FeeLinesEditorProps) 
           >
             {f.kind === 'pct' ? '%' : 'đ/đơn'}
           </button>
+          {optionalToggle && (
+            <label
+              className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-muted"
+              title="Chương trình shop tự đăng ký — mỗi người dùng tự bật"
+            >
+              <input
+                type="checkbox"
+                checked={!!f.optional}
+                onChange={(e) => set(f.id, { optional: e.target.checked })}
+                className="size-3.5 accent-primary"
+              />
+              Tuỳ chọn
+            </label>
+          )}
           <button
             type="button"
             aria-label={`Xoá ${f.label || 'khoản phí'}`}

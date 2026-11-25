@@ -84,68 +84,210 @@ export interface ParsedFile {
 }
 
 /**
- * Nhóm phí từ các cột cấp 2 dưới "Tổng phí" trong file quyết toán (đúng thứ tự sheet "Báo cáo").
- * Chỉ lấy cột cấp 2 — cột cấp 3 (vd "Phí vận chuyển thực tế") đã gộp trong cấp 2, cộng nữa sẽ bị trùng.
+ * Mỗi cột phí trong file quyết toán TikTok = 1 dòng (đúng tên cột, Sếp yêu cầu 24/11: liệt kê đủ, không gộp).
+ * Chỉ đọc cột cấp 2 dưới "Tổng phí"; riêng "Phí vận chuyển của người bán" tách theo cột cấp 3 (tiêu đề có "-" = trừ cột đó
+ * → phần còn lại "chưa tách" thường bằng 0). `section` = nhóm hiển thị. Cột mới TikTok thêm sau → dòng "Phí khác".
  */
-export const FEE_GROUPS: { key: string; label: string; headers: string[] }[] = [
-  { key: 'commission', label: 'Phí hoa hồng TikTok', headers: ['phi hoa hong cua tiktok shop'] },
-  { key: 'transaction', label: 'Phí giao dịch', headers: ['phi giao dich'] },
-  { key: 'shipping', label: 'Phí vận chuyển (người bán chịu)', headers: ['phi van chuyen cua nguoi ban'] },
+export const FEE_GROUPS: { key: string; label: string; section?: string; headers: string[] }[] = [
   {
-    key: 'affiliate',
-    label: 'Hoa hồng liên kết (KOC/affiliate)',
+    key: 'commission',
+    label: 'Phí hoa hồng của TikTok Shop',
+    section: 'Phí sàn',
+    headers: ['phi hoa hong cua tiktok shop'],
+  },
+  { key: 'transaction', label: 'Phí giao dịch', section: 'Phí sàn', headers: ['phi giao dich'] },
+  { key: 'handling', label: 'Phí xử lý đơn hàng', section: 'Phí sàn', headers: ['phi xu ly don hang'] },
+  { key: 'shipActual', label: 'Phí vận chuyển thực tế', section: 'Vận chuyển', headers: ['phi van chuyen thuc te'] },
+  {
+    key: 'shipPlatformDiscount',
+    label: 'Chiết khấu phí vận chuyển của nền tảng',
+    section: 'Vận chuyển',
+    headers: ['chiet khau phi van chuyen cua nen tang'],
+  },
+  {
+    key: 'shipCustomer',
+    label: 'Chi phí vận chuyển của khách hàng',
+    section: 'Vận chuyển',
+    headers: ['chi phi van chuyen cua khach hang'],
+  },
+  {
+    key: 'shipReturn',
+    label: 'Phí vận chuyển trả hàng thực tế',
+    section: 'Vận chuyển',
+    headers: ['phi van chuyen tra hang thuc te'],
+  },
+  {
+    key: 'shipCustomerRefund',
+    label: 'Phí vận chuyển của khách hàng được hoàn lại',
+    section: 'Vận chuyển',
+    headers: ['phi van chuyen cua khach hang duoc hoan lai'],
+  },
+  {
+    key: 'sfrRefund',
+    label: 'Hoàn tiền chương trình đảm bảo (Hoàn phí vận chuyển)',
+    section: 'Vận chuyển',
+    headers: ['hoan tien chuong trinh dam bao'],
+  },
+  {
+    key: 'shipFailedSubsidy',
+    label: 'Trợ cấp giao hàng không thành công',
+    section: 'Vận chuyển',
+    headers: ['tro cap giao hang khong thanh cong'],
+  },
+  { key: 'shipSubsidy', label: 'Trợ giá vận chuyển', section: 'Vận chuyển', headers: ['tro gia van chuyen'] },
+  { key: 'logistics', label: 'Phí vận hành logistic', section: 'Vận chuyển', headers: ['phi van hanh logistic'] },
+  {
+    key: 'shipping',
+    label: 'Phí vận chuyển khác (chưa tách)',
+    section: 'Vận chuyển',
     headers: [
-      'hoa hong lien ket',
-      'hoa hong lien ket quang cao cua hang',
-      'hoa hong cua doi tac lien ket',
-      'tien coc hoa hong lien ket',
-      'hoan hoa hong lien ket',
-      'hoa hong quang cao cua hang cua doi tac lien ket',
+      'phi van chuyen cua nguoi ban',
+      '-phi van chuyen thuc te',
+      '-chiet khau phi van chuyen cua nen tang',
+      '-chi phi van chuyen cua khach hang',
+      '-phi van chuyen tra hang thuc te',
+      '-phi van chuyen cua khach hang duoc hoan lai',
+      '-hoan tien chuong trinh dam bao',
+      '-tro cap giao hang khong thanh cong',
+      '-tro gia van chuyen',
+      '-phi van hanh logistic',
     ],
   },
-  { key: 'handling', label: 'Phí xử lý đơn hàng', headers: ['phi xu ly don hang'] },
+  { key: 'affiliate', label: 'Hoa hồng liên kết', section: 'Hoa hồng liên kết', headers: ['hoa hong lien ket'] },
+  {
+    key: 'affShopAds',
+    label: 'Hoa hồng liên kết Quảng cáo cửa hàng',
+    section: 'Hoa hồng liên kết',
+    headers: ['hoa hong lien ket quang cao cua hang'],
+  },
+  {
+    key: 'affPartner',
+    label: 'Hoa hồng của đối tác liên kết',
+    section: 'Hoa hồng liên kết',
+    headers: ['hoa hong cua doi tac lien ket'],
+  },
+  {
+    key: 'affPartnerShopAds',
+    label: 'Hoa hồng quảng cáo cửa hàng của Đối tác liên kết',
+    section: 'Hoa hồng liên kết',
+    headers: ['hoa hong quang cao cua hang cua doi tac lien ket'],
+  },
+  {
+    key: 'affDeposit',
+    label: 'Tiền cọc hoa hồng liên kết',
+    section: 'Hoa hồng liên kết',
+    headers: ['tien coc hoa hong lien ket'],
+  },
+  {
+    key: 'affRefund',
+    label: 'Hoàn hoa hồng liên kết',
+    section: 'Hoa hồng liên kết',
+    headers: ['hoan hoa hong lien ket'],
+  },
+  {
+    key: 'sfr',
+    label: 'Phí dịch vụ SFR (chương trình Hoàn phí vận chuyển)',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu sfr'],
+  },
+  {
+    key: 'voucherXtra',
+    label: 'Phí dịch vụ Voucher Xtra',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu voucher xtra'],
+  },
+  {
+    key: 'flashSale',
+    label: 'Phí dịch vụ Flash Sale',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu flash sale'],
+  },
+  { key: 'sfp', label: 'Phí dịch vụ SFP', section: 'Dịch vụ & chương trình', headers: ['phi dich vu sfp'] },
+  {
+    key: 'cashback',
+    label: 'Phí dịch vụ hoàn tiền thưởng',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu hoan tien thuong'],
+  },
+  {
+    key: 'liveDeal',
+    label: 'Phí dịch vụ Ưu đãi đặc biệt trên LIVE',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu uu dai dac biet tren live'],
+  },
+  {
+    key: 'eams',
+    label: 'Phí dịch vụ Chương trình EAMS',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi dich vu chuong trinh eams'],
+  },
+  {
+    key: 'paylater',
+    label: 'Phí chương trình TikTok PayLater',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi chuong trinh tiktok paylater'],
+  },
+  {
+    key: 'campaignResource',
+    label: 'Phí nguồn lực chiến dịch',
+    section: 'Dịch vụ & chương trình',
+    headers: ['phi nguon luc chien dich'],
+  },
+  {
+    key: 'managedTax',
+    label: 'Gói dịch vụ được quản lý (thuế bán hàng)',
+    section: 'Dịch vụ & chương trình',
+    headers: ['goi dich vu duoc quan ly (thue ban hang)'],
+  },
+  {
+    key: 'managedOrder',
+    label: 'Gói dịch vụ được quản lý (phí mỗi đơn hàng)',
+    section: 'Dịch vụ & chương trình',
+    headers: ['goi dich vu duoc quan ly (phi moi don hang)'],
+  },
+  {
+    key: 'taxVat',
+    label: 'Thuế GTGT do TikTok Shop khấu trừ',
+    section: 'Thuế',
+    headers: ['thue gtgt do tiktok shop khau tru'],
+  },
+  {
+    key: 'taxPit',
+    label: 'Thuế TNCN do TikTok Shop khấu trừ',
+    section: 'Thuế',
+    headers: ['thue tncn do tiktok shop khau tru'],
+  },
+  { key: 'gmvVoucher', label: 'Voucher GMV Max', section: 'Quảng cáo GMV Max', headers: ['voucher gmv max'] },
+  {
+    key: 'gmvVoucherTax',
+    label: 'Thuế bán hàng của voucher GMV Max',
+    section: 'Quảng cáo GMV Max',
+    headers: ['thue ban hang cua voucher gmv max'],
+  },
+  { key: 'gmvAds', label: 'Phí quảng cáo GMV Max', section: 'Quảng cáo GMV Max', headers: ['phi quang cao gmv max'] },
   {
     key: 'service',
-    label: 'Phí dịch vụ (Voucher Xtra, Flash Sale…)',
-    headers: [
-      'phi dich vu sfp',
-      'phi dich vu hoan tien thuong',
-      'phi dich vu uu dai dac biet tren live',
-      'phi dich vu voucher xtra',
-      'phi dich vu chuong trinh eams',
-      'phi dich vu flash sale',
-      'phi chuong trinh tiktok paylater',
-      'phi nguon luc chien dich',
-      'phi dich vu sfr',
-      'goi dich vu duoc quan ly (thue ban hang)',
-      'goi dich vu duoc quan ly (phi moi don hang)',
-    ],
+    label: 'Phí dịch vụ (dữ liệu cũ, tải lại file để tách)',
+    section: 'Dịch vụ & chương trình',
+    headers: [],
   },
-  {
-    key: 'tax',
-    label: 'Thuế do TikTok khấu trừ',
-    headers: ['thue gtgt do tiktok shop khau tru', 'thue tncn do tiktok shop khau tru'],
-  },
-  {
-    key: 'gmvMax',
-    label: 'Quảng cáo GMV Max (trừ vào quyết toán)',
-    headers: ['voucher gmv max', 'thue ban hang cua voucher gmv max', 'phi quang cao gmv max'],
-  },
+  { key: 'tax', label: 'Thuế do TikTok khấu trừ (dữ liệu cũ)', section: 'Thuế', headers: [] },
+  { key: 'gmvMax', label: 'Quảng cáo GMV Max (dữ liệu cũ)', section: 'Quảng cáo GMV Max', headers: [] },
   // Shopee — điền từ file đơn hàng (shopeeImport.ts), không đọc theo tiêu đề cột quyết toán
-  { key: 'spFixed', label: 'Phí cố định (Shopee)', headers: [] },
-  { key: 'spService', label: 'Phí dịch vụ (Shopee)', headers: [] },
-  { key: 'spTransaction', label: 'Phí xử lý giao dịch (Shopee)', headers: [] },
-  { key: 'spReturnShip', label: 'Phí vận chuyển trả hàng (Shopee)', headers: [] },
-  { key: 'spInfra', label: 'Phí dịch vụ — Phí hạ tầng (Shopee)', headers: [] },
-  { key: 'spVoucherXtra', label: 'Phí dịch vụ — Voucher Xtra (Shopee)', headers: [] },
-  { key: 'spAffiliate', label: 'Hoa hồng Tiếp thị liên kết (Shopee)', headers: [] },
-  { key: 'spPiship', label: 'Phí dịch vụ PiShip (Shopee)', headers: [] },
-  { key: 'spShipping', label: 'Phí vận chuyển ròng (Shopee)', headers: [] },
-  { key: 'spTopup', label: 'Phí DVHT Nạp Tiền Tự Động (Shopee)', headers: [] },
-  { key: 'spInstall', label: 'Lắp đặt / Trade-in (Shopee)', headers: [] },
-  { key: 'spTax', label: 'Thuế GTGT + TNCN do Shopee khấu trừ', headers: [] },
-  { key: 'spVat', label: 'Thuế GTGT (Shopee khấu trừ)', headers: [] },
-  { key: 'spPit', label: 'Thuế TNCN (Shopee khấu trừ)', headers: [] },
+  { key: 'spFixed', label: 'Phí cố định (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spService', label: 'Phí dịch vụ (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spTransaction', label: 'Phí xử lý giao dịch (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spReturnShip', label: 'Phí vận chuyển trả hàng (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spInfra', label: 'Phí dịch vụ — Phí hạ tầng (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spVoucherXtra', label: 'Phí dịch vụ — Voucher Xtra (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spAffiliate', label: 'Hoa hồng Tiếp thị liên kết (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spPiship', label: 'Phí dịch vụ PiShip (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spShipping', label: 'Phí vận chuyển ròng (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spTopup', label: 'Phí DVHT Nạp Tiền Tự Động (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spInstall', label: 'Lắp đặt / Trade-in (Shopee)', section: 'Shopee', headers: [] },
+  { key: 'spTax', label: 'Thuế GTGT + TNCN do Shopee khấu trừ', section: 'Shopee', headers: [] },
+  { key: 'spVat', label: 'Thuế GTGT (Shopee khấu trừ)', section: 'Shopee', headers: [] },
+  { key: 'spPit', label: 'Thuế TNCN (Shopee khấu trừ)', section: 'Shopee', headers: [] },
 ];
 
 export const norm = (s: string | undefined) =>
@@ -290,14 +432,20 @@ export function parseIncome(rows: string[][], settled = true): IncomeRow[] {
     fees: pick(c, 'tong phi', 'total fees'),
     adjustment: pick(c, 'so tien dieu chinh', 'adjustment amount'),
   };
-  const groups = FEE_GROUPS.map((g) => ({ key: g.key, cols: g.headers.map((n) => c.get(n)).filter((i) => i != null) }));
+  // Tiêu đề bắt đầu bằng "-" = trừ cột đó (tách 1 cột cấp 3 ra khỏi nhóm cấp 2 của nó)
+  const groups = FEE_GROUPS.map((g) => ({
+    key: g.key,
+    cols: g.headers
+      .map((n) => ({ i: c.get(n.replace(/^-/, '')), sign: n.startsWith('-') ? -1 : 1 }))
+      .filter((x) => x.i != null),
+  }));
   const out: IncomeRow[] = [];
   for (const r of rows.slice(h.row + 1)) {
     const id = clean(r[col.id]);
     if (!/\d/.test(id)) continue;
     const feeParts: Record<string, number> = {};
     for (const g of groups) {
-      const v = g.cols.reduce((s, i) => s + num(r[i!]), 0);
+      const v = g.cols.reduce((s, x) => s + x.sign * num(r[x.i!]), 0);
       if (v !== 0) feeParts[g.key] = v;
     }
     const related = col.orderId == null ? '' : clean(r[col.orderId]);

@@ -9,36 +9,291 @@ import {
   parseOrders,
   parseProfitRows,
 } from '../src/pages/finance/profit/profitImport';
-import { computeProfit, limitOrders, mergeData, orderState, profitOrderIds, type ProfitOptions } from '../src/pages/finance/profit/profitCalc';
+import {
+  computeProfit,
+  limitOrders,
+  mergeData,
+  orderState,
+  profitOrderIds,
+  sfrTotals,
+  withoutSfr,
+  type ProfitOptions,
+} from '../src/pages/finance/profit/profitCalc';
 
 // Cột rút gọn theo file "Tất cả đơn hàng" của TikTok (giá trị ID có "\t" ở cuối như file thật)
 const ORDERS: string[][] = [
-  ['Order ID', 'Order Status', 'Order Substatus', 'Cancelation/Return Type', 'SKU ID', 'Seller SKU', 'Product Name', 'Variation', 'Quantity', 'Sku Quantity of return', 'SKU Subtotal After Discount', 'Created Time', 'Order Channel', 'Creator Handle'],
-  ['A1\t', 'Đã hoàn tất', 'Đã hoàn tất', '', 'S1\t', '', 'Dầu mù u', '10ml', '1', '0', '75600', '28/10/2026 21:16:08\t', 'Product cards', ''],
-  ['A2\t', 'Đã hoàn tất', 'Đã hoàn tất', '', 'S1\t', '', 'Dầu mù u', '10ml', '2', '0', '150000', '27/10/2026 18:58:45\t', 'Videos', 'koc_a'],
-  ['A2\t', 'Đã hoàn tất', 'Đã hoàn tất', '', 'S2\t', '', 'Tinh dầu', '', '1', '0', '50000', '27/10/2026 18:58:45\t', 'Videos', 'koc_a'],
-  ['A3\t', 'Đã hủy', 'Đã hủy', 'Cancel', 'S2\t', '', 'Tinh dầu', '', '1', '1', '270000', '01/10/2026 10:00:00\t', '', ''],
-  ['A4\t', 'Đang giao', 'Đang vận chuyển', '', 'S1\t', '', 'Dầu mù u', '10ml', '1', '0', '90000', '30/10/2026 08:00:00\t', '', ''],
-  ['A5\t', 'Đã hoàn tất', 'Đã hoàn tất', 'Return/Refund', 'S2\t', '', 'Tinh dầu', '', '1', '1', '60000', '15/10/2026 08:00:00\t', '', ''],
+  [
+    'Order ID',
+    'Order Status',
+    'Order Substatus',
+    'Cancelation/Return Type',
+    'SKU ID',
+    'Seller SKU',
+    'Product Name',
+    'Variation',
+    'Quantity',
+    'Sku Quantity of return',
+    'SKU Subtotal After Discount',
+    'Created Time',
+    'Order Channel',
+    'Creator Handle',
+  ],
+  [
+    'A1\t',
+    'Đã hoàn tất',
+    'Đã hoàn tất',
+    '',
+    'S1\t',
+    '',
+    'Dầu mù u',
+    '10ml',
+    '1',
+    '0',
+    '75600',
+    '28/10/2026 21:16:08\t',
+    'Product cards',
+    '',
+  ],
+  [
+    'A2\t',
+    'Đã hoàn tất',
+    'Đã hoàn tất',
+    '',
+    'S1\t',
+    '',
+    'Dầu mù u',
+    '10ml',
+    '2',
+    '0',
+    '150000',
+    '27/10/2026 18:58:45\t',
+    'Videos',
+    'koc_a',
+  ],
+  [
+    'A2\t',
+    'Đã hoàn tất',
+    'Đã hoàn tất',
+    '',
+    'S2\t',
+    '',
+    'Tinh dầu',
+    '',
+    '1',
+    '0',
+    '50000',
+    '27/10/2026 18:58:45\t',
+    'Videos',
+    'koc_a',
+  ],
+  [
+    'A3\t',
+    'Đã hủy',
+    'Đã hủy',
+    'Cancel',
+    'S2\t',
+    '',
+    'Tinh dầu',
+    '',
+    '1',
+    '1',
+    '270000',
+    '01/10/2026 10:00:00\t',
+    '',
+    '',
+  ],
+  [
+    'A4\t',
+    'Đang giao',
+    'Đang vận chuyển',
+    '',
+    'S1\t',
+    '',
+    'Dầu mù u',
+    '10ml',
+    '1',
+    '0',
+    '90000',
+    '30/10/2026 08:00:00\t',
+    '',
+    '',
+  ],
+  [
+    'A5\t',
+    'Đã hoàn tất',
+    'Đã hoàn tất',
+    'Return/Refund',
+    'S2\t',
+    '',
+    'Tinh dầu',
+    '',
+    '1',
+    '1',
+    '60000',
+    '15/10/2026 08:00:00\t',
+    '',
+    '',
+  ],
 ];
 
 // Cột rút gọn theo sheet "Chi tiết đơn hàng" của file income
-const INCOME_HEADER = ['ID đơn hàng/điều chỉnh', 'Loại giao dịch', 'Thời gian tạo đơn hàng', 'Thời gian quyết toán đơn hàng', 'Tổng số tiền quyết toán', 'Tổng doanh thu', 'Tổng phí', 'Phí giao dịch', 'Phí hoa hồng của TikTok Shop', 'Phí vận chuyển của người bán', 'Phí vận chuyển thực tế', 'Hoa hồng liên kết', 'Phí xử lý đơn hàng', 'Thuế GTGT do TikTok Shop khấu trừ', 'Phí quảng cáo GMV Max', 'Số tiền điều chỉnh', 'ID đơn hàng liên quan', 'Trọng lượng kiện hàng ước tính'];
+const INCOME_HEADER = [
+  'ID đơn hàng/điều chỉnh',
+  'Loại giao dịch',
+  'Thời gian tạo đơn hàng',
+  'Thời gian quyết toán đơn hàng',
+  'Tổng số tiền quyết toán',
+  'Tổng doanh thu',
+  'Tổng phí',
+  'Phí giao dịch',
+  'Phí hoa hồng của TikTok Shop',
+  'Phí vận chuyển của người bán',
+  'Phí vận chuyển thực tế',
+  'Hoa hồng liên kết',
+  'Phí xử lý đơn hàng',
+  'Thuế GTGT do TikTok Shop khấu trừ',
+  'Phí quảng cáo GMV Max',
+  'Số tiền điều chỉnh',
+  'ID đơn hàng liên quan',
+  'Trọng lượng kiện hàng ước tính',
+];
 const INCOME: string[][] = [
   INCOME_HEADER,
-  ['A1', 'Đơn hàng', '2026/10/28', '2026/11/09', '50000', '75600', '-25600', '-5000', '-12000', '0', '-34800', '-5000', '-3000', '-600', '0', '0', 'A1', '400'],
-  ['A2', 'Đơn hàng', '2026/10/27', '2026/11/07', '150000', '200000', '-50000', '-10000', '-20000', '0', '-30000', '-10000', '-3000', '-2000', '-5000', '0', 'A2', '400'],
-  ['A3', 'Đơn hàng', '2026/10/01', '2026/10/02', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'A3', '400'],
-  ['A5', 'Đơn hàng', '2026/10/15', '2026/10/30', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'A5', '400'],
-  ['Z9', 'Đơn hàng', '2026/09/21', '2026/10/02', '40000', '60000', '-20000', '-4000', '-10000', '0', '0', '-3000', '-3000', '0', '0', '0', 'Z9', '400'],
-  ['ADJ1', 'Điều chỉnh phí vận chuyển', '2026/10/20', '2026/10/25', '-5000', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '-5000', '', '0'],
+  [
+    'A1',
+    'Đơn hàng',
+    '2026/10/28',
+    '2026/11/09',
+    '50000',
+    '75600',
+    '-25600',
+    '-5000',
+    '-12000',
+    '0',
+    '-34800',
+    '-5000',
+    '-3000',
+    '-600',
+    '0',
+    '0',
+    'A1',
+    '400',
+  ],
+  [
+    'A2',
+    'Đơn hàng',
+    '2026/10/27',
+    '2026/11/07',
+    '150000',
+    '200000',
+    '-50000',
+    '-10000',
+    '-20000',
+    '0',
+    '-30000',
+    '-10000',
+    '-3000',
+    '-2000',
+    '-5000',
+    '0',
+    'A2',
+    '400',
+  ],
+  [
+    'A3',
+    'Đơn hàng',
+    '2026/10/01',
+    '2026/10/02',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    'A3',
+    '400',
+  ],
+  [
+    'A5',
+    'Đơn hàng',
+    '2026/10/15',
+    '2026/10/30',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    'A5',
+    '400',
+  ],
+  [
+    'Z9',
+    'Đơn hàng',
+    '2026/09/21',
+    '2026/10/02',
+    '40000',
+    '60000',
+    '-20000',
+    '-4000',
+    '-10000',
+    '0',
+    '0',
+    '-3000',
+    '-3000',
+    '0',
+    '0',
+    '0',
+    'Z9',
+    '400',
+  ],
+  [
+    'ADJ1',
+    'Điều chỉnh phí vận chuyển',
+    '2026/10/20',
+    '2026/10/25',
+    '-5000',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    '-5000',
+    '',
+    '0',
+  ],
 ];
 const ONHOLD: string[][] = [
   ['ID đơn hàng', 'Thời gian tạo đơn hàng', 'Tổng số tiền quyết toán ước tính', 'Tổng doanh thu', 'Tổng phí'],
   ['A4', '2026/10/30', '60000', '90000', '-30000'],
 ];
 const ADS: string[][] = [
-  ['Theo ngày', 'Chi phí', 'Số lượng đơn hàng SKU (Cửa hàng hiện tại)', 'Chi phí cho mỗi đơn hàng', 'Doanh thu gộp (Cửa hàng hiện tại)', 'ROI', 'Tiền tệ'],
+  [
+    'Theo ngày',
+    'Chi phí',
+    'Số lượng đơn hàng SKU (Cửa hàng hiện tại)',
+    'Chi phí cho mỗi đơn hàng',
+    'Doanh thu gộp (Cửa hàng hiện tại)',
+    'ROI',
+    'Tiền tệ',
+  ],
   ['2026-10-01 00:00:00', '20000', '1', '20000', '90000', '4.50', 'VND'],
   ['2026-10-02 00:00:00', '15000', '0', '0', '0', '0.00', 'VND'],
   ['-', '35000', '1', '35000', '90000', '2.57', 'VND'],
@@ -77,15 +332,40 @@ describe('đọc file Tính lợi nhuận', () => {
   it('đơn hàng: bỏ "\\t", đọc số lượng / trả / tiền hàng / kênh', () => {
     const o = parseOrders(ORDERS);
     expect(o).toHaveLength(6);
-    expect(o[0]).toMatchObject({ orderId: 'A1', skuId: 'S1', qty: 1, subtotal: 75600, createdAt: '2026-10-28', channel: 'Product cards' });
+    expect(o[0]).toMatchObject({
+      orderId: 'A1',
+      skuId: 'S1',
+      qty: 1,
+      subtotal: 75600,
+      createdAt: '2026-10-28',
+      channel: 'Product cards',
+    });
     expect(o[3]).toMatchObject({ orderId: 'A3', cancelType: 'Cancel', returnQty: 1 });
   });
 
-  it('quyết toán: nhóm phí chỉ lấy cột cấp 2 (không cộng "Phí vận chuyển thực tế")', () => {
+  it('quyết toán: mỗi cột phí 1 dòng, vận chuyển tách cột cấp 3 — tổng các dòng = Tổng phí', () => {
     const r = parseIncome(INCOME, true);
-    expect(r[0]).toMatchObject({ id: 'A1', orderId: 'A1', settlement: 50000, revenue: 75600, fees: -25600, settled: true });
-    expect(r[0].feeParts).toEqual({ transaction: -5000, commission: -12000, affiliate: -5000, handling: -3000, tax: -600 });
-    expect(r[1].feeParts.gmvMax).toBe(-5000);
+    expect(r[0]).toMatchObject({
+      id: 'A1',
+      orderId: 'A1',
+      settlement: 50000,
+      revenue: 75600,
+      fees: -25600,
+      settled: true,
+    });
+    // Mỗi cột phí = 1 dòng; "Phí vận chuyển của người bán" (0) tách theo cột cấp 3 → phần chưa tách bù đúng tổng
+    expect(r[0].feeParts).toEqual({
+      transaction: -5000,
+      commission: -12000,
+      affiliate: -5000,
+      handling: -3000,
+      shipActual: -34800,
+      shipping: 34800,
+      taxVat: -600,
+    });
+    const sum = (o: Record<string, number>) => Object.values(o).reduce((x, v) => x + v, 0);
+    expect(sum(r[0].feeParts)).toBe(-25600); // = Tổng phí
+    expect(r[1].feeParts.gmvVoucher ?? r[1].feeParts.gmvAds).toBe(-5000);
     expect(r[5]).toMatchObject({ orderId: null, adjustment: -5000 }); // điều chỉnh không gắn đơn
   });
 
@@ -127,7 +407,15 @@ describe('trạng thái đơn', () => {
 describe('tính lợi nhuận', () => {
   it('đối chiếu đơn ↔ quyết toán, giá vốn, quảng cáo, điều chỉnh', () => {
     const r = computeProfit(load(), COSTS, [], OPTS);
-    expect(r.counts).toMatchObject({ total: 5, completed: 2, cancelled: 1, in_progress: 1, returned: 1, settled: 4, unsettled: 1 });
+    expect(r.counts).toMatchObject({
+      total: 5,
+      completed: 2,
+      cancelled: 1,
+      in_progress: 1,
+      returned: 1,
+      settled: 4,
+      unsettled: 1,
+    });
     // A1 50k + A2 150k + A3 0 + A5 0 + điều chỉnh −5k = 195k đã về; A4 60k chờ về
     expect(r.settled).toBe(195000);
     expect(r.unsettled).toBe(60000);
@@ -159,11 +447,16 @@ describe('tính lợi nhuận', () => {
   });
 
   it('chi phí khác: đ/đơn (đơn không huỷ), % doanh thu, cố định', () => {
-    const r = computeProfit(load(), COSTS, [
-      { id: 'a', label: 'Đóng gói', kind: 'perOrder', value: 2000 },
-      { id: 'b', label: 'Ship tự trả', kind: 'pctRevenue', value: 10 },
-      { id: 'c', label: 'Nhân sự', kind: 'fixed', value: 100000 },
-    ], OPTS);
+    const r = computeProfit(
+      load(),
+      COSTS,
+      [
+        { id: 'a', label: 'Đóng gói', kind: 'perOrder', value: 2000 },
+        { id: 'b', label: 'Ship tự trả', kind: 'pctRevenue', value: 10 },
+        { id: 'c', label: 'Nhân sự', kind: 'fixed', value: 100000 },
+      ],
+      OPTS,
+    );
     expect(r.otherLines.map((l) => l.amount)).toEqual([8000, 36560, 100000]);
   });
 
@@ -210,5 +503,97 @@ describe('Giới hạn đơn gói Miễn phí', () => {
     expect(kept.orders.map((o: { orderId: string }) => o.orderId)).toEqual(['A']);
     // B bị bỏ; dòng không gắn đơn + dòng ngoài kỳ (X) giữ để báo như cũ
     expect(kept.income.map((r: { orderId: string | null }) => r.orderId)).toEqual(['A', null, 'X']);
+  });
+});
+
+describe('mergeData — 1 đơn quyết toán nhiều lần', () => {
+  it('giữ mọi lần quyết toán khác nhau, chỉ bỏ dòng trùng khi tải 2 file chồng kỳ', () => {
+    const row = (settledAt: string, settlement: number) => ({
+      id: 'O1',
+      orderId: 'O1',
+      type: 'Đơn hàng',
+      createdAt: '2026-10-10',
+      settledAt,
+      settlement,
+      revenue: 0,
+      fees: settlement,
+      adjustment: 0,
+      feeParts: {},
+      settled: true,
+    });
+    const file = [row('2026-10-14', -3255), row('2026-10-15', -40000), row('2026-10-18', 40000)];
+    const m = mergeData([
+      { orders: [], income: file, ads: [] },
+      { orders: [], income: file.map((r) => ({ ...r })), ads: [] }, // tải lại cùng file
+    ]);
+    expect(m.income.map((r) => r.settlement)).toEqual([-3255, -40000, 40000]);
+    const est = { ...row('', 50000), settledAt: null, settled: false };
+    expect(mergeData([{ orders: [], income: [...file, est], ads: [] }]).income).toHaveLength(3); // bỏ ước tính
+  });
+});
+
+describe('Nạp ví quảng cáo từ số dư (TikTok)', () => {
+  const row = (id: string, type: string, settlement: number) => ({
+    id,
+    orderId: null,
+    type,
+    createdAt: '2026-10-10',
+    settledAt: '2026-10-10',
+    settlement,
+    revenue: 0,
+    fees: 0,
+    adjustment: settlement,
+    feeParts: {},
+    settled: true,
+  });
+  const income = [
+    row('T1', 'GMV thanh toán cho Quảng cáo TikTok', -500000),
+    row('B1', 'Khoản bồi hoàn của nền tảng', 50000),
+  ];
+  const ads = [{ key: 'a1', date: '2026-10-10', cost: 300000, revenue: null, orders: null }];
+  const opts = { includeUnsettled: true, dedupeGmvMax: true };
+
+  it('có file quảng cáo → không trừ khoản nạp ví (chi phí lấy theo file QC), báo riêng', () => {
+    const r = computeProfit(mergeData([{ orders: [], income, ads }]), {}, [], opts);
+    expect(r.adsTopup).toEqual({ count: 1, amount: -500000, counted: false });
+    expect(r.settled).toBe(50000);
+    expect(r.ads).toBe(300000);
+    expect(r.adjustmentLines.map((a) => a.label)).toEqual(['Khoản bồi hoàn của nền tảng']);
+  });
+
+  it('không có file quảng cáo / tắt công tắc → khoản nạp ví vẫn trừ như điều chỉnh', () => {
+    expect(computeProfit(mergeData([{ orders: [], income, ads: [] }]), {}, [], opts).settled).toBe(-450000);
+    const off = computeProfit(mergeData([{ orders: [], income, ads }]), {}, [], { ...opts, dedupeGmvMax: false });
+    expect(off.settled).toBe(-450000);
+    expect(off.adsTopup.counted).toBe(true);
+  });
+});
+
+describe('Chương trình Hoàn phí vận chuyển (TikTok) — có / không đăng ký', () => {
+  it('không đăng ký = bỏ phí SFR và bỏ tiền hoàn của chương trình', () => {
+    const row = (id: string, settlement: number, feeParts: Record<string, number>) => ({
+      id,
+      orderId: id,
+      type: 'Đơn hàng',
+      createdAt: '2026-10-10',
+      settledAt: '2026-10-12',
+      settlement,
+      revenue: 100000,
+      fees: settlement - 100000,
+      adjustment: 0,
+      feeParts,
+      settled: true,
+    });
+    const data = {
+      orders: [],
+      income: [row('O1', 96745, { sfr: -3255 }), row('O2', 70000, { sfr: -3255, sfrRefund: 20000 })],
+      ads: [],
+    };
+    expect(sfrTotals(data)).toEqual({ fee: -6510, refund: 20000, orders: 2 });
+    const opts = { includeUnsettled: true, dedupeGmvMax: true };
+    const on = computeProfit(data, {}, [], opts);
+    const off = computeProfit(withoutSfr(data), {}, [], opts);
+    expect(off.settled - on.settled).toBe(6510 - 20000);
+    expect(off.feeLines.some((f) => f.key === 'sfr' || f.key === 'sfrRefund')).toBe(false);
   });
 });

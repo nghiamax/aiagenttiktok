@@ -4,6 +4,7 @@ import { requirePermission } from '../auth/middleware.js';
 import { findUserById, publicUser } from '../auth/users.js';
 import { addPricingCalc, pricingUsed, profitOrdersUsed, setProfitOrders } from '../finance/usage.js';
 import { getCosts, isCostPlatform, saveCosts } from '../finance/costs.js';
+import { getSystemFees, saveSystemFees } from '../finance/platformFees.js';
 
 /** /api/finance — lượt Tính giá bán theo gói (Miễn phí 100 lượt / Pro không giới hạn) */
 export const financeRouter = Router();
@@ -69,4 +70,13 @@ financeRouter.put('/costs', requirePermission('finance'), (req, res) => {
   } catch (e) {
     res.status(400).json({ code: 'BAD_REQUEST', error: (e as Error).message });
   }
+});
+
+/* Biểu phí cố định của sàn (ngoài phí ngành): mọi người xem, chỉ Quản trị viên sửa */
+financeRouter.get('/platform-fees', requirePermission('finance'), (_req, res) => {
+  res.json(getSystemFees());
+});
+
+financeRouter.put('/platform-fees', requirePermission('manage_users'), (req, res) => {
+  res.json(saveSystemFees(req.body));
 });

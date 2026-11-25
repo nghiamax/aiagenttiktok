@@ -120,7 +120,7 @@ export default function RuleFormModal({
   return (
     <Modal
       title="Thêm quy tắc"
-      description="Khi video / sản phẩm / chiến dịch khớp điều kiện thì Agent làm gì, trong phạm vi nào."
+      description="Khi video / sản phẩm / chiến dịch khớp điều kiện thì BOT làm gì, trong phạm vi nào."
       onClose={onClose}
       footer={
         <div className="flex justify-end gap-2">
@@ -183,7 +183,7 @@ export default function RuleFormModal({
             </Link>
           </p>
           <p className="mt-2 text-sm">
-            <b>{formatNumber(matches.names.length)}</b> {matches.unit} Agent làm được
+            <b>{formatNumber(matches.names.length)}</b> {matches.unit} BOT làm được
             {matches.names.length > 0 && (
               <span className="text-muted" title={matches.names.join('\n')}>
                 {' '}

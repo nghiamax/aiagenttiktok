@@ -28,7 +28,7 @@ export default function GuardrailsCard({ guardrails: g, onChange, onReset }: Gua
         </button>
       </div>
       <p className="mt-1 text-sm text-muted">
-        Áp cho mọi đề xuất của Agent. Vượt giới hạn thì Agent không đề xuất thêm trong ngày, chờ hôm sau.
+        Áp cho mọi đề xuất của BOT. Vượt giới hạn thì BOT không đề xuất thêm trong ngày, chờ hôm sau.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -43,7 +43,7 @@ export default function GuardrailsCard({ guardrails: g, onChange, onReset }: Gua
           {g.dailyBoostCap < MIN_BOOST_BUDGET_VND && (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              Thấp hơn mức tăng cường tối thiểu của TikTok cho 1 video (~{formatNumber(MIN_BOOST_BUDGET_VND)}đ) — Agent sẽ
+              Thấp hơn mức tăng cường tối thiểu của TikTok cho 1 video (~{formatNumber(MIN_BOOST_BUDGET_VND)}đ) — BOT sẽ
               không đề xuất tăng cường được.
             </p>
           )}

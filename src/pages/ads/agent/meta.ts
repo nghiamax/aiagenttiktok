@@ -176,10 +176,10 @@ export function budgetLimitWarning(
   const pct = params.budgetChangePct;
   if (pct == null) return null;
   if (pct > limits.maxBudgetIncreasePct) {
-    return `Tăng ${pct}% vượt giới hạn ${limits.maxBudgetIncreasePct}%/ngày — Agent sẽ chỉ tăng tối đa ${limits.maxBudgetIncreasePct}%.`;
+    return `Tăng ${pct}% vượt giới hạn ${limits.maxBudgetIncreasePct}%/ngày — BOT sẽ chỉ tăng tối đa ${limits.maxBudgetIncreasePct}%.`;
   }
   if (-pct > limits.maxBudgetDecreasePct) {
-    return `Giảm ${-pct}% vượt giới hạn ${limits.maxBudgetDecreasePct}%/ngày — Agent sẽ chỉ giảm tối đa ${limits.maxBudgetDecreasePct}%.`;
+    return `Giảm ${-pct}% vượt giới hạn ${limits.maxBudgetDecreasePct}%/ngày — BOT sẽ chỉ giảm tối đa ${limits.maxBudgetDecreasePct}%.`;
   }
   return null;
 }

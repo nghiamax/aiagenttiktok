@@ -32,3 +32,18 @@ describe('ineligibleReason — sản phẩm', () => {
     expect(ineligibleReason('enable_product', {}, t(true))).toBeNull();
   });
 });
+
+describe('reEnableVerdict — ô "Cần bật lại"', async () => {
+  const { reEnableVerdict } = await import('../src/pages/ads/components/ReEnableCell');
+  const w = (cost: number, orders: number, roi: number | null) => ({ cost, revenue: null, orders, roi });
+  const t = (w30: ReturnType<typeof w> | null, w14: ReturnType<typeof w> | null = null) => ({ w30, w14 }) as never;
+  it('có lời ≥ 3 đơn → suggest; ít đơn → few; lỗ → keep_off; thiếu hoà vốn / không có số', () => {
+    expect(reEnableVerdict(t(w(2_000_000, 19, 6.1)), 4.5)).toBe('suggest');
+    expect(reEnableVerdict(t(w(78, 1, 50)), 4.5)).toBe('few');
+    expect(reEnableVerdict(t(w(1_000_000, 10, 3)), 4.5)).toBe('keep_off');
+    expect(reEnableVerdict(t(w(1_000_000, 10, 6)), null)).toBe('no_break_even');
+    expect(reEnableVerdict(t(null), 4.5)).toBe('no_data');
+    // không có 30 ngày → dùng 14 ngày
+    expect(reEnableVerdict(t(w(0, 0, null), w(500_000, 5, 6)), 4.5)).toBe('suggest');
+  });
+});

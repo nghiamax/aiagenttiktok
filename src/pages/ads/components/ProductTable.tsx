@@ -14,7 +14,7 @@ import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import { classifyProduct } from '../classify';
 import EmptyTableState from './EmptyTableState';
-import ReEnableCell from './ReEnableCell';
+import ReEnableCell, { reEnableVerdict } from './ReEnableCell';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
 import { LINK_BTN, TD, TD_NUM, TH, TOOLBAR } from './tableStyles';
@@ -41,6 +41,10 @@ const NO_SPEND_FILTER = 'no_spend';
  * Không thuộc nhóm nào. Mỗi chiến dịch 1 dòng; nhãn từng dòng: "CD đã tắt" (ưu tiên) / "Đã loại trừ" (+ đánh giá bật lại).
  */
 const OFF_FILTER = 'off';
+/** Sản phẩm đang chạy = chiến dịch đang chạy + chưa loại trừ (Sếp thêm 25/11) */
+const RUNNING_FILTER = 'running';
+/** Đã tắt / loại trừ mà số 30 ngày có lời đủ đơn → "Cân nhắc bật lại" (cùng cách chấm với cột đánh giá) */
+const REENABLE_FILTER = 'reenable';
 const NO_SPEND_CELL = {
   label: 'Chưa chi tiêu',
   title: '7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm. Sản phẩm vẫn đang bật trong chiến dịch.',
@@ -71,10 +75,16 @@ export default function ProductTable({
   const isNoSpendRow = (r: Row) => !isPausedRow(r) && !isExcludedRow(r) && !r.trend?.group && !r.trend?.unconfirmed;
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
   const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter && !isPausedRow(r);
+  const isOffRow = (r: Row) => isPausedRow(r) || isExcludedRow(r);
+  const isReEnableRow = (r: Row) => isOffRow(r) && reEnableVerdict(r.trend, breakEvenOf(settings, r.p.id)) === 'suggest';
   const filtered =
     filter === 'all'
       ? rows
-      : filter === OFF_FILTER
+      : filter === RUNNING_FILTER
+        ? rows.filter((r) => !isOffRow(r))
+        : filter === REENABLE_FILTER
+          ? rows.filter(isReEnableRow)
+          : filter === OFF_FILTER
         ? rows.filter((r) => isPausedRow(r) || isExcludedRow(r))
         : filter === NO_SPEND_FILTER
           ? rows.filter(isNoSpendRow)
@@ -91,13 +101,16 @@ export default function ProductTable({
   }
   const offCount = rows.filter((r) => isPausedRow(r) || isExcludedRow(r)).length;
   const noSpendCount = rows.filter(isNoSpendRow).length;
+  const reEnableCount = rows.filter(isReEnableRow).length;
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
+    { value: RUNNING_FILTER, label: `Đang chạy (${rows.length - offCount})` },
     ...settings.productGroups.map((g) => ({
       value: g.id,
       label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
     })),
     ...(noSpendCount > 0 || filter === NO_SPEND_FILTER ? [{ value: NO_SPEND_FILTER, label: `Chưa chi tiêu (${noSpendCount})` }] : []),
+    ...(offCount > 0 || filter === REENABLE_FILTER ? [{ value: REENABLE_FILTER, label: `Cần bật lại (${reEnableCount})` }] : []),
     ...(offCount > 0 || filter === OFF_FILTER ? [{ value: OFF_FILTER, label: `Đã tắt / loại trừ (${offCount})` }] : []),
   ];
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
@@ -119,6 +132,10 @@ export default function ProductTable({
         <span className="text-sm text-muted">
           {activeGroup ? (
             groupDescription(activeGroup, 'product')
+          ) : filter === RUNNING_FILTER ? (
+            'Sản phẩm đang chạy (chiến dịch đang bật, chưa loại trừ)'
+          ) : filter === REENABLE_FILTER ? (
+            'Đã tắt / loại trừ nhưng 30 ngày qua có lời (ROI ≥ hoà vốn, ≥ 3 đơn) — cân nhắc bật lại'
           ) : filter === OFF_FILTER ? (
             'Chiến dịch đã tắt hoặc sản phẩm đã loại trừ — không tính vào nhóm. Đã loại trừ: đánh giá bật lại theo số 30 ngày'
           ) : filter === NO_SPEND_FILTER ? (

@@ -23,6 +23,7 @@ import WatchCard from './components/WatchCard';
 import { SIGNAL_ANCHOR } from './components/SignalDivider';
 import { useAdsData } from './data';
 import { offsetOf } from '../../../shared/agentMatch';
+import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../shared/reEnable';
 import { effectiveStatus } from '../../../shared/videoStatus';
 import { productKey } from './metrics';
 import type { GroupLevel } from './groups';
@@ -91,7 +92,12 @@ export default function AdsPage() {
   const { state: agentState } = useAgentStore();
   const pendingCount = pendingProposals(agentState.proposals).length;
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const openSettings = () => setSettingsOpen(true);
+  /** Sản phẩm vừa bấm ô ROI hoà vốn ở bảng (mở hộp ở đúng sản phẩm) */
+  const [beFocus, setBeFocus] = useState<string | null>(null);
+  const openSettings = (productId?: string) => {
+    setBeFocus(typeof productId === 'string' ? productId : null);
+    setSettingsOpen(true);
+  };
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét, không đổi theo ô chọn ngày).
@@ -136,6 +142,8 @@ export default function AdsPage() {
       const group = confirmedGroup(summary.product, trends.product(p), `${p.campaignId}/${p.id}`);
       if (group) addTo(summary.product, group, p.cost, p.revenue);
     }
+    // Nhóm hệ thống "Cân nhắc bật lại": hệ thống tự đánh giá theo 30 / 14 ngày (chi / DT của khung đánh giá)
+    for (const c of reEnableCandidates(trends.snaps, settings)) addTo(summary.product, REENABLE_GROUP_ID, c.stat.cost, c.stat.revenue);
     for (const c of d7.campaigns) {
       if (c.status !== 'running') continue;
       const group = confirmedGroup(summary.campaign, trends.campaign(c), c.id);
@@ -312,6 +320,7 @@ export default function AdsPage() {
 
       {settingsOpen && (
         <BreakEvenModal
+          focusProductId={beFocus}
           products={allProducts.breakEven}
           campaignById={campaignById}
           settings={settings}

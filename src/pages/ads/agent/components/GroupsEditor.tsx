@@ -4,6 +4,7 @@ import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
 import { buildTrendIndex } from '../../../../../shared/trend';
+import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../../../shared/reEnable';
 import { useTrend } from '../../trend';
 import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
@@ -113,10 +114,12 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   }
 
   const trends = useTrend();
-  const { counts, unconfirmed } = useMemo(
-    () => countByGroup(trends.snaps, level, { ...settings, [GROUP_KEY[level]]: draft }, trends.confirmOn),
-    [trends.snaps, trends.confirmOn, level, draft, settings],
-  );
+  const { counts, unconfirmed } = useMemo(() => {
+    const r = countByGroup(trends.snaps, level, { ...settings, [GROUP_KEY[level]]: draft }, trends.confirmOn);
+    // Nhóm hệ thống "Cân nhắc bật lại": đếm theo đánh giá 30 / 14 ngày
+    if (level === 'product') r.counts.set(REENABLE_GROUP_ID, reEnableCandidates(trends.snaps, settings).length);
+    return r;
+  }, [trends.snaps, trends.confirmOn, level, draft, settings]);
 
   const errors = new Map(draft.map((g) => [g.id, validate(g, level)]));
   const hasErrors = [...errors.values()].some((e) => e.length > 0);

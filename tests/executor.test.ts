@@ -440,8 +440,28 @@ describe('Thao tác thủ công từ bảng Video (executeManual)', () => {
     expect(mock.writes).toHaveLength(0);
   });
 
+  it('Bật lại sản phẩm (bảng Sản phẩm): không cần video, thêm đúng 1 sản phẩm vào item_group_ids, hoàn tác = tắt lại', async () => {
+    mock.info.item_group_ids = ['p2'];
+    const r = await ex.executeManual({ actionType: 'enable_product', target: { campaignId: 'c1', productId: 'p1', videoId: '' } });
+    expect(mock.writes).toHaveLength(1);
+    expect(mock.writes[0].tool).toBe('campaign_gmv_max_update');
+    expect(mock.writes[0].params.item_group_ids).toEqual(['p2', 'p1']);
+    expect(r.action).toMatchObject({ actor: 'manual', ruleId: null, actionType: 'enable_product', target: { productId: 'p1', videoId: '' } });
+    await ex.undoAction(r.action.id);
+    expect(mock.info.item_group_ids).toEqual(['p2']);
+  });
+
+  it('Bật lại: sản phẩm đang bật / chiến dịch tự chọn sản phẩm → không gửi lệnh', async () => {
+    await expect(ex.executeManual({ actionType: 'enable_product', target: { campaignId: 'c1', productId: 'p1', videoId: '' } })).rejects.toThrow();
+    mock.info.item_group_ids = ['p2'];
+    mock.info.product_specific_type = 'ALL';
+    await expect(ex.executeManual({ actionType: 'enable_product', target: { campaignId: 'c1', productId: 'p1', videoId: '' } })).rejects.toThrow();
+    expect(mock.writes).toHaveLength(0);
+  });
+
   it('chỉ nhận Gỡ / Thêm lại / Tăng cường; thiếu đối tượng → từ chối', async () => {
     await expect(ex.executeManual({ actionType: 'update_budget', target, params: { budgetChangePct: 50 } })).rejects.toThrow('không làm thủ công');
+    await expect(ex.executeManual({ actionType: 'disable_product', target })).rejects.toThrow('không làm thủ công');
     await expect(ex.executeManual({ actionType: 'remove_creative', target: { campaignId: 'c1', productId: '', videoId: '' } })).rejects.toThrow('Thiếu');
     expect(mock.writes).toHaveLength(0);
   });

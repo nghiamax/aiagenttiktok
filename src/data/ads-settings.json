@@ -64,6 +64,16 @@
   ],
   "productGroups": [
     {
+      "id": "p-reenable",
+      "name": "Cân nhắc bật lại",
+      "tone": "green",
+      "icon": "sparkles",
+      "kind": "platform",
+      "builtin": true,
+      "showInInbox": true,
+      "conditionSets": []
+    },
+    {
       "id": "p-loss",
       "name": "Lỗ",
       "tone": "red",

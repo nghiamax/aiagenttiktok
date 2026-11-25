@@ -6,6 +6,7 @@ import { isSpendGated, matchesIgnoringSpend, type WindowStat } from './trend.js'
 import type { EvalContext } from './groups.js';
 import { shortVnd } from './format.js';
 import { effectiveStatus } from './videoStatus.js';
+import { REENABLE_GROUP_ID, reEnableCandidates, reEnableReason } from './reEnable.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
 export const ruleLevel = (rule: Pick<AgentRule, 'level'>): RuleLevel => rule.level ?? 'video';
@@ -292,6 +293,30 @@ export function confirmRuleTargets(
   return { kept, unconfirmed };
 }
 
+/** Đối tượng của quy tắc cấp sản phẩm chọn nhóm "Cân nhắc bật lại" (có tính phạm vi) */
+function reEnableRuleTargets(rule: AgentRule, settings: AdsSettings, d7: AdsSnapshot, snaps: ConfirmSnaps): ConfirmedTarget[] {
+  return reEnableCandidates({ d7, d14: snaps.d14, d30: snaps.d30 }, settings)
+    .filter((c) => inScope(rule, c.campaignId, c.productId))
+    .map((c) => {
+      const target = { campaignId: c.campaignId, productId: c.productId, videoId: '' };
+      // Số 'lúc đề xuất' theo khung 7 ngày (thường = 0 vì đang tắt); số 30 / 14 ngày nằm ở windows + lý do
+      const m7 = metricsOf(target, d7);
+      return {
+        target,
+        name: c.name,
+        reason: reEnableReason(c),
+        cost: m7?.cost ?? 0,
+        revenue: m7?.revenue ?? 0,
+        orders: m7?.orders ?? 0,
+        roi: m7?.roi ?? null,
+        breakEven: c.breakEven,
+        campaignRunning: c.campaignRunning,
+        productExcluded: c.excluded,
+        windows: { d14: snaps.d14 ? metricsOf(target, snaps.d14) : null, d30: snaps.d30 ? metricsOf(target, snaps.d30) : null },
+      };
+    });
+}
+
 /** Lý do bỏ qua khi khung 14 ngày không cùng nhóm */
 export const UNCONFIRMED_REASON = 'Mới có dấu hiệu — 14 ngày chưa cùng nhóm';
 
@@ -332,6 +357,10 @@ export function matchRuleTrend(
   d7: AdsSnapshot,
   snaps: ConfirmSnaps,
 ): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
+  // Nhóm hệ thống "Cân nhắc bật lại": hệ thống tự đánh giá theo 30 / 14 ngày (không dùng luật 7 = 14 ngày)
+  if (ruleLevel(rule) === 'product' && rule.trigger === REENABLE_GROUP_ID) {
+    return { kept: reEnableRuleTargets(rule, settings, d7, snaps), unconfirmed: [], recovering: [] };
+  }
   const primary = findRuleTargets(rule, settings, d7);
   const { kept, unconfirmed } = confirmRuleTargets(rule, settings, primary, snaps);
   const recovering: RuleTarget[] = [];

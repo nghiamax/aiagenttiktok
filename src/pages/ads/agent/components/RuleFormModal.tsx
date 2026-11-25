@@ -10,7 +10,7 @@ import type { VideoAction } from '../../types';
 import { useAdsData } from '../../data';
 import { useTrend } from '../../trend';
 import { campaignOfProduct, campaignOptionsOf, campaignTargetRoi, productOptionsFor } from '../lookup';
-import { ACTIONS_BY_LEVEL, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
+import { ACTIONS_BY_LEVEL, actionsFor, actionTypeMeta, budgetLimitWarning, defaultParams, LEVEL_OPTIONS, MODE_OPTIONS } from '../meta';
 import { matchRuleTargets, skippedText } from '../ruleMatch';
 import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, RuleLevel, RuleMode } from '../types';
 import GroupPicker from './GroupPicker';
@@ -55,8 +55,17 @@ export default function RuleFormModal({
     // Nhóm được truyền vào phải thuộc đúng cấp, không thì lấy nhóm gợi ý
     return initialTrigger && list.some((g) => g.id === initialTrigger) ? initialTrigger : defaultGroupId(list);
   });
-  const [actionType, setActionType] = useState<AgentActionType>(ACTIONS_BY_LEVEL[initialLevel][0]);
-  const [params, setParams] = useState<AgentRuleParams>(() => defaultParams(ACTIONS_BY_LEVEL[initialLevel][0]));
+  const [actionType, setActionType] = useState<AgentActionType>(() => actionsFor(initialLevel, trigger)[0]);
+  const [params, setParams] = useState<AgentRuleParams>(() => defaultParams(actionsFor(initialLevel, trigger)[0]));
+  // Đổi nhóm sang nhóm chỉ cho một số hành động (vd Cân nhắc bật lại) → chọn hành động đầu hợp lệ
+  const changeTrigger = (id: VideoAction) => {
+    setTrigger(id);
+    const allowed = actionsFor(level, id);
+    if (!allowed.includes(actionType)) {
+      setActionType(allowed[0]);
+      setParams(defaultParams(allowed[0]));
+    }
+  };
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [productId, setProductId] = useState<string | null>(null);
   const [cooldownHours, setCooldownHours] = useState(guardrails.cooldownHours);
@@ -171,7 +180,7 @@ export default function RuleFormModal({
         <fieldset>
           <legend className={LABEL}>Khi</legend>
           <p className="mb-2 text-xs text-muted">{SUBJECT[level]}</p>
-          <GroupPicker groups={groups} value={trigger} onChange={setTrigger} />
+          <GroupPicker groups={groups} value={trigger} onChange={changeTrigger} />
           <p className="mt-2 text-xs text-muted">
             {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
             <Link
@@ -198,7 +207,7 @@ export default function RuleFormModal({
         <fieldset>
           <legend className={LABEL}>Thì BOT sẽ</legend>
           <div className="grid gap-2 sm:grid-cols-3">
-            {ACTIONS_BY_LEVEL[level].map((a) => {
+            {actionsFor(level, trigger).map((a) => {
               const meta = actionTypeMeta(a, a === actionType ? params : {});
               const active = a === actionType;
               return (

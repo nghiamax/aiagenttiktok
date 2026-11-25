@@ -226,7 +226,7 @@ export default function GroupCard({
           <p className="flex items-center gap-2 rounded-xl bg-canvas/70 px-3 py-2.5 text-sm text-muted">
             <Lock className="size-4 shrink-0" />
             {groupDescription(group, level)}
-            {group.kind === 'platform' && ' (quy tắc của sàn, không sửa được)'}
+            {group.kind === 'platform' && (level === 'product' ? ' (hệ thống tự đánh giá, không sửa được)' : ' (quy tắc của sàn, không sửa được)')}
           </p>
         ) : (
           <>

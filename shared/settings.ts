@@ -1,5 +1,8 @@
 import { normalizeGroups, type GroupDef, type GroupLevel } from './groups.js';
 
+/** ID nhóm hệ thống cấp sản phẩm "Cân nhắc bật lại" (shared/reEnable.ts — để đây tránh vòng import) */
+export const REENABLE_GROUP = 'p-reenable';
+
 /** Thiết lập phân loại: ROI hoà vốn từng sản phẩm + định nghĩa nhóm của 3 cấp (lưu trên server) */
 export interface AdsSettings {
   /** ROI hoà vốn theo ID sản phẩm (item_group_id) */
@@ -41,7 +44,10 @@ export function normalizeSettings(saved: Partial<AdsSettings> | null | undefined
     // Bản lưu cũ (chưa có nhóm cấp này) → dùng nhóm mặc định
     const groups = Array.isArray(list) && list.length > 0 ? list : groupsOf(defaults, level);
     // Sếp bỏ nhóm mẫu "Theo dõi" (22/11/2026) — shop cần thì tự thêm nhóm mới (id khác, không bị bỏ)
-    return normalizeGroups(level === 'video' ? groups.filter((g) => !(g.id === REMOVED_VIDEO_GROUP && g.builtin)) : groups);
+    // Nhóm hệ thống "Cân nhắc bật lại" (Sếp chốt 25/11): bản lưu cũ chưa có → thêm lên đầu nhóm sản phẩm
+    const sys = level === 'product' && !groups.some((g) => g.id === REENABLE_GROUP) ? defaults.productGroups.find((g) => g.id === REENABLE_GROUP) : undefined;
+    const withSys = sys ? [sys, ...groups] : groups;
+    return normalizeGroups(level === 'video' ? withSys.filter((g) => !(g.id === REMOVED_VIDEO_GROUP && g.builtin)) : withSys);
   };
   return {
     breakEvenRoi: { ...defaults.breakEvenRoi, ...saved?.breakEvenRoi },

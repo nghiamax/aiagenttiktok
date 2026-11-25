@@ -13,6 +13,8 @@ interface BreakEvenModalProps {
   onSave: (next: AdsSettings) => void;
   onReset: () => void;
   onClose: () => void;
+  /** Bấm ô ROI hoà vốn của 1 sản phẩm ở bảng → sản phẩm đó lên đầu + con trỏ ở ô nhập */
+  focusProductId?: string | null;
 }
 
 /** ROI chỉ có phần thập phân nên không bỏ dấu chấm */
@@ -33,9 +35,11 @@ export default function BreakEvenModal({
   onSave,
   onReset,
   onClose,
+  focusProductId = null,
 }: BreakEvenModalProps) {
   // Một SPU có thể nằm ở nhiều chiến dịch → nhập 1 lần theo ID sản phẩm
-  const uniqueProducts = [...new Map(products.map((p) => [p.id, p])).values()];
+  const all = [...new Map(products.map((p) => [p.id, p])).values()];
+  const uniqueProducts = focusProductId ? [...all.filter((p) => p.id === focusProductId), ...all.filter((p) => p.id !== focusProductId)] : all;
 
   const { loaded } = useAdsSettings();
   const fromSettings = () => Object.fromEntries(uniqueProducts.map((p) => [p.id, toText(settings.breakEvenRoi[p.id])]));
@@ -101,7 +105,7 @@ export default function BreakEvenModal({
     >
       <ul className="divide-y divide-line">
         {uniqueProducts.map((p) => (
-          <li key={p.id} className="flex items-center gap-3 px-5 py-3">
+          <li key={p.id} className={`flex items-center gap-3 px-5 py-3 ${p.id === focusProductId ? 'bg-primary-soft' : ''}`}>
             <MediaThumb src={p.imageUrl} icon={Package} shape="square" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium" title={p.name}>
@@ -116,6 +120,7 @@ export default function BreakEvenModal({
               <input
                 type="text"
                 inputMode="decimal"
+                autoFocus={p.id === focusProductId}
                 placeholder="vd 3,5"
                 value={beDraft[p.id] ?? ''}
                 onChange={(e) => setBeDraft({ ...beDraft, [p.id]: e.target.value })}

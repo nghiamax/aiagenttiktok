@@ -14,7 +14,8 @@ import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import { classifyProduct } from '../classify';
 import EmptyTableState from './EmptyTableState';
-import { reEnableVerdict } from '../reEnable';
+import { REENABLE_GROUP_ID, reEnableVerdict } from '../reEnable';
+import ProductReEnableButton from './ProductReEnableButton';
 import ReEnableCell from './ReEnableCell';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
@@ -28,7 +29,8 @@ interface ProductTableProps {
   onOpenProduct: (product: AdsProduct) => void;
   onOpenCampaign: (campaignId: string) => void;
   settings: AdsSettings;
-  onOpenSettings: () => void;
+  /** Mở hộp ROI hoà vốn (kèm sản phẩm vừa bấm → lên đầu, con trỏ ở ô nhập) */
+  onOpenSettings: (productId?: string) => void;
   /** ID nhóm sản phẩm đang lọc hoặc 'all' (lưu trên URL) */
   action: string;
   onActionChange: (action: string) => void;
@@ -44,8 +46,8 @@ const NO_SPEND_FILTER = 'no_spend';
 const OFF_FILTER = 'off';
 /** Sản phẩm đang chạy = chiến dịch đang chạy + chưa loại trừ (Sếp thêm 25/11) */
 const RUNNING_FILTER = 'running';
-/** Đã tắt / loại trừ mà số 30 ngày có lời đủ đơn → "Cân nhắc bật lại" (cùng cách chấm với cột đánh giá) */
-const REENABLE_FILTER = 'reenable';
+/** Nhóm hệ thống "Cân nhắc bật lại" (shared/reEnable.ts): đã tắt / loại trừ mà số 30 ngày có lời đủ đơn — ô lọc = ID nhóm (khớp ô Tổng quan) */
+const REENABLE_FILTER = REENABLE_GROUP_ID;
 const NO_SPEND_CELL = {
   label: 'Chưa chi tiêu',
   title: '7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm. Sản phẩm vẫn đang bật trong chiến dịch.',
@@ -90,7 +92,7 @@ export default function ProductTable({
         : filter === NO_SPEND_FILTER
           ? rows.filter(isNoSpendRow)
           : rows.filter((r) => !isExcludedRow(r) && (r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter)));
-  const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
+  const activeGroup = filter === 'all' || filter === REENABLE_FILTER ? undefined : findGroup(settings, filter, 'product');
 
   // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
   const counts = new Map<string, number>();
@@ -106,12 +108,12 @@ export default function ProductTable({
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     { value: RUNNING_FILTER, label: `Đang chạy (${rows.length - offCount})` },
-    ...settings.productGroups.map((g) => ({
+    ...settings.productGroups.filter((g) => g.kind !== 'platform').map((g) => ({
       value: g.id,
       label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
     })),
     ...(noSpendCount > 0 || filter === NO_SPEND_FILTER ? [{ value: NO_SPEND_FILTER, label: `Chưa chi tiêu (${noSpendCount})` }] : []),
-    ...(offCount > 0 || filter === REENABLE_FILTER ? [{ value: REENABLE_FILTER, label: `Cần bật lại (${reEnableCount})` }] : []),
+    ...(offCount > 0 || filter === REENABLE_FILTER ? [{ value: REENABLE_FILTER, label: `${findGroup(settings, REENABLE_FILTER, 'product')?.name ?? 'Cân nhắc bật lại'} (${reEnableCount})` }] : []),
     ...(offCount > 0 || filter === OFF_FILTER ? [{ value: OFF_FILTER, label: `Đã tắt / loại trừ (${offCount})` }] : []),
   ];
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
@@ -238,7 +240,18 @@ export default function ProductTable({
                   </td>
                   <td className={TD}>
                     {isPausedRow(row) || isExcludedRow(row) ? (
-                      <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} kind={isPausedRow(row) ? 'paused' : 'excluded'} />
+                      <div className="flex flex-col items-start gap-1.5">
+                        <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} kind={isPausedRow(row) ? 'paused' : 'excluded'} />
+                        {isExcludedRow(row) && (
+                          <ProductReEnableButton
+                            campaignId={p.campaignId}
+                            campaignName={campaign?.name ?? p.campaignId}
+                            productId={p.id}
+                            productName={p.name}
+                            suggested={isReEnableRow(row)}
+                          />
+                        )}
+                      </div>
                     ) : (
                       <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                     )}
@@ -263,14 +276,21 @@ export default function ProductTable({
                       return be == null ? (
                         <button
                           type="button"
-                          onClick={onOpenSettings}
+                          onClick={() => onOpenSettings(p.id)}
                           title="Chưa nhập ROI hoà vốn — nhóm Lỗ / Lời sẽ không khớp"
                           className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
                         >
                           Nhập
                         </button>
                       ) : (
-                        <span className="text-muted">{formatNumber(be, 2)}</span>
+                        <button
+                          type="button"
+                          onClick={() => onOpenSettings(p.id)}
+                          title="Bấm để sửa ROI hoà vốn"
+                          className="rounded-lg px-2 py-1 text-muted underline decoration-dotted underline-offset-4 transition hover:bg-primary-soft hover:text-primary"
+                        >
+                          {formatNumber(be, 2)}
+                        </button>
                       );
                     })()}
                   </td>

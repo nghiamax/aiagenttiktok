@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { AUTO_MODE_ENABLED } from '../../../../shared/agentPolicy';
+import { REENABLE_GROUP_ID } from '../../../../shared/reEnable';
 import { formatNumber } from '../../../lib/format';
 import { ENTITY_METRICS, type ClauseValue, type Metric } from '../groups';
 import type {
@@ -95,6 +96,11 @@ export const ACTIONS_BY_LEVEL: Record<RuleLevel, AgentActionType[]> = {
   product: ['disable_product', 'enable_product', 'remind'],
   campaign: ['update_budget', 'update_roi_target', 'remind'],
 };
+
+/** Hành động hợp với cấp + nhóm: nhóm hệ thống "Cân nhắc bật lại" (sản phẩm đang tắt) chỉ Bật sản phẩm / Nhắc việc */
+export function actionsFor(level: RuleLevel, trigger: string): AgentActionType[] {
+  return level === 'product' && trigger === REENABLE_GROUP_ID ? ['enable_product', 'remind'] : ACTIONS_BY_LEVEL[level];
+}
 
 /** Chỉ số dùng được trong điều kiện của từng cấp */
 export const METRICS_BY_LEVEL: Record<RuleLevel, Metric[]> = {

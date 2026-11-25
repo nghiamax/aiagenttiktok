@@ -513,8 +513,8 @@ export function executeProposal(proposalId: string, by?: ActorRef, actor: 'appro
 
 /* ───────── Thao tác thủ công (Sếp bấm trên bảng Video + xác nhận) ───────── */
 
-/** Thao tác thủ công cho phép từ bảng Video */
-export const MANUAL_ACTIONS = ['remove_creative', 'add_creative', 'boost_creative'] as const;
+/** Thao tác thủ công: bảng Video (gỡ / thêm lại / tăng cường) + bảng Sản phẩm (bật lại sản phẩm đã loại trừ — Sếp yêu cầu 25/11) */
+export const MANUAL_ACTIONS = ['remove_creative', 'add_creative', 'boost_creative', 'enable_product'] as const;
 export type ManualAction = (typeof MANUAL_ACTIONS)[number];
 export const MAX_MANUAL_BOOST_DAYS = 7;
 
@@ -531,8 +531,11 @@ async function videoWindow(target: AgentTarget): Promise<AgentActionLog['before'
   const w = { from: `${range.from}T00:00:00+07:00`, to: `${range.to}T23:59:59+07:00`, cost: 0, revenue: 0, orders: 0, roi: null as number | null, breakEven: null };
   try {
     const { snapshot } = await getSnapshot(range, false);
-    for (const v of snapshot.videos) {
-      if (v.campaignId !== target.campaignId || v.id !== target.videoId) continue;
+    // Cấp sản phẩm (không có video): cộng dòng sản phẩm trong chiến dịch
+    const rows = target.videoId
+      ? snapshot.videos.filter((v) => v.campaignId === target.campaignId && v.id === target.videoId)
+      : snapshot.products.filter((p) => p.campaignId === target.campaignId && p.id === target.productId);
+    for (const v of rows) {
       w.cost += v.cost ?? 0;
       w.revenue += v.revenue ?? 0;
       w.orders += v.orders ?? 0;
@@ -544,15 +547,16 @@ async function videoWindow(target: AgentTarget): Promise<AgentActionLog['before'
   return w;
 }
 
-/** Sếp bấm Gỡ / Thêm lại / Tăng cường trên bảng Video rồi xác nhận → chạy thật */
+/** Sếp bấm Gỡ / Thêm lại / Tăng cường (bảng Video) hoặc Bật lại (bảng Sản phẩm) rồi xác nhận → chạy thật */
 export function executeManual(input: ManualInput, by?: ActorRef): Promise<ExecResult> {
   return serial(async () => {
     if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
     const actionType = input.actionType as ManualAction;
     if (!(MANUAL_ACTIONS as readonly string[]).includes(actionType)) throw new PrecheckError('Thao tác này không làm thủ công được');
     const t = input.target;
-    if (!t?.campaignId || !t.productId || !t.videoId) throw new PrecheckError('Thiếu chiến dịch / sản phẩm / video');
-    const target: AgentTarget = { campaignId: String(t.campaignId), productId: String(t.productId), videoId: String(t.videoId) };
+    const productLevel = actionType === 'enable_product';
+    if (!t?.campaignId || !t.productId || (!productLevel && !t.videoId)) throw new PrecheckError(productLevel ? 'Thiếu chiến dịch / sản phẩm' : 'Thiếu chiến dịch / sản phẩm / video');
+    const target: AgentTarget = { campaignId: String(t.campaignId), productId: String(t.productId), videoId: productLevel ? '' : String(t.videoId) };
 
     let params: AgentRuleParams = {};
     if (actionType === 'boost_creative') {

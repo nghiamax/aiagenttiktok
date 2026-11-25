@@ -136,6 +136,9 @@ const FALLBACK_TEXT: Record<GroupLevel, string> = {
 
 /** Mô tả cả nhóm bằng lời */
 export function groupDescription(group: GroupDef, level: GroupLevel = 'video'): string {
+  if (group.kind === 'platform' && group.id === 'p-reenable') {
+    return 'Hệ thống tự đánh giá: sản phẩm đang tắt / loại trừ (hoặc chiến dịch đã tắt) mà 30 ngày qua ROI ≥ hoà vốn và có từ 3 đơn';
+  }
   if (group.kind === 'platform') {
     return 'Theo trạng thái TikTok: video cần ủy quyền nhưng đã có chi phí, đơn hoặc doanh thu';
   }

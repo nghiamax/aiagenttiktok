@@ -38,6 +38,9 @@ const PAGE_SIZE = 20;
 const EXCLUDED_FILTER = 'excluded';
 /** Sản phẩm đang bật nhưng 7 ngày không có chi / đơn → chưa xếp nhóm (để các ô lọc cộng lại đủ Tất cả) */
 const NO_SPEND_FILTER = 'no_spend';
+/** Thuộc chiến dịch đã tắt — ưu tiên hơn "Đã loại trừ" (mỗi chiến dịch 1 dòng, Sếp chốt 25/11) */
+const PAUSED_FILTER = 'paused_campaign';
+const PAUSED_CELL = { label: 'Chiến dịch đã tắt', title: 'Chiến dịch đang tắt — sản phẩm không chạy ở chiến dịch này, Agent không làm gì' };
 const NO_SPEND_CELL = {
   label: 'Chưa chi tiêu',
   title: '7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm. Sản phẩm vẫn đang bật trong chiến dịch.',
@@ -62,9 +65,10 @@ export default function ProductTable({
   /** Thuộc chiến dịch đã tắt → không tính (phần cuối khi lọc nhóm) */
   const isPausedRow = (r: Row) => campaignById.get(r.p.campaignId)?.status !== 'running';
   /** Đã tắt khỏi chiến dịch */
-  const isExcludedRow = (r: Row) => !!r.p.excluded;
+  /** Đã tắt khỏi chiến dịch ĐANG CHẠY (chiến dịch đã tắt thì xếp vào "Chiến dịch đã tắt") */
+  const isExcludedRow = (r: Row) => !!r.p.excluded && !isPausedRow(r);
   /** Đang bật nhưng 7 ngày không có chi / đơn → chưa thuộc nhóm nào */
-  const isNoSpendRow = (r: Row) => !isExcludedRow(r) && !r.trend?.group && !r.trend?.unconfirmed;
+  const isNoSpendRow = (r: Row) => !isPausedRow(r) && !isExcludedRow(r) && !r.trend?.group && !r.trend?.unconfirmed;
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
   const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter && !isPausedRow(r);
   const filtered =
@@ -74,6 +78,8 @@ export default function ProductTable({
         ? rows.filter(isExcludedRow)
         : filter === NO_SPEND_FILTER
           ? rows.filter(isNoSpendRow)
+          : filter === PAUSED_FILTER
+            ? rows.filter(isPausedRow)
         : rows.filter((r) => !isExcludedRow(r) && (r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter)));
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
@@ -87,6 +93,7 @@ export default function ProductTable({
   }
   const excludedCount = rows.filter(isExcludedRow).length;
   const noSpendCount = rows.filter(isNoSpendRow).length;
+  const pausedCount = rows.filter(isPausedRow).length;
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     ...settings.productGroups.map((g) => ({
@@ -95,6 +102,7 @@ export default function ProductTable({
     })),
     ...(noSpendCount > 0 || filter === NO_SPEND_FILTER ? [{ value: NO_SPEND_FILTER, label: `Chưa chi tiêu (${noSpendCount})` }] : []),
     ...(excludedCount > 0 || filter === EXCLUDED_FILTER ? [{ value: EXCLUDED_FILTER, label: `Đã loại trừ (${excludedCount})` }] : []),
+    ...(pausedCount > 0 || filter === PAUSED_FILTER ? [{ value: PAUSED_FILTER, label: `Chiến dịch đã tắt (${pausedCount})` }] : []),
   ];
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
   // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
@@ -117,6 +125,8 @@ export default function ProductTable({
             groupDescription(activeGroup, 'product')
           ) : filter === EXCLUDED_FILTER ? (
             'Sản phẩm đã tắt khỏi chiến dịch — đánh giá theo số lúc còn chạy (30 ngày) so với ROI hoà vốn'
+          ) : filter === PAUSED_FILTER ? (
+            'Sản phẩm thuộc chiến dịch đang tắt — không tính vào nhóm, Agent không làm gì'
           ) : filter === NO_SPEND_FILTER ? (
             'Sản phẩm đang bật nhưng 7 ngày gần nhất không có chi phí / đơn — chưa xếp nhóm'
           ) : (
@@ -177,7 +187,11 @@ export default function ProductTable({
                           {p.name}
                         </button>
                         <p className="flex items-center gap-1.5 truncate text-xs text-muted">
-                          {p.excluded && (
+                          {isPausedRow(row) ? (
+                            <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 font-semibold text-muted" title="Chiến dịch đang tắt">
+                              CD đã tắt
+                            </span>
+                          ) : isExcludedRow(row) && (
                             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 font-semibold text-muted" title="Sản phẩm đã tắt khỏi chiến dịch">
                               Đã loại trừ
                             </span>
@@ -198,10 +212,10 @@ export default function ProductTable({
                     </button>
                   </td>
                   <td className={TD}>
-                    {p.excluded ? (
+                    {isExcludedRow(row) ? (
                       <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} />
                     ) : (
-                      <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                      <TrendGroupCell level="product" trend={trend} empty={isPausedRow(row) ? PAUSED_CELL : NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                     )}
                   </td>
                   <td className={TD}>

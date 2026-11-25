@@ -149,7 +149,21 @@ export default function AdsPage() {
   const inCampaign = (id: string) => !campaignId || id === campaignId;
 
   const campaigns = snapshot.campaigns.filter((c) => inCampaign(c.id));
-  const products = snapshot.products.filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
+  // Sản phẩm đã loại trừ không có số trong khoảng đang xem (vd tắt từ 10 ngày trước) vẫn phải hiện ở ô "Đã loại trừ":
+  // lấy thêm từ snapshot 30 / 14 ngày (Sếp chốt 25/11) — số khoảng đang xem = 0, đánh giá bật lại dùng số 30 ngày
+  const products = useMemo(() => {
+    const have = new Set(snapshot.products.map((p) => `${p.campaignId}/${p.id}`));
+    const extra: AdsProduct[] = [];
+    for (const s of [trends.snaps.d30, trends.snaps.d14]) {
+      for (const p of s?.products ?? []) {
+        const k = `${p.campaignId}/${p.id}`;
+        if (!p.excluded || have.has(k)) continue;
+        have.add(k);
+        extra.push({ ...p, cost: 0, revenue: 0, orders: 0, roi: null, videoCount: 0 });
+      }
+    }
+    return [...snapshot.products, ...extra];
+  }, [snapshot.products, trends.snaps.d30, trends.snaps.d14]).filter((p) => inCampaign(p.campaignId) && (!productId || p.id === productId));
   const videos = snapshot.videos.filter(
     (v) =>
       inCampaign(v.campaignId) && (!productId || v.productId === productId) && matches(v.title, v.id, v.identityName),

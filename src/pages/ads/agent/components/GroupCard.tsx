@@ -144,7 +144,8 @@ export default function GroupCard({
           <button type="button" onClick={() => onMove(1)} disabled={!canMoveDown} aria-label="Ưu tiên thấp hơn" title="Ưu tiên thấp hơn" className={iconBtn}>
             <ArrowDown className="size-4" />
           </button>
-          {!group.builtin && (
+          {/* Nhóm điều kiện xoá được, kể cả nhóm mẫu Cắt lỗ / Nhân rộng (Sếp chốt 25/11); nhóm sàn + nhóm cuối thì không */}
+          {group.kind === 'custom' && (
             <button
               type="button"
               onClick={() => setConfirmRemove(true)}
@@ -231,6 +232,7 @@ export default function GroupCard({
           <span className="text-danger">
             Xoá nhóm “{group.name}”?
             {usedByRules > 0 && ` ${usedByRules} quy tắc đang dùng nhóm này sẽ không chạy.`}
+            {group.builtin && ' Muốn lấy lại: bấm Khôi phục mặc định.'}
           </span>
           <div className="flex gap-2">
             <button

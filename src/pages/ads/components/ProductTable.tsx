@@ -112,6 +112,7 @@ export default function ProductTable({
             <tr className="border-b border-line">
               <th className={`${TH} text-left`}>Sản phẩm</th>
               <th className={`${TH} text-left`}>Chiến dịch</th>
+              <th className={`${TH} text-left`} title="Agent xét theo 7 · 14 · 30 ngày">Nhóm</th>
               <th className={`${TH} text-left`}>Video</th>
               <SortableHeader label="Chi phí" sortKey="cost" {...header} />
               <SortableHeader label="Doanh thu" sortKey="revenue" {...header} />
@@ -119,7 +120,6 @@ export default function ProductTable({
               <SortableHeader label="CPA" sortKey="cpa" {...header} />
               <SortableHeader label="ROI" sortKey="roi" {...header} />
               <th className={`${TH} text-right`}>ROI hoà vốn</th>
-              <th className={`${TH} text-left`} title="Agent xét theo 7 · 14 · 30 ngày">Nhóm</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -164,6 +164,9 @@ export default function ProductTable({
                     </button>
                   </td>
                   <td className={TD}>
+                    <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                  </td>
+                  <td className={TD}>
                     <button
                       type="button"
                       onClick={() => onOpenProduct(p)}
@@ -193,9 +196,6 @@ export default function ProductTable({
                         <span className="text-muted">{formatNumber(be, 2)}</span>
                       );
                     })()}
-                  </td>
-                  <td className={TD}>
-                    <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                   </td>
                 </tr>
                 </Fragment>

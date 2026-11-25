@@ -37,6 +37,10 @@ export function ineligibleReason(actionType: AgentActionType, params: AgentRuleP
       if (t.videoStatus && NO_BOOST_STATUSES.has(t.videoStatus)) return 'Video không đủ điều kiện tăng cường';
       if (!params.boostBudget) return 'Quy tắc chưa đặt ngân sách tăng cường';
       return null;
+    case 'disable_product':
+      return t.productExcluded ? 'Sản phẩm đã tắt khỏi chiến dịch' : null;
+    case 'enable_product':
+      return t.productExcluded ? null : 'Sản phẩm đang bật';
     case 'update_budget':
       return params.budgetChangePct ? null : 'Quy tắc chưa đặt % ngân sách';
     case 'update_roi_target':
@@ -99,6 +103,8 @@ export interface RuleTarget {
   videoStatus?: VideoStatus;
   /** Chiến dịch đang chạy? */
   campaignRunning: boolean;
+  /** Cấp sản phẩm: đã tắt khỏi chiến dịch */
+  productExcluded?: boolean;
 }
 
 const inScope = (rule: AgentRule, campaignId: string, productId?: string) =>
@@ -150,6 +156,7 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
           roi: p.roi,
           breakEven: breakEvenOf(settings, p.id),
           campaignRunning: running(p.campaignId),
+          productExcluded: !!p.excluded,
         },
       ];
     });

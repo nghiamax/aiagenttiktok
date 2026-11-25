@@ -130,7 +130,7 @@ export default function AdsPage() {
       }
     }
     for (const p of d7.products) {
-      if (!running(p.campaignId)) continue;
+      if (!running(p.campaignId) || p.excluded) continue; // sản phẩm đã tắt khỏi chiến dịch → không tính (ô lọc riêng ở bảng)
       const group = confirmedGroup(summary.product, trends.product(p), `${p.campaignId}/${p.id}`);
       if (group) addTo(summary.product, group, p.cost, p.revenue);
     }

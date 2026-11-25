@@ -220,6 +220,7 @@ function buildCore(
   /* 3. Sản phẩm lỗ */
   const lossP = suggestParams(settings, 'product-loss');
   const lossTargets: RuleTarget[] = snapshot.products.flatMap((p) => {
+    if (p.excluded) return []; // đã tắt khỏi chiến dịch
     const cost = p.cost ?? 0;
     const be = breakEvenOf(settings, p.id);
     if (be == null || cost <= 0) return [];
@@ -536,7 +537,7 @@ function buildCore(
     const p = suggestParams(settings, 'product-few-videos');
     const byProduct = new Map<string, { name: string; campaignId: string; cost: number; videos: Set<string>; running: Set<string>; unavailable: Set<string> }>();
     for (const pr of snapshot.products) {
-      if (!running(pr.campaignId)) continue;
+      if (!running(pr.campaignId) || pr.excluded) continue;
       const x = byProduct.get(pr.id) ?? { name: pr.name, campaignId: pr.campaignId, cost: 0, videos: new Set(), running: new Set(), unavailable: new Set() };
       x.cost += pr.cost ?? 0;
       byProduct.set(pr.id, x);

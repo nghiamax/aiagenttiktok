@@ -71,6 +71,11 @@ export interface AdsProduct {
   revenue: number | null;
   orders: number | null;
   roi: number | null;
+  /**
+   * Đã tắt khỏi chiến dịch (chiến dịch chọn sản phẩm thủ công, sản phẩm không còn trong danh sách đang bật).
+   * Thiếu = đang bật hoặc không biết (chiến dịch tự chọn sản phẩm / không đọc được).
+   */
+  excluded?: boolean;
 }
 
 /** Video (creative) quảng cáo cho một sản phẩm */

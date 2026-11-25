@@ -14,6 +14,7 @@ import SignalDivider from './SignalDivider';
 import { useTrend } from '../trend';
 import { classifyProduct } from '../classify';
 import EmptyTableState from './EmptyTableState';
+import ReEnableCell from './ReEnableCell';
 import MediaThumb from './MediaThumb';
 import SortableHeader from './SortableHeader';
 import { LINK_BTN, TD, TD_NUM, TH, TOOLBAR } from './tableStyles';
@@ -33,6 +34,8 @@ interface ProductTableProps {
 }
 
 const PAGE_SIZE = 20;
+/** Sản phẩm đã tắt khỏi chiến dịch: ô lọc riêng, không thuộc nhóm nào (Sếp chốt 25/11, như video Đã gỡ) */
+const EXCLUDED_FILTER = 'excluded';
 
 export default function ProductTable({
   products,
@@ -52,26 +55,34 @@ export default function ProductTable({
   type Row = (typeof rows)[number];
   /** Thuộc chiến dịch đã tắt → không tính (phần cuối khi lọc nhóm) */
   const isPausedRow = (r: Row) => campaignById.get(r.p.campaignId)?.status !== 'running';
+  /** Đã tắt khỏi chiến dịch */
+  const isExcludedRow = (r: Row) => !!r.p.excluded;
   /** Dấu hiệu của nhóm đang lọc: 7 ngày gần nhất thuộc nhóm, 14 ngày chưa */
   const isSignalRow = (r: Row) => !!r.trend?.unconfirmed && r.trend.g7 === filter && !isPausedRow(r);
   const filtered =
-    filter === 'all' ? rows : rows.filter((r) => r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter));
+    filter === 'all'
+      ? rows
+      : filter === EXCLUDED_FILTER
+        ? rows.filter(isExcludedRow)
+        : rows.filter((r) => !isExcludedRow(r) && (r.trend?.group === filter || (!!r.trend?.unconfirmed && r.trend.g7 === filter)));
   const activeGroup = filter === 'all' ? undefined : findGroup(settings, filter, 'product');
 
   // Số sản phẩm mỗi nhóm hiện ngay trên nút lọc
   const counts = new Map<string, number>();
   const signals = new Map<string, number>();
   for (const r of rows) {
-    if (isPausedRow(r)) continue; // số trên nút lọc = sản phẩm Agent làm được (khớp ô Tổng quan)
+    if (isPausedRow(r) || isExcludedRow(r)) continue; // số trên nút lọc = sản phẩm Agent làm được (khớp ô Tổng quan)
     if (r.trend?.group) counts.set(r.trend.group, (counts.get(r.trend.group) ?? 0) + 1);
     else if (r.trend?.unconfirmed && r.trend.g7) signals.set(r.trend.g7, (signals.get(r.trend.g7) ?? 0) + 1);
   }
+  const excludedCount = rows.filter(isExcludedRow).length;
   const filterOptions = [
     { value: 'all', label: `Tất cả (${rows.length})` },
     ...settings.productGroups.map((g) => ({
       value: g.id,
       label: `${g.name} ${counts.get(g.id) ?? 0}${signals.get(g.id) ? ` · ${signals.get(g.id)} dấu hiệu` : ''}`,
     })),
+    ...(excludedCount > 0 || filter === EXCLUDED_FILTER ? [{ value: EXCLUDED_FILTER, label: `Đã loại trừ (${excludedCount})` }] : []),
   ];
   const sortRows = (list: Row[]) => sortByValue(list, (r) => (sort.key === 'cpa' ? r.cpa : r.p[sort.key]), sort.dir);
   // Lọc theo nhóm: đã thuộc nhóm lên trước, dấu hiệu xếp sau dải phân cách
@@ -92,6 +103,8 @@ export default function ProductTable({
         <span className="text-sm text-muted">
           {activeGroup ? (
             groupDescription(activeGroup, 'product')
+          ) : filter === EXCLUDED_FILTER ? (
+            'Sản phẩm đã tắt khỏi chiến dịch — đánh giá theo số lúc còn chạy (30 ngày) so với ROI hoà vốn'
           ) : (
             <>
               {filtered.length} sản phẩm ·{' '}
@@ -149,7 +162,14 @@ export default function ProductTable({
                         >
                           {p.name}
                         </button>
-                        <p className="truncate text-xs text-muted">ID {p.id}</p>
+                        <p className="flex items-center gap-1.5 truncate text-xs text-muted">
+                          {p.excluded && (
+                            <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 font-semibold text-muted" title="Sản phẩm đã tắt khỏi chiến dịch">
+                              Đã loại trừ
+                            </span>
+                          )}
+                          ID {p.id}
+                        </p>
                       </div>
                     </div>
                   </td>
@@ -164,7 +184,11 @@ export default function ProductTable({
                     </button>
                   </td>
                   <td className={TD}>
-                    <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                    {p.excluded ? (
+                      <ReEnableCell trend={trend} breakEven={breakEvenOf(settings, p.id)} />
+                    ) : (
+                      <TrendGroupCell level="product" trend={trend} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                    )}
                   </td>
                   <td className={TD}>
                     <button

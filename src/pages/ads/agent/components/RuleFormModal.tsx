@@ -196,7 +196,7 @@ export default function RuleFormModal({
         </fieldset>
 
         <fieldset>
-          <legend className={LABEL}>Thì Agent sẽ</legend>
+          <legend className={LABEL}>Thì BOT sẽ</legend>
           <div className="grid gap-2 sm:grid-cols-3">
             {ACTIONS_BY_LEVEL[level].map((a) => {
               const meta = actionTypeMeta(a, a === actionType ? params : {});
@@ -330,7 +330,7 @@ export default function RuleFormModal({
           <p className="flex gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
             <AlertTriangle className="size-5 shrink-0" />
             <span>
-              Agent sẽ tự thực hiện quy tắc này mà không chờ Sếp duyệt. Đây là thao tác thật trên TikTok Ads, vẫn bị giới hạn
+              BOT sẽ tự thực hiện quy tắc này mà không chờ Sếp duyệt. Đây là thao tác thật trên TikTok Ads, vẫn bị giới hạn
               bởi giới hạn an toàn (trần tăng cường, mức tăng/giảm ngân sách, số thao tác mỗi ngày).
             </span>
           </p>

@@ -7,6 +7,7 @@ import {
   CREATIVE_VERIFY_MAX_SEC,
   CREATIVE_VERIFY_MIN_SEC,
   CREATIVE_VERIFY_TIMEOUT_MIN,
+  AUTO_MODE_ENABLED,
   EXECUTION_ENABLED,
   MIN_BOOST_BUDGET_VND,
 } from '../../shared/agentPolicy.js';
@@ -402,8 +403,42 @@ function markUndone(rt: AgentRuntime, originalId: string) {
   if (o) o.status = 'undone';
 }
 
-/** Duyệt + thực thi 1 đề xuất. PrecheckError = không gửi lệnh, đề xuất vẫn chờ duyệt. */
-export function executeProposal(proposalId: string, by?: ActorRef): Promise<ExecResult> {
+/** Người làm của BOT trong nhật ký */
+export const BOT_ACTOR: ActorRef = { id: 'bot', name: 'BOT AI' };
+
+/**
+ * BOT chạy (Sếp mở 25/11): thực thi lần lượt các đề xuất của quy tắc chế độ "BOT chạy" vừa tạo, đi đúng đường Duyệt
+ * (xét lại số liệu, giới hạn an toàn, điều kiện TikTok). Không chạy được → đề xuất ở lại Chờ duyệt kèm lý do.
+ * Quy tắc đã đổi khỏi "BOT chạy" / BOT tạm dừng giữa chừng → bỏ qua (để Sếp duyệt tay).
+ */
+export async function runAutoProposals(ids: string[]): Promise<{ ran: number; failed: number }> {
+  let ran = 0;
+  let failed = 0;
+  for (const id of ids) {
+    const cfg = getAgentConfig();
+    const p = getRuntime().proposals.find((x) => x.id === id);
+    const rule = p && cfg.rules.find((r) => r.id === p.ruleId);
+    if (!AUTO_MODE_ENABLED || cfg.paused || !p || p.status !== 'pending' || rule?.mode !== 'auto') continue;
+    try {
+      await executeProposal(id, BOT_ACTOR, 'agent');
+      ran++;
+    } catch (e) {
+      failed++;
+      const reason = (e instanceof Error ? e.message : String(e)).replace(/^Chưa chạy được: /, '');
+      updateRuntime((r) => {
+        const x = r.proposals.find((y) => y.id === id);
+        if (x && x.status === 'pending') x.note = `BOT chưa chạy được: ${reason} — chờ Sếp duyệt`;
+      });
+    }
+  }
+  return { ran, failed };
+}
+
+/**
+ * Duyệt + thực thi 1 đề xuất. PrecheckError = không gửi lệnh, đề xuất vẫn chờ duyệt.
+ * actor 'agent' = BOT tự chạy (quy tắc chế độ "BOT chạy"), còn lại = Sếp duyệt.
+ */
+export function executeProposal(proposalId: string, by?: ActorRef, actor: 'approved' | 'agent' = 'approved'): Promise<ExecResult> {
   return serial(async () => {
     if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
     const rt = getRuntime();
@@ -448,7 +483,7 @@ export function executeProposal(proposalId: string, by?: ActorRef): Promise<Exec
     const action: AgentActionLog = {
       id: crypto.randomUUID(),
       executedAt: new Date().toISOString(),
-      actor: 'approved',
+      actor,
       ruleId: p.ruleId,
       actionType: p.actionType,
       target: p.target,

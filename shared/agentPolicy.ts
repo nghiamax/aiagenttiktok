@@ -1,9 +1,10 @@
 /**
- * Chính sách Agent hiện tại (Sếp chốt 18/11/2026): MỌI VIỆC CẦN SẾP DUYỆT.
- * Chế độ "Tự chạy" bị khoá: giao diện không cho chọn, server ép quy tắc 'auto' về 'approve'.
- * Chỉ mở lại khi Sếp yêu cầu rõ ràng.
+ * Chế độ "BOT chạy" (Sếp mở 25/11/2026 — trước đó 18/11: mọi việc cần Sếp duyệt).
+ * true: quy tắc đặt "BOT chạy" được server thực thi ngay sau lượt quét (runAutoProposals), đi đúng đường Duyệt:
+ * xét lại số liệu, giới hạn an toàn, điều kiện TikTok; không chạy được → nằm lại Chờ duyệt.
+ * false: giao diện ẩn lựa chọn, server ép quy tắc 'auto' về 'approve'.
  */
-export const AUTO_MODE_ENABLED = false;
+export const AUTO_MODE_ENABLED = true;
 
 /** Ngân sách tăng cường tối thiểu của TikTok: tương đương 10 USD/ngày (ước tính theo tỷ giá ~26.000đ) */
 export const MIN_BOOST_BUDGET_VND = 260_000;

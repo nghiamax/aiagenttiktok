@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
-/* Chốt chặn an toàn: chỉ tool đọc, Tự chạy bị khoá */
+/* Chốt chặn an toàn: chỉ tool đọc; "BOT chạy" chỉ mở qua AUTO_MODE_ENABLED (Sếp mở 25/11) */
 
 describe('Chỉ gọi tool ĐỌC của TikTok', () => {
   it('READ_TOOLS không có tool tạo / sửa / xoá', async () => {
@@ -84,16 +84,16 @@ describe('Chỉ gọi tool ĐỌC của TikTok', () => {
   });
 });
 
-describe('Tự chạy bị khoá (mọi việc cần Sếp duyệt)', () => {
+describe('BOT chạy (Sếp mở 25/11/2026)', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  it('AUTO_MODE_ENABLED = false', async () => {
+  it('AUTO_MODE_ENABLED = true', async () => {
     const { AUTO_MODE_ENABLED } = await import('../shared/agentPolicy');
-    expect(AUTO_MODE_ENABLED).toBe(false);
+    expect(AUTO_MODE_ENABLED).toBe(true);
   });
 
-  it('server lưu quy tắc "auto" thành "approve"', async () => {
+  it('server giữ quy tắc "BOT chạy" khi lưu (không ép về Cần duyệt)', async () => {
     vi.stubEnv('DATA_DIR', dir);
     vi.resetModules();
     const store = await import('../server/store');
@@ -105,11 +105,23 @@ describe('Tự chạy bị khoá (mọi việc cần Sếp duyệt)', () => {
         rules: [...base.rules.map((r) => ({ ...r, mode: 'auto' as const })), { ...base.rules[0], id: 'my-rule', custom: true, mode: 'auto' as const }],
       });
     });
-    expect(saved.rules.every((r) => r.mode !== 'auto')).toBe(true);
-    expect(saved.rules.find((r) => r.id === 'my-rule')?.mode).toBe('approve');
+    expect(saved.rules.every((r) => r.mode === 'auto')).toBe(true);
+    expect(saved.rules.find((r) => r.id === 'my-rule')?.mode).toBe('auto');
     // database ghi vào thư mục tạm, không đụng server-data thật
     expect(fs.existsSync(path.join(dir, 'app.db'))).toBe(true);
     (await import('../server/db/index')).closeDb();
     vi.unstubAllEnvs();
+  });
+});
+
+describe('BOT chạy bị khoá khi AUTO_MODE_ENABLED = false', () => {
+  it('server ép quy tắc "auto" về "approve"', async () => {
+    vi.resetModules();
+    vi.doMock('../shared/agentPolicy', async (orig) => ({ ...(await orig<object>()), AUTO_MODE_ENABLED: false }));
+    const { normalizeAgentConfig } = await import('../server/store');
+    const cfg = normalizeAgentConfig({ rules: [{ id: 'x', custom: true, mode: 'auto' } as never] });
+    expect(cfg.rules.find((r) => r.id === 'x')?.mode).toBe('approve');
+    vi.doUnmock('../shared/agentPolicy');
+    vi.resetModules();
   });
 });

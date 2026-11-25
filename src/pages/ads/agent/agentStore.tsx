@@ -34,6 +34,8 @@ export interface RunSummary {
   outdated?: number;
   skipped?: 'paused';
   skippedTargets: Record<string, number>;
+  /** BOT chạy: số đề xuất đã tự thực thi / chưa chạy được (chờ duyệt) */
+  auto?: { ran: number; failed: number };
 }
 
 /** Kết quả Duyệt (chạy thật) / Bỏ qua / Hoàn tác */

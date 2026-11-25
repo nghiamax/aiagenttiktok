@@ -456,3 +456,39 @@ describe('Thao tác thủ công từ bảng Video (executeManual)', () => {
     expect(u.action).toMatchObject({ actor: 'manual', undoOf: r.action.id });
   });
 });
+
+describe('BOT chạy (runAutoProposals — quy tắc chế độ "BOT chạy")', () => {
+  const autoRule = (mode: 'auto' | 'approve' = 'auto') => ({ id: 'r1', mode } as AgentConfig['rules'][number]);
+
+  it('thực thi ngay, nhật ký ghi BOT tự chạy', async () => {
+    mock.config.rules = [autoRule()];
+    const p = proposal('update_budget', { budgetChangePct: 20 });
+    expect(await ex.runAutoProposals([p.id])).toEqual({ ran: 1, failed: 0 });
+    expect(mock.writes).toHaveLength(1);
+    expect(mock.runtime.actions[0]).toMatchObject({ actor: 'agent', by: ex.BOT_ACTOR, proposalId: p.id });
+    expect(mock.runtime.proposals[0].status).toBe('approved');
+  });
+
+  it('vượt giới hạn an toàn → không gửi lệnh, đề xuất nằm lại Chờ duyệt kèm lý do', async () => {
+    mock.config.rules = [autoRule()];
+    mock.config.guardrails.maxActionsPerDay = 1;
+    await ex.executeProposal(proposal('update_budget', { budgetChangePct: 10 }).id);
+    const p = proposal('update_budget', { budgetChangePct: 20 });
+    expect(await ex.runAutoProposals([p.id])).toEqual({ ran: 0, failed: 1 });
+    expect(mock.writes).toHaveLength(1);
+    const x = mock.runtime.proposals.find((y) => y.id === p.id)!;
+    expect(x.status).toBe('pending');
+    expect(x.note).toMatch(/^BOT chưa chạy được: .*thao tác hôm nay.* — chờ Sếp duyệt$/);
+  });
+
+  it('quy tắc đã đổi về Cần duyệt / BOT tạm dừng → không tự chạy', async () => {
+    mock.config.rules = [autoRule('approve')];
+    const p = proposal('update_budget', { budgetChangePct: 20 });
+    expect(await ex.runAutoProposals([p.id])).toEqual({ ran: 0, failed: 0 });
+    mock.config.rules = [autoRule()];
+    mock.config.paused = true;
+    expect(await ex.runAutoProposals([p.id])).toEqual({ ran: 0, failed: 0 });
+    expect(mock.writes).toHaveLength(0);
+    expect(mock.runtime.proposals[0].status).toBe('pending');
+  });
+});

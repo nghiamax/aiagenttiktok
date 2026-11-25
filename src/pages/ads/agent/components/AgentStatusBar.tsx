@@ -35,12 +35,13 @@ function isToday(iso: string) {
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
 function summaryText(s: RunSummary): string {
-  if (s.skipped === 'paused') return 'Agent đang tạm dừng nên không chạy.';
+  if (s.skipped === 'paused') return 'BOT đang tạm dừng nên không chạy.';
   const skipped = Object.entries(s.skippedTargets)
     .map(([reason, n]) => `${reason.toLowerCase()}: ${n}`)
     .join(', ');
   const outdated = s.outdated ? `, ${s.outdated} đề xuất cũ tự huỷ (không còn khớp số liệu mới)` : '';
-  return `Xong: ${s.proposals} đề xuất mới, ${s.reminders} nhắc việc${outdated}${skipped ? `. Bỏ qua — ${skipped}` : ''}.`;
+  const auto = s.auto ? `, BOT tự chạy ${s.auto.ran}${s.auto.failed ? ` (${s.auto.failed} chưa chạy được — xem Chờ duyệt)` : ''}` : '';
+  return `Xong: ${s.proposals} đề xuất mới, ${s.reminders} nhắc việc${auto}${outdated}${skipped ? `. Bỏ qua — ${skipped}` : ''}.`;
 }
 
 /** Dải trạng thái Agent: công tắc Bật/Tắt tự quét, Quét ngay, lần chạy gần nhất, mức dùng giới hạn hôm nay */

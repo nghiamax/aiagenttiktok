@@ -6,7 +6,7 @@ import { holdSchedulerLock, releaseSchedulerLock } from './leaderLock.js';
 /** Lượt quét bị chặn vì tiến trình khác đang giữ khoá → thử lại sau ngần này (không đợi tới giờ sau) */
 export const LOCK_RETRY_MS = 60_000;
 import { runAgent, type RunSummary } from './engine.js';
-import { verifyPendingActions } from './executor.js';
+import { runAutoProposals, verifyPendingActions } from './executor.js';
 import { fillAfterMetrics } from './afterMetrics.js';
 
 /** Điền số liệu "Sau thao tác" từng khối 24h: 1 phút sau khi bật server, rồi mỗi 15 phút (chỉ đọc TikTok; không có khối tới hạn thì không gọi) */
@@ -81,12 +81,14 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
   if (existing) return existing;
   // Quét ngay: lấy số liệu mới từ TikTok; lịch tự động: dùng cache (tối đa 6 tiếng)
   const p = runAgent({ fresh: trigger === 'manual' })
+    // BOT chạy: thực thi ngay đề xuất của quy tắc chế độ "BOT chạy" (cùng shop, lần lượt, đủ lớp kiểm tra như Duyệt)
+    .then(async (s) => (s.autoIds.length ? { ...s, auto: await runAutoProposals(s.autoIds) } : s))
     .then((s) => {
       const skipped = Object.entries(s.skippedTargets)
         .map(([k, n]) => `${k}: ${n}`)
         .join(', ');
       console.log(
-        `[agent] ${shop} ${trigger} ${s.skipped ? '— đang tạm dừng' : `→ ${s.proposals} đề xuất, ${s.reminders} nhắc việc, ${s.expired} hết hạn, ${s.outdated} không còn khớp${skipped ? ` · bỏ qua (${skipped})` : ''}`}`,
+        `[agent] ${shop} ${trigger} ${s.skipped ? '— đang tạm dừng' : `→ ${s.proposals} đề xuất, ${s.reminders} nhắc việc, ${s.expired} hết hạn, ${s.outdated} không còn khớp${skipped ? ` · bỏ qua (${skipped})` : ''}${s.auto ? ` · BOT chạy ${s.auto.ran}, chưa chạy được ${s.auto.failed}` : ''}`}`,
       );
       return s;
     })

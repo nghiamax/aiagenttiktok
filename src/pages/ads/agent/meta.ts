@@ -58,7 +58,7 @@ export function actionTypeMeta(actionType: AgentActionType, params: AgentRulePar
 }
 
 export const ACTOR_META: Record<ActionActor, Meta> = {
-  agent: { label: 'Agent tự chạy', icon: Bot, className: 'text-accent-violet' },
+  agent: { label: 'BOT tự chạy', icon: Bot, className: 'text-accent-violet' },
   approved: { label: 'Sếp duyệt', icon: UserCheck, className: 'text-primary' },
   manual: { label: 'Thủ công', icon: Hand, className: 'text-muted' },
 };
@@ -70,14 +70,14 @@ export const STATUS_META: Record<ActionStatus, Meta> = {
   undone: { label: 'Đã hoàn tác', icon: RotateCcw, className: 'text-muted' },
 };
 
-/** Tự chạy đang khoá (shared/agentPolicy.ts): mọi việc cần Sếp duyệt */
+/** Chế độ quy tắc — "BOT chạy" theo AUTO_MODE_ENABLED (shared/agentPolicy.ts, Sếp mở 25/11) */
 export const MODE_OPTIONS: { value: RuleMode; label: string }[] = [
   { value: 'off', label: 'Tắt' },
   { value: 'approve', label: 'Cần duyệt' },
-  ...(AUTO_MODE_ENABLED ? [{ value: 'auto' as const, label: 'Tự chạy' }] : []),
+  ...(AUTO_MODE_ENABLED ? [{ value: 'auto' as const, label: 'BOT chạy' }] : []),
 ];
 
-export const MODE_LABEL: Record<RuleMode, string> = { off: 'Tắt', approve: 'Cần duyệt', auto: 'Tự chạy' };
+export const MODE_LABEL: Record<RuleMode, string> = { off: 'Tắt', approve: 'Cần duyệt', auto: 'BOT chạy' };
 
 /* ───────────── Cấp áp dụng ───────────── */
 

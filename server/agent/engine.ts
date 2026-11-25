@@ -44,6 +44,10 @@ export interface RunSummary {
   outdated: number;
   /** Số đối tượng bị bỏ qua theo lý do */
   skippedTargets: Record<string, number>;
+  /** Đề xuất mới của quy tắc chế độ "BOT chạy" — scheduler thực thi ngay sau lượt quét (runAutoProposals) */
+  autoIds: string[];
+  /** Kết quả BOT chạy (scheduler điền) */
+  auto?: { ran: number; failed: number };
 }
 
 const vnDate = (offsetDays: number) => new Date(Date.parse(todayVN()) - offsetDays * DAY).toISOString().slice(0, 10);
@@ -149,7 +153,7 @@ function applyWindows(p: AgentProposal, t: ConfirmedTarget) {
 export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> {
   const cfg = getAgentConfig();
   const ranAt = new Date().toISOString();
-  const summary: RunSummary = { ranAt, proposals: 0, reminders: 0, expired: 0, outdated: 0, skippedTargets: {} };
+  const summary: RunSummary = { ranAt, proposals: 0, reminders: 0, expired: 0, outdated: 0, skippedTargets: {}, autoIds: [] };
   const skip = (reason: string) => (summary.skippedTargets[reason] = (summary.skippedTargets[reason] ?? 0) + 1);
 
   if (cfg.paused) return { ...summary, skipped: 'paused' };
@@ -298,10 +302,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           ...(t.slowLoss && { slowLoss: true }),
           status: 'pending',
           ruleMode: rule.mode,
-          ...(rule.mode === 'auto' && {
-            note: 'Quy tắc đặt Tự chạy nhưng Agent chưa được bật thực thi trên TikTok → chờ Sếp duyệt',
-          }),
         };
+        if (rule.mode === 'auto') summary.autoIds.push(proposal.id);
         rt.proposals.unshift(proposal);
         pendingKeys.add(k);
         touch(k, ranAt);

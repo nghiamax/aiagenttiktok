@@ -253,7 +253,7 @@ export function lessons(stats: RuleImpact[], groupName: (id: string) => string):
         ruleId: rule.id,
         tone: 'good',
         target: 'rules',
-        text: `Đúng ${pct(s.accuracy)} trên ${scored} thao tác — có thể chuyển sang Tự chạy.`,
+        text: `Đúng ${pct(s.accuracy)} trên ${scored} thao tác — có thể chuyển sang BOT chạy.`,
       });
     }
   }

@@ -81,6 +81,16 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect(Date.parse(p.expiresAt) - Date.parse(p.createdAt)).toBe(24 * 3_600_000);
   });
 
+  it('quy tắc BOT chạy → đề xuất vào autoIds (scheduler thực thi); Cần duyệt → không', async () => {
+    expect((await runAgent()).autoIds).toEqual([]);
+    mock.runtime = { lastRunAt: null, lastRunError: null, proposals: [], actions: [] };
+    mock.config.rules[0] = { ...mock.config.rules[0], mode: 'auto' };
+    const s = await runAgent();
+    expect(s.autoIds).toHaveLength(3);
+    expect(s.autoIds.sort()).toEqual(mock.runtime.proposals.map((p) => p.id).sort());
+    expect(mock.runtime.proposals.every((p) => p.ruleMode === 'auto' && !p.note)).toBe(true);
+  });
+
   it('chạy lại ngay → không tạo trùng', async () => {
     await runAgent();
     const s = await runAgent();

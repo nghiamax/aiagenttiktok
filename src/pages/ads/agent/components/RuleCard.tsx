@@ -40,7 +40,7 @@ const MODE_STYLE: Record<RuleMode, string> = {
   auto: 'border-accent-violet/50',
 };
 
-/** Thẻ quy tắc: Khi … Thì … · Phạm vi · Chế độ Tắt / Cần duyệt / Tự chạy */
+/** Thẻ quy tắc: Khi … Thì … · Phạm vi · Chế độ Tắt / Cần duyệt / BOT chạy */
 export default function RuleCard({ rule, settings, guardrails, onChange, onRemove }: RuleCardProps) {
   const { snapshot } = useAdsData();
   const [confirmAuto, setConfirmAuto] = useState(false);
@@ -59,7 +59,7 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
   const productId = rule.productIds?.[0] ?? null;
 
   function changeMode(mode: RuleMode) {
-    // Bật Tự chạy luôn hỏi lại: Agent sẽ tự tiêu tiền / gỡ video không cần duyệt
+    // Bật BOT chạy luôn hỏi lại: BOT sẽ tự tiêu tiền / gỡ video không cần duyệt
     if (mode === 'auto' && rule.mode !== 'auto') setConfirmAuto(true);
     else onChange({ mode });
   }
@@ -80,7 +80,7 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
               )}
             </h3>
             <p className="text-xs text-muted">
-              {rule.mode === 'off' ? 'Đang tắt' : rule.mode === 'approve' ? 'Đề xuất chờ Sếp duyệt' : 'Agent tự thực hiện'}
+              {rule.mode === 'off' ? 'Đang tắt' : rule.mode === 'approve' ? 'Đề xuất chờ Sếp duyệt' : 'BOT tự thực hiện (không chờ duyệt)'}
             </p>
           </div>
         </div>
@@ -259,7 +259,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
 
       {confirmAuto && (
         <Modal
-          title={`Bật "Tự chạy" cho ${rule.name}?`}
+          title={`Bật "BOT chạy" cho ${rule.name}?`}
           onClose={() => setConfirmAuto(false)}
           footer={
             <div className="flex justify-end gap-2">
@@ -278,7 +278,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
                 }}
                 className="rounded-xl bg-accent-violet px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
               >
-                Bật Tự chạy
+                Bật BOT chạy
               </button>
             </div>
           }
@@ -287,13 +287,13 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             <p className="flex gap-2 rounded-xl bg-amber-50 p-3 text-amber-700">
               <AlertTriangle className="size-5 shrink-0" />
               <span>
-                Agent sẽ tự thực hiện <b>“{actionText(rule)}”</b> mà không chờ Sếp duyệt. Đây là thao tác thật trên TikTok
+                BOT sẽ tự thực hiện <b>“{actionText(rule)}”</b> mà không chờ Sếp duyệt. Đây là thao tác thật trên TikTok
                 Ads.
               </span>
             </p>
             <p className="text-muted">
               Mọi thao tác vẫn bị giới hạn bởi giới hạn an toàn (trần tăng cường, mức tăng/giảm ngân sách, số thao tác mỗi ngày), và được ghi vào Nhật ký để
-              theo dõi. Nên chạy ở chế độ Cần duyệt một thời gian trước khi bật Tự chạy.
+              theo dõi. Nên chạy ở chế độ Cần duyệt một thời gian trước khi bật BOT chạy. Việc không chạy được (vượt giới hạn, TikTok lỗi) sẽ nằm lại Chờ duyệt.
             </p>
           </div>
         </Modal>

@@ -9,6 +9,7 @@ import {
   tuneDecisions,
   tuneSettingsOf,
   DEFAULT_TUNE,
+  isLegacyCampaignRule,
   TUNE_TRIGGER,
   type CampaignTuneSettings,
   type TuneContext,
@@ -307,5 +308,27 @@ describe('Xác nhận 2 khung không chồng nhau + quy tắc Agent', () => {
   it('khung B trống (chiến dịch mới) → A6; bảo vệ không cần xác nhận', () => {
     const d7 = snap({ budget: 480_000 });
     expect(tuneDecisions(d7, d7, S, [], NOW).get('c1')!.code).toBe('A6');
+  });
+});
+
+describe('Cấp chiến dịch chỉ còn BOT chỉnh (Sếp chốt 26/11)', () => {
+  it('quy tắc chiến dịch theo nhóm cũ = kiểu cũ, không khớp gì; c-tune / cấp video không phải', () => {
+    const legacy: AgentRule = { id: 'x', name: 'x', level: 'campaign', trigger: 'c-scale', actionType: 'update_budget', params: { budgetChangePct: 20 }, mode: 'approve', cooldownHours: 24, campaignIds: null };
+    expect(isLegacyCampaignRule(legacy)).toBe(true);
+    expect(isLegacyCampaignRule({ ...legacy, trigger: TUNE_TRIGGER })).toBe(false);
+    expect(isLegacyCampaignRule({ ...legacy, level: 'video', trigger: 'cut' })).toBe(false);
+    const d7 = snap({ budget: 480_000 });
+    expect(matchRuleTrend(legacy, S, d7, { d14: double(d7), d30: null }, [], NOW).kept).toHaveLength(0);
+  });
+
+  it('c-tune Nhắc việc: chỉ chiến dịch cần Sếp quyết (B6), bỏ chiến dịch BOT tự chỉnh được', () => {
+    const remind: AgentRule = { id: 'r', name: 'r', level: 'campaign', trigger: TUNE_TRIGGER, actionType: 'remind', params: {}, mode: 'approve', cooldownHours: 24, campaignIds: null };
+    // ROI thực 3,5 ≪ ROI MT 5 (chênh 30%), lỗ 375k ≈ 1,4P (chưa tới H4)
+    const b6 = one({ targetRoi: 5, budget: 2_000_000 }, { revenue: 10.5e6, cost: 3e6, orders: 10 });
+    const { kept } = matchRuleTrend(remind, S1(), b6, { d14: double(b6), d30: null }, [], NOW);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ actionType: 'remind', params: { tune: { code: 'B6' } } });
+    const c1 = snap({ budget: 480_000 });
+    expect(matchRuleTrend(remind, S, c1, { d14: double(c1), d30: null }, [], NOW).kept).toHaveLength(0);
   });
 });

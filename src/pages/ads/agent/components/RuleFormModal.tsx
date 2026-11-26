@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, FolderOpen, Package } from 'lucide-react';
+import { AlertTriangle, Bell, FolderOpen, Package, SlidersHorizontal } from 'lucide-react';
+import { TUNE_MODES, TUNE_TRIGGER, tuneSettingsOf } from '../../../../../shared/campaignTune';
 import Modal from '../../../../components/ui/Modal';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
@@ -33,6 +34,24 @@ const SUBJECT: Record<RuleLevel, string> = {
   campaign: 'Chiến dịch thuộc nhóm:',
 };
 
+/** Cấp chiến dịch: chỉ còn BOT chỉnh ROI & ngân sách (Sếp chốt 26/11) */
+const CAMPAIGN_CHOICES: { action: AgentActionType; label: string; desc: string; icon: typeof Bell; tone: string }[] = [
+  {
+    action: 'update_roi_target',
+    label: 'Chỉnh ROI & ngân sách',
+    desc: 'Theo tình huống từng chiến dịch, có đo lại và trả về số cũ',
+    icon: SlidersHorizontal,
+    tone: 'bg-primary-soft text-primary',
+  },
+  {
+    action: 'remind',
+    label: 'Nhắc việc',
+    desc: 'Khi cần Sếp quyết: nên tắt, vẫn lỗ sau 3 bước, không đạt nổi ROI MT…',
+    icon: Bell,
+    tone: 'bg-amber-50 text-amber-600',
+  },
+];
+
 const LABEL = 'mb-1.5 block text-sm font-medium';
 const SELECT_BOX =
   'mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-white px-3 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-soft hover:border-muted/40';
@@ -51,12 +70,18 @@ export default function RuleFormModal({
   const groups = groupsOf(settings, level);
   const [name, setName] = useState('');
   const [trigger, setTrigger] = useState<VideoAction>(() => {
+    // Cấp chiến dịch chỉ còn BOT chỉnh ROI & ngân sách (Sếp chốt 26/11)
+    if (initialLevel === 'campaign') return TUNE_TRIGGER;
     const list = groupsOf(settings, initialLevel);
     // Nhóm được truyền vào phải thuộc đúng cấp, không thì lấy nhóm gợi ý
     return initialTrigger && list.some((g) => g.id === initialTrigger) ? initialTrigger : defaultGroupId(list);
   });
-  const [actionType, setActionType] = useState<AgentActionType>(() => actionsFor(initialLevel, trigger)[0]);
-  const [params, setParams] = useState<AgentRuleParams>(() => defaultParams(actionsFor(initialLevel, trigger)[0]));
+  const [actionType, setActionType] = useState<AgentActionType>(() =>
+    initialLevel === 'campaign' ? 'update_roi_target' : actionsFor(initialLevel, trigger)[0],
+  );
+  const [params, setParams] = useState<AgentRuleParams>(() =>
+    initialLevel === 'campaign' ? {} : defaultParams(actionsFor(initialLevel, trigger)[0]),
+  );
   // Đổi nhóm sang nhóm chỉ cho một số hành động (vd Cân nhắc bật lại) → chọn hành động đầu hợp lệ
   const changeTrigger = (id: VideoAction) => {
     setTrigger(id);
@@ -72,6 +97,7 @@ export default function RuleFormModal({
   const [mode, setMode] = useState<RuleMode>('approve');
   const [touched, setTouched] = useState(false);
 
+  const isCampaign = level === 'campaign';
   const triggerGroup = groups.find((g) => g.id === trigger);
   const nameError = touched && name.trim() === '' ? 'Nhập tên quy tắc' : null;
 
@@ -92,11 +118,17 @@ export default function RuleFormModal({
 
   function changeLevel(next: RuleLevel) {
     setLevel(next);
+    if (next === 'campaign') {
+      setTrigger(TUNE_TRIGGER);
+      setActionType('update_roi_target');
+      setParams({});
+      setProductId(null);
+      return;
+    }
     const first = ACTIONS_BY_LEVEL[next][0];
     setActionType(first);
     setParams(defaultParams(first));
     setTrigger(defaultGroupId(groupsOf(settings, next)));
-    if (next === 'campaign') setProductId(null);
   }
 
   function changeAction(a: AgentActionType) {
@@ -164,7 +196,7 @@ export default function RuleFormModal({
             onBlur={() => setTouched(true)}
             placeholder={
               level === 'campaign'
-                ? 'vd: Tăng ngân sách khi tiêu gần hết mà ROI tốt'
+                ? 'vd: BOT chỉnh chiến dịch Gross revenue'
                 : level === 'product'
                   ? 'vd: Tắt sản phẩm lỗ'
                   : 'vd: Gỡ video lỗ chiến dịch Gross revenue'
@@ -179,18 +211,41 @@ export default function RuleFormModal({
 
         <fieldset>
           <legend className={LABEL}>Khi</legend>
-          <p className="mb-2 text-xs text-muted">{SUBJECT[level]}</p>
-          <GroupPicker groups={groups} value={trigger} onChange={changeTrigger} />
-          <p className="mt-2 text-xs text-muted">
-            {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
-            <Link
-              to={`/care-ads/product?view=groups&level=${level}`}
-              onClick={onClose}
-              className="font-medium text-primary hover:text-primary-hover"
-            >
-              Sửa phân nhóm {LEVEL_UNIT[level]} →
-            </Link>
-          </p>
+          {isCampaign ? (
+            <div className="flex items-start gap-3 rounded-xl border border-primary bg-primary-soft px-3 py-2.5 text-sm">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary">
+                <SlidersHorizontal className="size-4" />
+              </span>
+              <span>
+                <b className="block text-primary">Theo Chiến lược điều chỉnh · chế độ {TUNE_MODES[tuneSettingsOf(settings).mode].label}</b>
+                <span className="text-xs text-muted">
+                  BOT tự xét từng chiến dịch (lỗ / lời / đang thử) và chọn tăng / giảm ngân sách hoặc ROI mục tiêu.{' '}
+                  <Link
+                    to="/care-ads/product?view=groups&level=campaign"
+                    onClick={onClose}
+                    className="font-medium text-primary hover:text-primary-hover"
+                  >
+                    Sửa chiến lược →
+                  </Link>
+                </span>
+              </span>
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-muted">{SUBJECT[level]}</p>
+              <GroupPicker groups={groups} value={trigger} onChange={changeTrigger} />
+              <p className="mt-2 text-xs text-muted">
+                {triggerGroup ? groupDescription(triggerGroup, level) : ''}{' '}
+                <Link
+                  to={`/care-ads/product?view=groups&level=${level}`}
+                  onClick={onClose}
+                  className="font-medium text-primary hover:text-primary-hover"
+                >
+                  Sửa phân nhóm {LEVEL_UNIT[level]} →
+                </Link>
+              </p>
+            </>
+          )}
           <p className="mt-2 text-sm">
             <b>{formatNumber(matches.names.length)}</b> {matches.unit} BOT làm được
             {matches.names.length > 0 && (
@@ -206,6 +261,35 @@ export default function RuleFormModal({
 
         <fieldset>
           <legend className={LABEL}>Thì BOT sẽ</legend>
+          {isCampaign ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {CAMPAIGN_CHOICES.map((c) => {
+                const active = c.action === actionType;
+                return (
+                  <button
+                    key={c.action}
+                    type="button"
+                    onClick={() => {
+                      setActionType(c.action);
+                      setParams({});
+                    }}
+                    aria-pressed={active}
+                    className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                      active ? 'border-primary bg-primary-soft' : 'border-line hover:bg-canvas'
+                    }`}
+                  >
+                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${c.tone}`}>
+                      <c.icon className="size-4" />
+                    </span>
+                    <span>
+                      <b className={`block font-medium ${active ? 'text-primary' : ''}`}>{c.label}</b>
+                      <span className="text-xs text-muted">{c.desc}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
           <div className="grid gap-2 sm:grid-cols-3">
             {actionsFor(level, trigger).map((a) => {
               const meta = actionTypeMeta(a, a === actionType ? params : {});
@@ -228,6 +312,7 @@ export default function RuleFormModal({
               );
             })}
           </div>
+          )}
 
           {actionType === 'boost_creative' && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -247,7 +332,7 @@ export default function RuleFormModal({
               />
             </div>
           )}
-          {actionType === 'update_budget' && (
+          {!isCampaign && actionType === 'update_budget' && (
             <div className="mt-3 sm:max-w-xs">
               <PctChangeField
                 label="Đổi ngân sách ngày"
@@ -257,7 +342,7 @@ export default function RuleFormModal({
               />
             </div>
           )}
-          {actionType === 'update_roi_target' && (
+          {!isCampaign && actionType === 'update_roi_target' && (
             <div className="mt-3 sm:max-w-xs">
               <PctChangeField
                 label="Đổi ROI mục tiêu"
@@ -321,7 +406,11 @@ export default function RuleFormModal({
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
             label="Thời gian chờ"
-            hint={`Không thao tác lại trên cùng ${level === 'video' ? 'video' : level === 'product' ? 'sản phẩm' : 'chiến dịch'}`}
+            hint={
+              isCampaign
+                ? 'Đề xuất / nhắc lại sau khi Sếp bỏ qua (bước đã chạy BOT tự đo)'
+                : `Không thao tác lại trên cùng ${level === 'video' ? 'video' : 'sản phẩm'}`
+            }
             suffix="giờ"
             value={cooldownHours}
             onCommit={setCooldownHours}

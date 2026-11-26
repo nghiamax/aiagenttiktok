@@ -145,3 +145,19 @@ describe('buildSuggestions', () => {
     expect(list.slice(firstDone).every((x) => x.done)).toBe(true);
   });
 });
+
+describe('Gợi ý cấp chiến dịch → bật BOT chỉnh ROI & ngân sách (Sếp chốt 26/11)', () => {
+  const snap = snapshot({
+    campaigns: [campaign({ id: 'c1', status: 'running', budget: 400_000, cost: 2.8e6, revenue: 14e6, orders: 40, roi: 5, targetRoi: 4 })],
+    products: [product({ id: 'p1', campaignId: 'c1', cost: 2.8e6, revenue: 14e6, orders: 40 })],
+  });
+  const S = settingsWith({ p1: 3 });
+
+  it('nút Bật quy tắc trỏ quy tắc c-tune, không tạo quy tắc theo nhóm cũ', () => {
+    const g = buildSuggestions(snap, S, [], GUARDRAILS).find((x) => x.id === 'campaign-scale');
+    expect(g?.action).toMatchObject({ kind: 'rule', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target' });
+    expect(g?.done).toBe(false);
+    const tune = rule({ id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', params: {} });
+    expect(buildSuggestions(snap, S, [tune], GUARDRAILS).find((x) => x.id === 'campaign-scale')?.done).toBe(true);
+  });
+});

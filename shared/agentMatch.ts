@@ -1,6 +1,6 @@
 import type { AdsSnapshot, AdsVideo, VideoStatus } from './adsSnapshot.js';
 import type { AgentActionLog, AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
-import { TUNE_CODES, TUNE_TRIGGER, tuneDecisions } from './campaignTune.js';
+import { isLegacyCampaignRule, needsBossDecision, TUNE_CODES, TUNE_TRIGGER, tuneDecisions } from './campaignTune.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
 import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
 import { isSpendGated, matchesIgnoringSpend, type WindowStat } from './trend.js';
@@ -353,6 +353,13 @@ function tuneRuleTargets(
       breakEven: d.econ.breakEven,
       campaignRunning: c.status === 'running',
     };
+    // Nhắc việc: chỉ những chiến dịch BOT cần Sếp quyết (nên tắt, vẫn lỗ sau 3 bước…) — không đổi gì trên TikTok
+    if (rule.actionType === 'remind') {
+      if (needsBossDecision(d)) {
+        kept.push({ ...t, actionType: 'remind', params: { tune: { code: d.code } }, windows: { d14: snaps.d14 ? metricsOf(target, snaps.d14) : null, d30: snaps.d30 ? metricsOf(target, snaps.d30) : null } });
+      }
+      continue;
+    }
     if (d.signal) {
       unconfirmed.push(t);
       continue;
@@ -417,6 +424,8 @@ export function matchRuleTrend(
 ): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
   // BOT chỉnh ROI & ngân sách (Sếp chốt 26/11): bảng quyết định theo tình huống, mỗi chiến dịch 1 hành động riêng
   if (ruleLevel(rule) === 'campaign' && rule.trigger === TUNE_TRIGGER) return tuneRuleTargets(rule, settings, d7, snaps, actions, now);
+  // Quy tắc chiến dịch theo nhóm cũ: đã thay bằng BOT chỉnh ROI & ngân sách → không khớp gì
+  if (isLegacyCampaignRule(rule)) return { kept: [], unconfirmed: [], recovering: [] };
   // Nhóm hệ thống "Cân nhắc bật lại": hệ thống tự đánh giá theo 30 / 14 ngày (không dùng luật 7 = 14 ngày)
   if (ruleLevel(rule) === 'product' && rule.trigger === REENABLE_GROUP_ID) {
     return { kept: reEnableRuleTargets(rule, settings, d7, snaps), unconfirmed: [], recovering: [] };

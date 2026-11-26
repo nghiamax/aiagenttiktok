@@ -3,6 +3,7 @@ import path from 'node:path';
 import { normalizeSettings, type AdsSettings } from '../shared/settings.js';
 import type { AgentActionLog, AgentConfig, AgentProposal, AgentRuntime, AgentState } from '../shared/agentTypes.js';
 import { AUTO_MODE_ENABLED } from '../shared/agentPolicy.js';
+import { isLegacyCampaignRule } from '../shared/campaignTune.js';
 import { config } from './config.js';
 import { getDb, parseJson, tx } from './db/index.js';
 import { currentShopId } from './shopContext.js';
@@ -69,7 +70,10 @@ export function normalizeAgentConfig(saved: Partial<AgentConfig> | null): AgentC
         return s ? { ...r, ...s, params: { ...r.params, ...s.params }, custom: false } : r;
       }),
       ...(saved?.rules ?? []).filter((r) => r.custom && !defaultIds.has(r.id)),
-    ].map((r) => (!AUTO_MODE_ENABLED && r.mode === 'auto' ? { ...r, mode: 'approve' as const } : r)),
+    ]
+      .map((r) => (!AUTO_MODE_ENABLED && r.mode === 'auto' ? { ...r, mode: 'approve' as const } : r))
+      // Quy tắc chiến dịch theo nhóm cũ: đã thay bằng BOT chỉnh ROI & ngân sách (Sếp chốt 26/11) → luôn Tắt
+      .map((r) => (isLegacyCampaignRule(r) && r.mode !== 'off' ? { ...r, mode: 'off' as const } : r)),
     guardrails: { ...DEFAULT_AGENT.guardrails, ...saved?.guardrails },
   };
 }

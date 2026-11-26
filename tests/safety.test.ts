@@ -124,4 +124,16 @@ describe('BOT chạy bị khoá khi AUTO_MODE_ENABLED = false', () => {
     vi.doUnmock('../shared/agentPolicy');
     vi.resetModules();
   });
+
+  it('server ép quy tắc chiến dịch theo nhóm cũ về Tắt (cấp chiến dịch chỉ còn BOT chỉnh, Sếp chốt 26/11)', async () => {
+    const { normalizeAgentConfig } = await import('../server/store');
+    const cfg = normalizeAgentConfig({
+      rules: [
+        { id: 'old', custom: true, level: 'campaign', trigger: 'c-scale', actionType: 'update_budget', mode: 'approve' } as never,
+        { id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', mode: 'approve' } as never,
+      ],
+    });
+    expect(cfg.rules.find((r) => r.id === 'old')?.mode).toBe('off');
+    expect(cfg.rules.find((r) => r.id === 'tune-campaign')?.mode).toBe('approve');
+  });
 });

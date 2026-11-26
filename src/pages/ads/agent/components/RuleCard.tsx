@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TUNE_TRIGGER } from '../../../../../shared/campaignTune';
+import { isLegacyCampaignRule, TUNE_TRIGGER } from '../../../../../shared/campaignTune';
 import { useAgentStore } from '../agentStore';
 import { AlertTriangle, ChevronDown, FolderOpen, Package, Trash2 } from 'lucide-react';
 import FilterSelect from '../../../../components/ui/FilterSelect';
@@ -56,11 +56,13 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
   const matches = matchRuleTargets(rule, settings, trends.snaps.d7, trends.confirm, agentState.actions);
   // BOT chỉnh ROI & ngân sách (Sếp chốt 26/11): chạy theo Chiến lược điều chỉnh, không chọn nhóm / %
   const tune = level === 'campaign' && rule.trigger === TUNE_TRIGGER;
+  // Quy tắc chiến dịch theo nhóm cũ: đã thay bằng BOT chỉnh (Sếp chốt 26/11) — server luôn để Tắt
+  const legacy = isLegacyCampaignRule(rule);
   const exampleTarget = campaignTargetRoi(snapshot, rule.campaignIds?.[0] ?? null);
   const unitName = LEVEL_UNIT[level];
   const group = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
   // Chưa chọn nhóm (bản cũ) hoặc nhóm đã xoá → mở sẵn ô chọn nhóm
-  const [pickingGroup, setPickingGroup] = useState(!group && !tune);
+  const [pickingGroup, setPickingGroup] = useState(!group && !tune && !legacy);
   const campaignId = rule.campaignIds?.[0] ?? null;
   const productId = rule.productIds?.[0] ?? null;
 
@@ -84,20 +86,36 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
               {rule.custom && (
                 <span className="rounded-md bg-canvas px-1.5 py-0.5 text-xs font-medium text-muted">Tự tạo</span>
               )}
+              {legacy && <span className="rounded-md bg-canvas px-1.5 py-0.5 text-xs font-medium text-muted">Kiểu cũ — đã tắt</span>}
             </h3>
             <p className="text-xs text-muted">
-              {rule.mode === 'off' ? 'Đang tắt' : rule.mode === 'approve' ? 'Đề xuất chờ Sếp duyệt' : 'BOT tự thực hiện (không chờ duyệt)'}
+              {legacy
+                ? 'Đã thay bằng BOT chỉnh ROI & ngân sách'
+                : rule.mode === 'off'
+                  ? 'Đang tắt'
+                  : rule.mode === 'approve'
+                    ? 'Đề xuất chờ Sếp duyệt'
+                    : 'BOT tự thực hiện (không chờ duyệt)'}
             </p>
           </div>
         </div>
-        <SegmentedControl options={MODE_OPTIONS} value={rule.mode} onChange={changeMode} ariaLabel={`Chế độ ${rule.name}`} />
+        {!legacy && <SegmentedControl options={MODE_OPTIONS} value={rule.mode} onChange={changeMode} ariaLabel={`Chế độ ${rule.name}`} />}
       </div>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-[80px_minmax(0,1fr)]">
         <dt className="font-semibold text-muted">Khi</dt>
         <dd className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            {tune ? (
+            {legacy ? (
+              <span className="text-muted">
+                Quy tắc theo nhóm chiến dịch cũ — cấp chiến dịch giờ chỉ dùng quy tắc <b className="text-ink">BOT chỉnh ROI &amp; ngân sách</b>{' '}
+                (theo{' '}
+                <Link to="?view=groups&level=campaign" className="font-medium text-primary hover:text-primary-hover">
+                  Chiến lược điều chỉnh
+                </Link>
+                ). Quy tắc này không chạy nữa{rule.custom ? ', có thể xoá' : ''}.
+              </span>
+            ) : tune ? (
               <span>
                 Theo{' '}
                 <Link to="?view=groups&level=campaign" className="font-medium text-primary hover:text-primary-hover">
@@ -117,7 +135,7 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
                 hoặc xoá quy tắc.
               </span>
             )}
-            {group && !tune && (
+            {group && !tune && !legacy && (
               <button
                 type="button"
                 onClick={() => setPickingGroup((v) => !v)}
@@ -143,9 +161,11 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
         </dd>
         <dt className="font-semibold text-muted">Thì</dt>
         <dd>
-          {tune
-            ? 'Mỗi lần đổi 1 thứ — tăng ngân sách, nâng hoặc hạ ROI mục tiêu theo tình huống; đo lại sau thời gian chờ, xấu đi thì đề xuất trả về số cũ'
-            : actionText(rule)}
+          {tune && rule.actionType === 'remind'
+            ? 'Nhắc việc khi cần Sếp quyết (nên tắt chiến dịch, chưa có đơn mà chi nhiều, vẫn lỗ sau 3 bước, không đạt nổi ROI mục tiêu, lỗ dồn 1 sản phẩm) — không đổi gì trên TikTok'
+            : tune
+              ? 'Mỗi lần đổi 1 thứ — tăng / giảm ngân sách, nâng hoặc hạ ROI mục tiêu theo tình huống; đo lại 2–7 ngày, xấu đi thì đề xuất trả về số cũ'
+              : actionText(rule)}
         </dd>
         <dt className="font-semibold text-muted md:pt-3">Phạm vi</dt>
         <dd className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -210,7 +230,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             )}
           </>
         )}
-        {!tune && rule.actionType === 'update_budget' && (
+        {!tune && !legacy && rule.actionType === 'update_budget' && (
           <PctChangeField
             label="Đổi ngân sách ngày"
             value={rule.params.budgetChangePct ?? 20}
@@ -218,7 +238,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             warning={budgetLimitWarning(rule.params, guardrails)}
           />
         )}
-        {!tune && rule.actionType === 'update_roi_target' && (
+        {!tune && !legacy && rule.actionType === 'update_roi_target' && (
           <div>
             <PctChangeField
               label="Đổi ROI mục tiêu"
@@ -233,14 +253,16 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             )}
           </div>
         )}
-        {!tune && <NumberField
-          label="Thời gian chờ"
-          hint={`Không thao tác lại trên cùng ${unitName}`}
-          suffix="giờ"
-          value={rule.cooldownHours}
-          onCommit={(n) => onChange({ cooldownHours: n })}
-        />}
-        {tune && <p className="text-xs text-muted sm:col-span-3">Chế độ chạy (Thận trọng / Cân bằng / Tăng trưởng), giới hạn bảo vệ và các mức chỉnh ở Chiến lược điều chỉnh (Phân nhóm → Chiến dịch).</p>}
+        {!legacy && (
+          <NumberField
+            label="Thời gian chờ"
+            hint={tune ? 'Đề xuất / nhắc lại sau khi Sếp bỏ qua (bước đã chạy BOT tự đo)' : `Không thao tác lại trên cùng ${unitName}`}
+            suffix="giờ"
+            value={rule.cooldownHours}
+            onCommit={(n) => onChange({ cooldownHours: n })}
+          />
+        )}
+        {tune && <p className="text-xs text-muted sm:col-span-2 sm:self-end">Chế độ chạy (Thận trọng / Cân bằng / Tăng trưởng), giới hạn bảo vệ và các mức chỉnh ở Chiến lược điều chỉnh (Phân nhóm → Chiến dịch).</p>}
       </div>
 
       {onRemove && (

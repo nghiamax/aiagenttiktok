@@ -9,7 +9,7 @@ import {
   type RuleTarget,
 } from '../../shared/agentMatch.js';
 import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
-import { isProtectCode } from '../../shared/campaignTune.js';
+import { isLegacyCampaignRule, isProtectCode } from '../../shared/campaignTune.js';
 import type {
   AgentActionLog,
   AgentActionType,
@@ -236,7 +236,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
     for (const a of rt.actions) if (a.status !== 'failed') touch(keyOf(a.actionType, a.target), a.executedAt);
 
     for (const rule of cfg.rules) {
-      if (rule.mode === 'off' || !rule.trigger) continue;
+      if (rule.mode === 'off' || !rule.trigger || isLegacyCampaignRule(rule)) continue;
       const cooldownMs = (rule.cooldownHours ?? guardrails.cooldownHours) * HOUR;
 
       // Chỉ đối tượng đã xác nhận bằng khung 14 ngày (Sếp chốt 22/11); còn lại ghi "bỏ qua"
@@ -254,7 +254,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
         }
         // BOT chỉnh chiến dịch: bảo vệ / lùi không chờ; bước thử chỉ chờ sau khi Sếp bỏ qua
         const tuneCode = ruleParams.tune?.code;
-        const since = tuneCode ? (isProtectCode(tuneCode) ? 0 : (lastRejected.get(k) ?? 0)) : (lastTouched.get(k) ?? 0);
+        // Nhắc việc của BOT chỉnh: chờ như quy tắc thường (không nhắc lại mỗi giờ)
+        const since = tuneCode && actionType !== 'remind' ? (isProtectCode(tuneCode) ? 0 : (lastRejected.get(k) ?? 0)) : (lastTouched.get(k) ?? 0);
         if (now - since < cooldownMs) {
           skip('Đang trong thời gian chờ');
           continue;

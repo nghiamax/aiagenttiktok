@@ -12,6 +12,7 @@ import type { AgentActionType, AgentGuardrails, AgentRule, AgentRuleParams, Agen
 import { contextForCampaign } from './classify.js';
 import { formatNumber, shortVnd } from './format.js';
 import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
+import { TUNE_TRIGGER } from './campaignTune.js';
 import { offsetChip } from './offsetText.js';
 import { effectiveStatus } from './videoStatus.js';
 import {
@@ -103,6 +104,14 @@ export function findMatchingRule(
 }
 
 const isActive = (r: AgentRule | undefined) => !!r && r.mode !== 'off';
+
+/**
+ * Cấp chiến dịch chỉ còn "BOT chỉnh ROI & ngân sách" (Sếp chốt 26/11): gợi ý chiến dịch vẫn tự nhận diện,
+ * nhưng nút "Bật quy tắc" bật quy tắc c-tune (BOT tự chọn tăng / giảm theo tình huống).
+ */
+export const TUNE_RULE_ACTION = { level: 'campaign' as const, trigger: TUNE_TRIGGER, actionType: 'update_roi_target' as const };
+const TUNE_EFFECT =
+  'Bật quy tắc BOT chỉnh ROI & ngân sách (Cần duyệt): BOT tự chọn tăng / giảm ngân sách hoặc ROI mục tiêu theo Chiến lược điều chỉnh, đo lại và trả về nếu xấu đi — Sếp duyệt mới làm.';
 
 interface RuleSpec {
   id: SuggestionId;
@@ -459,7 +468,8 @@ function buildCore(
       (a, b) => (isCut ? Number(!!b.offset) - Number(!!a.offset) : 0) || (b[s.amountBy] ?? 0) - (a[s.amountBy] ?? 0),
     );
     const withOffset = isCut ? targets.filter((t) => t.offset).length : 0;
-    const groupMissing = !findGroup(settings, s.group, s.level);
+    const tuneRule = s.level === 'campaign';
+    const groupMissing = !tuneRule && !findGroup(settings, s.group, s.level);
 
     out.push({
       id: s.id,
@@ -475,18 +485,22 @@ function buildCore(
       })),
       count: targets.length,
       amount: sum(targets, s.amountBy),
-      action: {
-        kind: 'rule',
-        level: s.level,
-        trigger: s.group,
-        actionType: s.actionType,
-        params: s.params,
-        name: s.name,
-        guardrailsPatch,
-        effect: guardrailsPatch ? `${s.effect} Trần tăng cường/ngày sẽ được nâng lên ${shortVnd(boostBudget)}.` : s.effect,
-        ...(groupMissing && { groupMissing: true }),
-      },
-      done: !groupMissing && isActive(findMatchingRule(rules, { level: s.level, trigger: s.group, actionType: s.actionType })),
+      action: tuneRule
+        ? { kind: 'rule', ...TUNE_RULE_ACTION, params: {}, name: 'BOT chỉnh ROI & ngân sách', effect: TUNE_EFFECT }
+        : {
+            kind: 'rule',
+            level: s.level,
+            trigger: s.group,
+            actionType: s.actionType,
+            params: s.params,
+            name: s.name,
+            guardrailsPatch,
+            effect: guardrailsPatch ? `${s.effect} Trần tăng cường/ngày sẽ được nâng lên ${shortVnd(boostBudget)}.` : s.effect,
+            ...(groupMissing && { groupMissing: true }),
+          },
+      done: tuneRule
+        ? isActive(findMatchingRule(rules, TUNE_RULE_ACTION))
+        : !groupMissing && isActive(findMatchingRule(rules, { level: s.level, trigger: s.group, actionType: s.actionType })),
       ...(unconfirmed > 0 && { unconfirmed }),
     });
   }

@@ -188,11 +188,50 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect(s.skippedTargets['Vượt trần tăng cường hôm nay']).toBe(1);
   });
 
-  it('đổi ngân sách vượt giới hạn % → đề xuất đúng mức giới hạn', async () => {
+  it('quy tắc chiến dịch theo nhóm cũ (đã thay bằng BOT chỉnh, Sếp chốt 26/11) → không chạy dù đang bật', async () => {
     mock.snapshot.campaigns[0] = campaign({ id: 'c1', budget: 1_000_000, cost: 7_000_000, revenue: 42_000_000, orders: 40, roi: 6, targetRoi: 5 });
-    mock.config.rules = [rule({ id: 'up', level: 'campaign', trigger: 'c-scale', actionType: 'update_budget', params: { budgetChangePct: 80 } })];
+    mock.config.rules = [rule({ id: 'up', level: 'campaign', trigger: 'c-scale', actionType: 'update_budget', params: { budgetChangePct: 20 } })];
+    const s = await runAgent();
+    expect(s.proposals + s.reminders).toBe(0);
+  });
+
+  it('BOT chỉnh: % ngân sách vượt giới hạn an toàn → đề xuất đúng mức giới hạn', async () => {
+    mock.settings = { ...settingsWith({ pA: 3.5 }), campaignTune: { mode: 'growth' } };
+    mock.config.guardrails = { ...GUARDRAILS, maxBudgetIncreasePct: 25 };
+    mock.snapshot = snapshot({
+      range: { from: '2026-11-12', to: '2026-11-18' },
+      campaigns: [campaign({ id: 'c1', budget: 480_000, cost: 3.2e6, revenue: 14e6, orders: 40, targetRoi: 4 })],
+      products: [product({ id: 'pA', campaignId: 'c1', revenue: 14e6, cost: 3.2e6, orders: 40 })],
+    });
+    const x2 = <T extends { cost: number | null; revenue: number | null; orders: number | null }>(r: T): T => ({ ...r, cost: r.cost! * 2, revenue: r.revenue! * 2, orders: r.orders! * 2 });
+    mock.byFrom['2026-11-05'] = { ...mock.snapshot, range: { from: '2026-11-05', to: '2026-11-18' }, campaigns: mock.snapshot.campaigns.map(x2), products: mock.snapshot.products.map(x2) };
+    mock.byFrom['2026-11-18'] = snapshot({ range: { from: '2026-11-18', to: '2026-11-18' } });
+    mock.config.rules = [rule({ id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', params: {} })];
     await runAgent();
-    expect(mock.runtime.proposals[0].params.budgetChangePct).toBe(GUARDRAILS.maxBudgetIncreasePct);
+    expect(mock.runtime.proposals[0].params).toMatchObject({ budgetChangePct: 25, tune: { code: 'C1' } }); // Tăng trưởng +30% → kẹp 25%
+  });
+
+  it('BOT chỉnh chế độ Nhắc việc: chỉ nhắc chiến dịch cần Sếp quyết, không nhắc lại mỗi giờ', async () => {
+    mock.settings = settingsWith({ pA: 4 });
+    // Lỗ, tiêu ít, ROI thực 3 ≪ ROI MT 5 → B6 (cần Sếp quyết); chiến dịch c2 lời → không nhắc
+    mock.snapshot = snapshot({
+      range: { from: '2026-11-12', to: '2026-11-18' },
+      campaigns: [
+        campaign({ id: 'c1', budget: 2_000_000, cost: 3e6, revenue: 9e6, orders: 40, targetRoi: 5 }),
+        campaign({ id: 'c2', budget: 2_000_000, cost: 3e6, revenue: 15e6, orders: 40, targetRoi: 4 }),
+      ],
+      products: [
+        product({ id: 'pA', campaignId: 'c1', revenue: 9e6, cost: 3e6, orders: 40 }),
+        product({ id: 'pA', campaignId: 'c2', revenue: 15e6, cost: 3e6, orders: 40 }),
+      ],
+    });
+    const x2 = <T extends { cost: number | null; revenue: number | null; orders: number | null }>(r: T): T => ({ ...r, cost: r.cost! * 2, revenue: r.revenue! * 2, orders: r.orders! * 2 });
+    mock.byFrom['2026-11-05'] = { ...mock.snapshot, range: { from: '2026-11-05', to: '2026-11-18' }, campaigns: mock.snapshot.campaigns.map(x2), products: mock.snapshot.products.map(x2) };
+    mock.byFrom['2026-11-18'] = snapshot({ range: { from: '2026-11-18', to: '2026-11-18' } });
+    mock.config.rules = [rule({ id: 'tune-remind', level: 'campaign', trigger: 'c-tune', actionType: 'remind', params: {}, cooldownHours: 24 })];
+    expect((await runAgent()).reminders).toBe(1);
+    expect(mock.runtime.actions[0]).toMatchObject({ actionType: 'remind', target: { campaignId: 'c1' } });
+    expect((await runAgent()).reminders).toBe(0);
   });
 
   it('quy tắc Tắt không chạy', async () => {

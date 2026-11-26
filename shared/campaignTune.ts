@@ -152,6 +152,16 @@ export const TUNE_CODES = {
 } as const;
 export type TuneCode = keyof typeof TUNE_CODES;
 
+/**
+ * Cấp chiến dịch chỉ còn "BOT chỉnh ROI & ngân sách" (Sếp chốt 26/11): quy tắc chiến dịch theo nhóm cũ
+ * (c-scale / c-low-roi / c-slow…) = kiểu cũ — server ép Tắt, Agent bỏ qua.
+ */
+export const isLegacyCampaignRule = (rule: { level?: string; trigger?: string | null }) => rule.level === 'campaign' && rule.trigger !== TUNE_TRIGGER;
+
+/** Tình huống cần Sếp quyết — quy tắc c-tune chế độ Nhắc việc nhắc các mã này (+ quyết định "nên tắt") */
+export const TUNE_NOTIFY_CODES = new Set<string>(['H1', 'H2', 'H4', 'B3', 'B5', 'B6']);
+export const needsBossDecision = (d: Pick<TuneDecision, 'code' | 'suggestPause'>) => !!d.suggestPause || TUNE_NOTIFY_CODES.has(d.code);
+
 /** Mã bảo vệ / lùi: không cần xác nhận 2 khung, không chờ thời gian chờ của quy tắc */
 export const isProtectCode = (code: string) => code.startsWith('H') || code === 'D2' || code === 'D3';
 /** Mã bảo vệ có hạ ngân sách — sau đó khoá mở rộng `learningDays` ngày */

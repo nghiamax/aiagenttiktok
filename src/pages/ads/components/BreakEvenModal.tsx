@@ -27,6 +27,14 @@ function parseRoi(text: string): number | null {
 
 const toText = (n: number | undefined) => (n == null ? '' : String(n).replace('.', ','));
 
+/** Số tiền (đ): bỏ dấu chấm / phẩy / khoảng trắng; trống hoặc ≤ 0 → null */
+function parseVnd(text: string): number | null {
+  const digits = text.replace(/[^d]/g, '');
+  const value = digits ? Number(digits) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+const vndText = (n: number | undefined) => (n == null ? '' : formatNumber(n));
+
 const SOURCE_LABEL: Record<PriceSource, string> = { aov: 'khách trả TB', list: 'giá niêm yết' };
 const SOURCE_TITLE: Record<PriceSource, string> = {
   aov: 'Giá khách trả trung bình = doanh thu ÷ đơn của sản phẩm (30 ngày, mọi chiến dịch)',
@@ -52,12 +60,18 @@ export default function BreakEvenModal({
   const { loaded } = useAdsSettings();
   const fromSettings = () => Object.fromEntries(uniqueProducts.map((p) => [p.id, toText(settings.breakEvenRoi[p.id])]));
   const [beDraft, setBeDraft] = useState<Record<string, string>>(fromSettings);
+  // Lãi 1 đơn Sếp nhập (ưu tiên hơn giá ÷ ROI hoà vốn); trống = tự tính
+  const profitFromSettings = () => Object.fromEntries(uniqueProducts.map((p) => [p.id, vndText(manualProfitOf(settings, p.id) ?? undefined)]));
+  const [profitDraft, setProfitDraft] = useState<Record<string, string>>(profitFromSettings);
   // Giá tự lấy (chỉ xem): giá khách trả TB 30 → 14 → 7 ngày, chưa có đơn thì giá niêm yết TikTok Shop
   const { snaps } = useTrend();
   const prices = productPrices(snaps);
   // Mở hộp lúc server chưa tải xong → tải xong thì điền lại số đã lưu
   useEffect(() => {
-    if (loaded) setBeDraft(fromSettings());
+    if (loaded) {
+      setBeDraft(fromSettings());
+      setProfitDraft(profitFromSettings());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
@@ -67,7 +81,14 @@ export default function BreakEvenModal({
       const value = parseRoi(text);
       if (value != null) breakEvenRoi[id] = value;
     }
-    onSave({ ...settings, breakEvenRoi });
+    // Lãi 1 đơn: giữ số của sản phẩm không có trong hộp, thay số của sản phẩm trong hộp
+    const profitPerOrder: Record<string, number> = { ...(settings.profitPerOrder ?? {}) };
+    for (const p of uniqueProducts) {
+      const value = parseVnd(profitDraft[p.id] ?? '');
+      if (value != null) profitPerOrder[p.id] = value;
+      else delete profitPerOrder[p.id];
+    }
+    onSave({ ...settings, breakEvenRoi, profitPerOrder });
     onClose();
   }
 
@@ -79,7 +100,7 @@ export default function BreakEvenModal({
   return (
     <Modal
       title="ROI hoà vốn"
-      description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo — video có ROI thấp hơn là đang lỗ. Lãi 1 đơn = giá khách trả TB ÷ ROI hoà vốn (tự tính, dùng cho điều kiện “lần lợi nhuận 1 đơn”). Chưa nhập ROI hoà vốn thì chưa tính được."
+      description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo — video có ROI thấp hơn là đang lỗ. Lãi 1 đơn dùng cho điều kiện “lần lợi nhuận 1 đơn”: nhập số của Sếp, để trống thì tự tính = giá khách trả TB ÷ ROI hoà vốn."
       onClose={onClose}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -129,8 +150,7 @@ export default function BreakEvenModal({
             {(() => {
               const price = prices.get(p.id);
               const be = parseRoi(beDraft[p.id] ?? '');
-              const manual = manualProfitOf(settings, p.id);
-              const profit = manual ?? (price && be != null ? price.price / be : null);
+              const auto = price && be != null ? Math.round(price.price / be) : null;
               return (
                 <div className="flex shrink-0 items-start gap-3">
                   <div className="w-28 pt-4 text-right" title={price ? SOURCE_TITLE[price.source] : 'Chưa có đơn và chưa lấy được giá niêm yết'}>
@@ -150,12 +170,23 @@ export default function BreakEvenModal({
                       className={INPUT}
                     />
                   </label>
-                  <div className="w-24 pt-4 text-right">
-                    <span className="block text-[11px] text-muted">Lãi 1 đơn</span>
-                    <span className={`text-sm font-semibold tabular-nums ${profit == null ? 'text-muted' : ''}`} title={manual != null ? 'Số Sếp nhập ở Phân nhóm' : profit == null ? 'Cần ROI hoà vốn và giá để tính (hoặc nhập ở Phân nhóm)' : '= giá ÷ ROI hoà vốn'}>
-                      {profit == null ? '--' : formatNumber(Math.round(profit))}
-                    </span>
-                  </div>
+                  <label className="w-28">
+                    <span className="block text-[11px] text-muted">Lãi 1 đơn (đ)</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder={auto != null ? formatNumber(auto) : 'vd 80.000'}
+                      value={profitDraft[p.id] ?? ''}
+                      onChange={(e) => setProfitDraft({ ...profitDraft, [p.id]: e.target.value })}
+                      onBlur={(e) => {
+                        const v = parseVnd(e.target.value);
+                        setProfitDraft({ ...profitDraft, [p.id]: v == null ? '' : formatNumber(v) });
+                      }}
+                      title={auto != null ? `Để trống = tự tính ${formatNumber(auto)}đ (giá ÷ ROI hoà vốn)` : 'Nhập lãi 1 đơn (chưa đủ giá / ROI hoà vốn để tự tính)'}
+                      aria-label={`Lãi 1 đơn của ${p.name}`}
+                      className={INPUT}
+                    />
+                  </label>
                 </div>
               );
             })()}

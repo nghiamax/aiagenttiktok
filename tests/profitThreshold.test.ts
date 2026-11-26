@@ -67,3 +67,11 @@ describe('Ngưỡng "lần lợi nhuận 1 đơn"', () => {
     expect(kept.map((t) => t.target.productId)).toEqual(['pA']);
   });
 });
+
+describe('Mặc định Nhân rộng (Sếp chốt 26/11): ≥ 3 đơn và ROI ≥ 1,2 lần ROI mục tiêu', () => {
+  const win = (roi: number) => video({ id: 'w', campaignId: 'c1', productId: 'pA', cost: 100_000, revenue: 100_000 * roi, orders: 5 });
+  it('ROI bằng mục tiêu → chưa Nhân rộng; ≥ 1,2 lần → Nhân rộng', () => {
+    expect(classifyVideo(win(5), C, S, profit)?.action).not.toBe('scale');
+    expect(classifyVideo(win(6), C, S, profit)?.action).toBe('scale');
+  });
+});

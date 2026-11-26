@@ -46,7 +46,7 @@
         {
           "clauses": [
             { "metric": "orders", "op": "gte", "value": { "type": "number", "n": 3 } },
-            { "metric": "roi", "op": "gte", "value": { "type": "target", "k": 1 } }
+            { "metric": "roi", "op": "gte", "value": { "type": "target", "k": 1.2 } }
           ]
         }
       ]

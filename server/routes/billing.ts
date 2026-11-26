@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { GATEWAYS, vietQrUrl, type BillingOrder } from '../../shared/billing.js';
+import { GATEWAYS, proOptionsError, vietQrUrl, type BillingOrder } from '../../shared/billing.js';
 import { quotaOf } from '../../shared/plans.js';
 import { config } from '../config.js';
 import { requirePermission } from '../auth/middleware.js';
@@ -96,6 +96,14 @@ billingRouter.get('/admin', requirePermission('manage_users'), (_req, res) => {
 });
 
 billingRouter.put('/admin/config', requirePermission('manage_users'), (req, res) => {
+  const opts = req.body?.options;
+  if (opts !== undefined) {
+    const list = Array.isArray(opts)
+      ? opts.map((o: { months?: unknown; price?: unknown }) => ({ months: Number(o?.months), price: Number(o?.price) || 0 }))
+      : [];
+    const err = proOptionsError(list);
+    if (err) return res.status(400).json({ code: 'BAD_REQUEST', error: err });
+  }
   res.json({ config: saveBillingConfig(req.body ?? {}) });
 });
 

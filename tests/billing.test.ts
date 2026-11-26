@@ -2,7 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { contentHasCode, extendProUntil, newOrderCode, vietQrUrl } from '../shared/billing';
+import {
+  contentHasCode,
+  extendProUntil,
+  monthsLabel,
+  newOrderCode,
+  parseDuration,
+  proOptionsError,
+  vietQrUrl,
+} from '../shared/billing';
 import { effectivePlan } from '../shared/plans';
 
 /* Mua Pro bằng chuyển khoản: mã đơn, cộng hạn, webhook SePay — dữ liệu ở thư mục tạm */
@@ -330,6 +338,61 @@ describe('Khung cổng thanh toán', () => {
     expect(c.gateways.sepay).toEqual({ bankBin: '970422', accountNo: '0348', accountName: 'A B', webhookKey: 'k' });
     expect(c.gateways.payos).toEqual({ clientId: '', apiKey: '', checksumKey: '' });
     expect(store.publicBilling().ready).toBe(true);
+  });
+
+  it('mốc thời hạn: mặc định 3/6/9/12; bộ cũ 1/3/12 đổi 1 lần (giữ giá mốc trùng); Quản trị viên tự đặt thì giữ', () => {
+    expect(store.getBillingConfig().options.map((o) => o.months)).toEqual([3, 6, 9, 12]);
+    fs.writeFileSync(
+      path.join(dir.path, 'billing.json'),
+      JSON.stringify({
+        options: [
+          { months: 1, price: 5000 },
+          { months: 3, price: 1_500_000 },
+          { months: 12, price: 6_000_000 },
+        ],
+      }),
+    );
+    expect(store.getBillingConfig().options).toEqual([
+      { months: 3, price: 1_500_000 },
+      { months: 6, price: 0 },
+      { months: 9, price: 0 },
+      { months: 12, price: 6_000_000 },
+    ]);
+    // Đã lưu từ trang quản trị (kể cả đúng 1/3/12) → không đổi nữa; xếp tăng dần, bỏ trùng
+    store.saveBillingConfig({
+      options: [
+        { months: 12, price: 9 },
+        { months: 1, price: 1 },
+        { months: 3, price: 3 },
+        { months: 3, price: 4 },
+      ],
+    });
+    expect(store.getBillingConfig().options.map((o) => o.months)).toEqual([1, 3, 12]);
+  });
+
+  it('kiểm tra mốc thời hạn: trùng / ngoài 1–60 / trống bị từ chối', () => {
+    expect(proOptionsError([{ months: 3, price: 1 }, { months: 6, price: 0 }])).toBeNull();
+    expect(proOptionsError([{ months: 3, price: 1 }, { months: 3, price: 2 }])).toMatch(/trùng/);
+    expect(proOptionsError([{ months: 0, price: 1 }])).toBeNull(); // 0 = Vĩnh viễn
+    expect(proOptionsError([{ months: -1, price: 1 }])).toMatch(/1 đến 60/);
+    expect(proOptionsError([{ months: 61, price: 1 }])).toMatch(/1 đến 60/);
+    expect(proOptionsError([])).toMatch(/ít nhất/);
+    expect(proOptionsError([{ months: NaN, price: 1 }])).toMatch(/Vĩnh viễn/);
+  });
+
+  it('gói Vĩnh viễn: gõ chữ → 0 tháng, xếp cuối, mua xong Pro không hết hạn', () => {
+    expect(parseDuration('Vĩnh viễn')).toBe(0);
+    expect(parseDuration(' vinh  vien ')).toBe(0);
+    expect(parseDuration('Trọn đời')).toBe(0);
+    expect(parseDuration('6 tháng')).toBe(6);
+    expect(parseDuration('1 năm')).toBe(12);
+    expect(parseDuration('abc')).toBeNaN();
+    expect(monthsLabel(0)).toBe('Vĩnh viễn');
+    store.saveBillingConfig({ options: [{ months: 0, price: 9 }, { months: 3, price: 1 }] });
+    expect(store.getBillingConfig().options.map((o) => o.months)).toEqual([3, 0]);
+    const now = Date.parse('2026-11-26T00:00:00Z');
+    expect(extendProUntil({ plan: 'pro', proUntil: '2026-12-01T00:00:00Z' }, 0, now)).toBeNull();
+    expect(extendProUntil({ plan: 'free' }, 0, now)).toBeNull();
   });
 
   it('đổi cổng giữ nguyên cấu hình cổng kia; ô lạ không được lưu; cổng không tồn tại → 404', () => {

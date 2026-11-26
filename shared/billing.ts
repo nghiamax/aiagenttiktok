@@ -33,10 +33,51 @@ export interface ProOption {
   price: number;
 }
 
-export const DEFAULT_PRO_MONTHS = [1, 3, 12];
+/** Mốc thời hạn mặc định (Quản trị viên sửa / thêm / bớt được ở trang Thanh toán) */
+export const DEFAULT_PRO_MONTHS = [3, 6, 9, 12];
+/** Mốc mặc định bản cũ — cấu hình còn đúng bộ này được đổi 1 lần sang mốc mới (giữ giá mốc trùng) */
+export const LEGACY_PRO_MONTHS = [1, 3, 12];
+export const MAX_PRO_MONTHS = 60;
+export const MAX_PRO_OPTIONS = 8;
 export const DAYS_PER_MONTH = 30;
 
-export const monthsLabel = (m: number) => (m % 12 === 0 ? `${m / 12} năm` : `${m} tháng`);
+/** Lỗi bộ mốc thời hạn (trùng / ngoài khoảng / quá nhiều), null = hợp lệ */
+export function proOptionsError(list: ProOption[]): string | null {
+  if (list.length === 0) return 'Cần ít nhất 1 mốc thời hạn';
+  if (list.length > MAX_PRO_OPTIONS) return `Tối đa ${MAX_PRO_OPTIONS} mốc thời hạn`;
+  const seen = new Set<number>();
+  for (const o of list) {
+    if (!Number.isInteger(o.months) || o.months < 0 || o.months > MAX_PRO_MONTHS)
+      return `Thời hạn: nhập số tháng từ 1 đến ${MAX_PRO_MONTHS} hoặc chữ "Vĩnh viễn"`;
+    if (seen.has(o.months)) return `Mốc ${monthsLabel(o.months)} bị trùng`;
+    seen.add(o.months);
+  }
+  return null;
+}
+
+/** months = 0 → gói Vĩnh viễn (Pro không hết hạn) */
+export const LIFETIME_MONTHS = 0;
+export const isLifetime = (m: number) => m === LIFETIME_MONTHS;
+
+export const monthsLabel = (m: number) =>
+  isLifetime(m) ? 'Vĩnh viễn' : m % 12 === 0 ? `${m / 12} năm` : `${m} tháng`;
+
+const plain = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Chữ Quản trị viên gõ ở ô thời hạn → số tháng: "6" / "6 tháng" → 6, "1 năm" → 12, "Vĩnh viễn" / "trọn đời" → 0; không hiểu → NaN */
+export function parseDuration(text: string): number {
+  const t = plain(text);
+  if (/^(vinh vien|tron doi|mai mai|lifetime|vo thoi han|khong thoi han|khong gioi han)$/.test(t)) return LIFETIME_MONTHS;
+  const m = /^(\d+)\s*(thang|th)?$/.exec(t);
+  if (m) return Number(m[1]);
+  const y = /^(\d+)\s*nam$/.exec(t);
+  if (y) return Number(y[1]) * 12;
+  return NaN;
+}
+
+/** Số tháng → chữ hiện trong ô thời hạn của trang quản trị */
+export const durationText = (m: number) => (isLifetime(m) ? 'Vĩnh viễn' : String(m));
 
 /**
  * Cổng thanh toán (payOS, SePay…). Mỗi cổng = 1 khai báo ở đây (tên, các ô cấu hình, hướng dẫn) + 1 file
@@ -288,6 +329,7 @@ export function extendProUntil(
   months: number,
   now = Date.now(),
 ): string | null {
+  if (isLifetime(months)) return null;
   if (current.plan === 'pro' && !current.proUntil) return null;
   const base = current.plan === 'pro' && current.proUntil ? Math.max(Date.parse(current.proUntil), now) : now;
   return new Date(base + months * DAYS_PER_MONTH * 86_400_000).toISOString();

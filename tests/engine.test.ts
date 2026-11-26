@@ -204,12 +204,12 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
   it('Quét ngay (fresh) lấy số liệu mới, lịch tự động dùng cache', async () => {
     vi.mocked(cache.getSnapshot).mockClear();
     await runAgent({ fresh: true });
-    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-11', to: '2026-11-17' }, true);
-    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-04', to: '2026-11-17' }, true); // 14 ngày
-    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-10-19', to: '2026-11-17' }, false); // 30 ngày dùng cache
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-12', to: '2026-11-18' }, true);
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-05', to: '2026-11-18' }, true); // 14 ngày
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-10-20', to: '2026-11-18' }, false); // 30 ngày dùng cache
     vi.mocked(cache.getSnapshot).mockClear();
     await runAgent();
-    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-11', to: '2026-11-17' }, false);
+    expect(cache.getSnapshot).toHaveBeenCalledWith({ from: '2026-11-12', to: '2026-11-18' }, false);
     expect(cache.getSnapshot).not.toHaveBeenCalledWith(expect.anything(), true);
   });
 
@@ -217,7 +217,7 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     /** 14 ngày: v1 vẫn lỗ (chi lớn, 0 đơn), v2 đã có lời → v2 chỉ lỗ trong 7 ngày */
     const d14 = () =>
       snapshot({
-        range: { from: '2026-11-04', to: '2026-11-17' },
+        range: { from: '2026-11-05', to: '2026-11-18' },
         campaigns: [campaign({ id: 'c1', targetRoi: 5, budget: 1_000_000 })],
         products: [product({ id: 'p1', campaignId: 'c1' })],
         videos: [
@@ -229,8 +229,8 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
       });
 
     it('7 + 14 ngày cùng Cắt lỗ → đề xuất (kèm số 14 / 30 ngày); chỉ lỗ 7 ngày → bỏ qua "chưa xác nhận"', async () => {
-      mock.byFrom['2026-11-04'] = d14();
-      mock.byFrom['2026-10-19'] = { ...d14(), range: { from: '2026-10-19', to: '2026-11-17' } };
+      mock.byFrom['2026-11-05'] = d14();
+      mock.byFrom['2026-10-20'] = { ...d14(), range: { from: '2026-10-20', to: '2026-11-18' } };
       const s = await runAgent();
       const ids = mock.runtime.proposals.map((p) => p.target.videoId).sort();
       expect(ids).toEqual(['v1', 'v3']);
@@ -246,9 +246,9 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
       const add = (snap: AdsSnapshot, v: ReturnType<typeof video>) => ({ ...snap, videos: [...snap.videos, v] });
       mock.snapshot = add(add(shop(), video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost: 42_000 })), video({ id: 'v8', campaignId: 'c1', productId: 'p1', cost: 40_000, revenue: 600_000, orders: 3 }));
       const long = (from: string, cost: number) =>
-        add(add({ ...d14(), range: { from, to: '2026-11-17' } }, video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost })), video({ id: 'v8', campaignId: 'c1', productId: 'p1', cost }));
-      mock.byFrom['2026-11-04'] = long('2026-11-04', 120_000);
-      mock.byFrom['2026-10-19'] = long('2026-10-19', 260_000);
+        add(add({ ...d14(), range: { from, to: '2026-11-18' } }, video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost })), video({ id: 'v8', campaignId: 'c1', productId: 'p1', cost }));
+      mock.byFrom['2026-11-05'] = long('2026-11-05', 120_000);
+      mock.byFrom['2026-10-20'] = long('2026-10-20', 260_000);
       const s = await runAgent();
       const p9 = mock.runtime.proposals.find((p) => p.target.videoId === 'v9');
       expect(p9).toMatchObject({ actionType: 'remove_creative', slowLoss: true, long: true });
@@ -259,7 +259,7 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     });
 
     it('Sếp tắt xác nhận → chỉ xét 7 ngày như cũ', async () => {
-      mock.byFrom['2026-11-04'] = d14();
+      mock.byFrom['2026-11-05'] = d14();
       mock.config.guardrails = { ...mock.config.guardrails, confirmWindow: false };
       const s = await runAgent();
       expect(s.proposals).toBe(3);
@@ -267,7 +267,7 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
 
     it('đề xuất đang chờ: 14 ngày không còn cùng nhóm → tự huỷ (outdated) kèm lý do', async () => {
       await runAgent(); // tạo 3 đề xuất (14 ngày = chung snapshot → khớp)
-      mock.byFrom['2026-11-04'] = d14();
+      mock.byFrom['2026-11-05'] = d14();
       const s = await runAgent();
       const v2 = mock.runtime.proposals.find((p) => p.target.videoId === 'v2')!;
       expect(v2.status).toBe('outdated');

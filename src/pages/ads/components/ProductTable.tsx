@@ -65,7 +65,7 @@ export default function ProductTable({
 }: ProductTableProps) {
   const [sort, setSort] = useState<SortState<ProductSortKey>>({ key: 'cost', dir: 'desc' });
 
-  // Nhóm theo 7 · 14 · 30 ngày đến hôm qua (đã xác nhận = 7 và 14 ngày cùng nhóm), không đổi theo ô chọn ngày
+  // Nhóm theo 7 · 14 · 30 ngày tính cả hôm nay (đã xác nhận = 7 và 14 ngày cùng nhóm), không đổi theo ô chọn ngày
   const trends = useTrend();
   const rows = products.map((p) => ({ p, cpa: cpa(p.cost, p.orders), trend: trends.product(p) }));
   type Row = (typeof rows)[number];

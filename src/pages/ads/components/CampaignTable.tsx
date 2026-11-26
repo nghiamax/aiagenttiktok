@@ -53,7 +53,7 @@ export default function CampaignTable({
   const { settings } = useAdsSettings();
   const { days } = useAdsData();
   const activeGroup = groupId ? findGroup(settings, groupId, 'campaign') : undefined;
-  // Nhóm theo 7 · 14 · 30 ngày đến hôm qua (đã xác nhận = 7 và 14 ngày cùng nhóm)
+  // Nhóm theo 7 · 14 · 30 ngày tính cả hôm nay (đã xác nhận = 7 và 14 ngày cùng nhóm)
   const trends = useTrend();
 
   const rows = campaigns

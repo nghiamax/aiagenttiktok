@@ -129,7 +129,7 @@ const defaultExample = (t: RuleTarget) =>
 const CPA_WORD = 'mốc chi cho 1 đơn (= giá trị đơn TB ÷ ROI hoà vốn';
 
 /**
- * Gợi ý cho shop. `confirm` = snapshot 14 ngày đến hôm qua: gợi ý về video / sản phẩm / chiến dịch chỉ tính đối tượng
+ * Gợi ý cho shop. `confirm` = snapshot 14 ngày tính cả hôm nay: gợi ý về video / sản phẩm / chiến dịch chỉ tính đối tượng
  * đúng điều kiện ở CẢ khung chính (7 ngày) và 14 ngày — giống cách Agent xác nhận (Sếp chốt 22/11). Thiếu → chỉ xét 1 khung.
  */
 export function buildSuggestions(

@@ -100,7 +100,7 @@ export default function AdsPage() {
   };
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
-  // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét, không đổi theo ô chọn ngày).
+  // Hộp theo dõi: nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày tính cả hôm nay (cùng khung Agent xét, không đổi theo ô chọn ngày).
   // Chưa xác nhận (7 ngày khác 14 ngày) → không tính, chỉ ghi chú dưới ô của nhóm 7 ngày
   const trends = useTrend();
   const allProducts = useAllProducts();

@@ -229,9 +229,9 @@ export function collectVideoTargets(
 /* ───────── Xác nhận bằng khung 14 ngày (+ 30 ngày để giải thích) — Sếp chốt 22/11/2026 ───────── */
 
 export interface ConfirmSnaps {
-  /** 14 ngày đến hôm qua; null = chưa có (đang tải / lỗi) → không lọc */
+  /** 14 ngày tính cả hôm nay; null = chưa có (đang tải / lỗi) → không lọc */
   d14: AdsSnapshot | null;
-  /** 30 ngày đến hôm qua — chỉ để ghi độ tin + số liệu, không quyết định */
+  /** 30 ngày tính cả hôm nay — chỉ để ghi độ tin + số liệu, không quyết định */
   d30: AdsSnapshot | null;
 }
 

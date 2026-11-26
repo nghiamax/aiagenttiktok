@@ -8,10 +8,13 @@ import { currentShopId } from '../shopContext.js';
 import { requireAccount } from '../tiktok/link.js';
 
 const DIR = path.join(config.dataDir, 'cache');
-/** Khoảng ngày có chứa hôm nay → số liệu còn đổi, cache ngắn */
-const TODAY_TTL_MS = 15 * 60_000;
-/** Ngày đã qua → TikTok vẫn có thể chốt lại số trong ~1-2 ngày, cache 6 giờ */
-const RECENT_TTL_MS = 6 * 60 * 60_000;
+/**
+ * Khoảng có hôm nay / 2 ngày gần → mỗi lần tải trang / quét lấy số MỚI từ TikTok (Sếp chốt 26/11).
+ * Chỉ dùng lại bản vừa lấy trong 1 phút: 1 lần tải trang gửi cùng lúc 3–4 yêu cầu, BOT quét xong chạy ngay → khỏi gọi trùng.
+ */
+const TODAY_TTL_MS = 60_000;
+/** Ngày đã qua: TikTok vẫn có thể chốt lại số trong ~1-2 ngày → cũng lấy mới */
+const RECENT_TTL_MS = 60_000;
 const RECENT_DAYS = 2;
 
 const inflight = new Map<string, Promise<AdsSnapshot>>();

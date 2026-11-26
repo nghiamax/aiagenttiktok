@@ -28,7 +28,7 @@ function writeDismissed(map: Record<string, number>) {
 
 /** Gợi ý cho shop từ số liệu đang xem + thiết lập + quy tắc (shared/suggest.ts) */
 export function useSuggestions() {
-  // Gợi ý luôn xét 7 ngày đến hôm qua (giống Agent), không theo khoảng ngày đang xem
+  // Gợi ý luôn xét 7 ngày tính cả hôm nay (giống Agent), không theo khoảng ngày đang xem
   const { baseline: snapshot } = useAdsData();
   // Xác nhận bằng 14 ngày như Agent (tắt ở Giới hạn an toàn / chưa tải → chỉ xét 7 ngày)
   const confirm14 = useTrend().confirm.d14;

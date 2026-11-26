@@ -11,7 +11,7 @@ export interface SignalItem {
   key: string;
   rule: AgentRule;
   target: RuleTarget;
-  /** Số 7 ngày (đến hôm qua) dạng MetricWindow để dùng chung WindowsTable */
+  /** Số 7 ngày (tính cả hôm nay) dạng MetricWindow để dùng chung WindowsTable */
   before: MetricWindow;
   windows: { d14: WindowStat | null; d30: WindowStat | null };
   /** Tên nhóm của quy tắc / nhóm ở khung 14 ngày (để giải thích) */
@@ -23,7 +23,7 @@ export interface SignalItem {
 
 /**
  * Dấu hiệu theo đúng cách Agent xét (Sếp chốt 22/11): KHÔNG thành đề xuất Duyệt / Gỡ, chỉ báo để người dùng để ý.
- * Tính trên web từ quy tắc đang bật + 7 / 14 / 30 ngày đến hôm qua — không lưu gì trên server.
+ * Tính trên web từ quy tắc đang bật + 7 / 14 / 30 ngày tính cả hôm nay — không lưu gì trên server.
  */
 export function useSignals(): SignalItem[] {
   const trends = useTrend();

@@ -1,5 +1,5 @@
 /**
- * Đánh giá 3 khung 7 · 14 · 30 ngày (đến hôm qua) — Sếp chốt 22/11/2026.
+ * Đánh giá 3 khung 7 · 14 · 30 ngày (tính cả hôm nay) — Sếp chốt 22/11/2026.
  * Nhóm "đã xác nhận" = khung 7 ngày và 14 ngày cùng nhóm. Chỉ nhóm đã xác nhận mới được Agent đề xuất / tính ở Tổng quan.
  * Khung 30 ngày chỉ để đánh giá độ tin ("kéo dài" khi cùng nhóm) và giải thích.
  * Không thêm nhóm / ngưỡng mới: xếp nhóm từng khung bằng classify* có sẵn. Dùng chung web + server.

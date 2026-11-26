@@ -50,7 +50,7 @@ function validate(g: GroupDef, level: GroupLevel): string[] {
 
 /**
  * Số đối tượng mỗi nhóm theo một bản thiết lập (bản nháp → thấy ảnh hưởng trước khi lưu).
- * Đếm nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày đến hôm qua (giống cột Nhóm / Agent); unconfirmed = 7 ngày thuộc nhóm nhưng 14 ngày khác.
+ * Đếm nhóm ĐÃ XÁC NHẬN theo 7 · 14 · 30 ngày tính cả hôm nay (giống cột Nhóm / Agent); unconfirmed = 7 ngày thuộc nhóm nhưng 14 ngày khác.
  */
 function countByGroup(snaps: TrendSnaps, level: GroupLevel, settings: AdsSettings, confirmOn: boolean) {
   const counts = new Map<string, number>();

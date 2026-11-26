@@ -127,13 +127,13 @@ export function recheckProposal(
 }
 
 /**
- * Snapshot 14 + 30 ngày đến hôm qua để xác nhận (cache server; Quét ngay lấy mới khung 14 ngày).
+ * Snapshot 14 + 30 ngày (tính cả hôm nay) để xác nhận (cache server; Quét ngay lấy mới khung 14 ngày).
  * Sếp tắt xác nhận / lỗi đọc → null (chỉ xét 1 khung như cũ).
  */
 export async function loadConfirmSnaps(guardrails: AgentGuardrails, fresh = false): Promise<ConfirmSnaps> {
   if (guardrails.confirmWindow === false) return { d14: null, d30: null };
   const read = (days: number, f: boolean) =>
-    getSnapshot({ from: vnDate(days), to: vnDate(1) }, f)
+    getSnapshot({ from: vnDate(days - 1), to: vnDate(0) }, f)
       .then((r) => r.snapshot)
       .catch(() => null);
   const [d14, d30] = await Promise.all([read(14, fresh), read(30, false)]);
@@ -164,8 +164,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
 
   const { guardrails } = cfg;
   const lookback = Math.max(1, guardrails.lookbackDays ?? 7);
-  // Xét n ngày gần nhất tính đến hôm qua (ngày đã đủ số)
-  const range = { from: vnDate(lookback), to: vnDate(1) };
+  // Xét n ngày gần nhất TÍNH CẢ HÔM NAY (giống TikTok — Sếp chốt 26/11)
+  const range = { from: vnDate(lookback - 1), to: vnDate(0) };
   summary.range = range;
   const snapshot = withRecentActions((await getSnapshot(range, opts?.fresh === true)).snapshot);
   const confirm = await loadConfirmSnaps(guardrails, opts?.fresh === true);

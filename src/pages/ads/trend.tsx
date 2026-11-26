@@ -9,7 +9,7 @@ import { useAdsSettings } from './settings';
 import type { AdsProduct, AdsVideo, Campaign } from './types';
 
 /*
- * Nhóm đã xác nhận 7 · 14 · 30 ngày đến hôm qua (Sếp chốt 22/11) — tính 1 lần cho cả trang ADS.
+ * Nhóm đã xác nhận 7 · 14 · 30 ngày (tính cả hôm nay) (Sếp chốt 22/11) — tính 1 lần cho cả trang ADS.
  * Cột Nhóm các bảng, hộp Tổng quan, Gợi ý, thẻ quy tắc đều đọc từ đây → khớp với cái Agent xét.
  */
 

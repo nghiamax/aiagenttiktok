@@ -47,7 +47,7 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
   const [confirmRemove, setConfirmRemove] = useState(false);
   const typeMeta = actionTypeMeta(rule.actionType, rule.params);
   const level = ruleLevel(rule);
-  // Đếm đúng như Agent: 7 ngày đến hôm qua + xác nhận 14 ngày (không theo ô chọn ngày)
+  // Đếm đúng như Agent: 7 ngày tính cả hôm nay + xác nhận 14 ngày (không theo ô chọn ngày)
   const trends = useTrend();
   const matches = matchRuleTargets(rule, settings, trends.snaps.d7, trends.confirm);
   const exampleTarget = campaignTargetRoi(snapshot, rule.campaignIds?.[0] ?? null);

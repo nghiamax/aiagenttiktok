@@ -64,7 +64,7 @@ const REMOVED_FILTER = 'removed';
 interface VideoRow {
   v: AdsVideo;
   cpa: number | null;
-  /** Nhóm theo 7 · 14 · 30 ngày đến hôm qua (không đổi theo ô chọn ngày) */
+  /** Nhóm theo 7 · 14 · 30 ngày (tính cả hôm nay) (không đổi theo ô chọn ngày) */
   trend: TrendInfo | undefined;
 }
 
@@ -172,7 +172,7 @@ export default function VideoTable({
                 ? 'TikTok báo video không khả dụng (đã ngừng chạy) — chưa có cách xử lý, không xếp nhóm, Agent không đề xuất'
                 : action === REMOVED_FILTER
                   ? 'Video đã gỡ khỏi chiến dịch — không thuộc nhóm nào. Kết quả sau khi gỡ xem ở Care Ads → Nhật ký'
-                  : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày đến hôm qua`}
+                  : `${filtered.length} dòng · nhóm xét theo 7 · 14 · 30 ngày tính đến hôm nay`}
         </span>
       </div>
 

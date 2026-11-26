@@ -33,9 +33,9 @@ interface AdsDataValue {
   reload: () => void;
   /** Số ngày của snapshot đang hiển thị (tính cả 2 đầu) */
   days: number;
-  /** Số liệu chuẩn "7 ngày đến hôm qua" — cùng khoảng Agent xét, dùng cho Gợi ý (không đổi theo ngày đang xem) */
+  /** Số liệu chuẩn "7 ngày tính cả hôm nay" — cùng khoảng Agent xét, dùng cho Gợi ý (không đổi theo ngày đang xem) */
   baseline: AdsSnapshot;
-  /** 7 · 14 · 30 ngày đến hôm qua — xếp nhóm đã xác nhận (14 / 30 null khi đang tải / lỗi) */
+  /** 7 · 14 · 30 ngày (tính cả hôm nay) — xếp nhóm đã xác nhận (14 / 30 null khi đang tải / lỗi) */
   trendSnaps: TrendSnaps;
 }
 
@@ -52,9 +52,9 @@ export function vnDate(offset = 0): string {
   return new Date(Date.now() + 7 * 3_600_000 - offset * DAY).toISOString().slice(0, 10);
 }
 
-/** n ngày gần nhất, tính đến hôm qua */
+/** n ngày gần nhất, TÍNH CẢ HÔM NAY (giống TikTok — Sếp chốt 26/11) */
 export function lastDays(n: number): DateRange {
-  return { from: vnDate(n), to: vnDate(1) };
+  return { from: vnDate(n - 1), to: vnDate() };
 }
 
 export function daysOf(range: { from: string; to: string } | null | undefined): number {
@@ -165,7 +165,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
     };
   }, [guest, range.from, range.to, reloadKey]);
 
-  // Số liệu cố định 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
+  // Số liệu cố định 7 · 14 · 30 ngày (tính cả hôm nay) (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
   // không thì tải nền (server có cache). Dùng cho Gợi ý, nhóm đã xác nhận ở các bảng / hộp Tổng quan
   const live = source === 'live' && status === 'ready' ? rawSnapshot : null;
   const raw7 = useFixedSnapshot(7, range, live, reloadKey, guest);

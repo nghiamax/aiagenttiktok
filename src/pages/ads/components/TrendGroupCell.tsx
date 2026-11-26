@@ -38,7 +38,7 @@ const statText = (s: Pick<WindowStat, 'cost' | 'orders' | 'roi'> | null) =>
   s ? `Chi ${shortVnd(s.cost ?? 0)} · ${formatNumber(s.orders ?? 0)} đơn · ROI ${s.roi == null ? '--' : formatNumber(s.roi, 2)}` : 'không có số';
 
 /**
- * Ô Nhóm theo 3 khung 7 · 14 · 30 ngày đến hôm qua (Sếp chốt 22/11): badge nhóm đã xác nhận (7 = 14 ngày),
+ * Ô Nhóm theo 3 khung 7 · 14 · 30 ngày tính cả hôm nay (Sếp chốt 22/11): badge nhóm đã xác nhận (7 = 14 ngày),
  * 3 chấm màu nhóm từng khung (rê chuột xem số), câu ngắn "kéo dài 30 ngày" / "2 tuần gần đây" / "dấu hiệu".
  */
 export default function TrendGroupCell({ level, trend, extra, current, empty }: TrendGroupCellProps) {

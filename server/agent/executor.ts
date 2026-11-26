@@ -113,7 +113,7 @@ async function spuIdsOf(target: AgentTarget): Promise<string[]> {
   const lookback = Math.max(1, getAgentConfig().guardrails.lookbackDays ?? 7);
   const ids = new Set<string>([target.productId]);
   try {
-    const { snapshot } = await getSnapshot({ from: vnDate(lookback), to: vnDate(1) }, false);
+    const { snapshot } = await getSnapshot({ from: vnDate(lookback - 1), to: vnDate(0) }, false);
     for (const v of snapshot.videos) {
       if (v.id !== target.videoId) continue;
       if (v.campaignId === target.campaignId) ids.add(v.productId);
@@ -453,7 +453,7 @@ export function executeProposal(proposalId: string, by?: ActorRef, actor: 'appro
     // Số liệu mới không còn khớp quy tắc (vd ROI đã lên trên hoà vốn) → không chạy, đề xuất tự huỷ
     const cfg = getAgentConfig();
     const lookback = Math.max(1, cfg.guardrails.lookbackDays ?? 7);
-    const snapshot = withRecentActions((await getSnapshot({ from: vnDate(lookback), to: vnDate(1) }, false)).snapshot);
+    const snapshot = withRecentActions((await getSnapshot({ from: vnDate(lookback - 1), to: vnDate(0) }, false)).snapshot);
     // Xét lại cả khung 14 ngày (xác nhận) như lúc quét
     const check = recheckProposal(p, cfg, getSettings(), snapshot, await loadConfirmSnaps(cfg.guardrails));
     if (!check.ok) {
@@ -527,7 +527,7 @@ export interface ManualInput {
 /** Số liệu `lookbackDays` của video (cộng các dòng theo sản phẩm) — "Lúc quyết định" trong Nhật ký */
 async function videoWindow(target: AgentTarget): Promise<AgentActionLog['before']> {
   const lookback = Math.max(1, getAgentConfig().guardrails.lookbackDays ?? 7);
-  const range = { from: vnDate(lookback), to: vnDate(1) };
+  const range = { from: vnDate(lookback - 1), to: vnDate(0) };
   const w = { from: `${range.from}T00:00:00+07:00`, to: `${range.to}T23:59:59+07:00`, cost: 0, revenue: 0, orders: 0, roi: null as number | null, breakEven: null };
   try {
     const { snapshot } = await getSnapshot(range, false);

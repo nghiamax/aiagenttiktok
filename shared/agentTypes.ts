@@ -156,7 +156,7 @@ export interface AgentProposal {
   actionId?: string;
   /** Có đơn bù ở sản phẩm khác (cấp video) — cập nhật mỗi lượt quét */
   offset?: VideoOffset;
-  /** Số liệu khung 14 / 30 ngày (đến hôm qua) lúc đề xuất — cập nhật mỗi lượt quét */
+  /** Số liệu khung 14 / 30 ngày (tính cả hôm nay) lúc đề xuất — cập nhật mỗi lượt quét */
   windows?: { d14: WindowStat | null; d30: WindowStat | null };
   /** 30 ngày cũng thuộc nhóm này ("kéo dài"); false = mới 2 tuần gần đây */
   long?: boolean;

@@ -11,6 +11,8 @@ interface ConditionSetsEditorProps {
   metrics?: Metric[];
   /** Mốc so sánh ROI được dùng */
   valueTypes?: ClauseValue['type'][];
+  /** Lợi nhuận 1 đơn của sản phẩm đang sửa (điều kiện theo sản phẩm) */
+  profitPerOrder?: number | null;
 }
 
 /** Sửa các "cách" (HOẶC), mỗi cách gồm nhiều điều kiện (VÀ) */
@@ -20,6 +22,7 @@ export default function ConditionSetsEditor({
   subject,
   metrics = ENTITY_METRICS,
   valueTypes = ['number', 'breakEven', 'target'],
+  profitPerOrder,
 }: ConditionSetsEditorProps) {
   const updateClause = (si: number, ci: number, clause: Clause) =>
     onChange(sets.map((s, i) => (i === si ? { clauses: s.clauses.map((c, j) => (j === ci ? clause : c)) } : s)));
@@ -60,6 +63,7 @@ export default function ConditionSetsEditor({
                     canRemove={set.clauses.length > 1}
                     metrics={metrics}
                     valueTypes={valueTypes}
+                    profitPerOrder={profitPerOrder}
                   />
                 </div>
               ))}

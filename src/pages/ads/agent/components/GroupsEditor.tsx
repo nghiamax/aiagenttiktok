@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
@@ -7,7 +7,7 @@ import { buildTrendIndex } from '../../../../../shared/trend';
 import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../../../shared/reEnable';
 import { productPrices, profitPerOrderMap } from '../../../../../shared/productProfit';
 import { useTrend } from '../../trend';
-import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
+import { LEVEL_UNIT, newClause, normalizeGroups, usesProfit, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
 import { useAdsData } from '../../data';
 import type { TrendSnaps } from '../../../../../shared/trend';
@@ -64,7 +64,7 @@ function countByGroup(snaps: TrendSnaps, level: GroupLevel, settings: AdsSetting
 
 /** Tab "Nhóm": định nghĩa nhóm video / sản phẩm / chiến dịch (sửa trên bản nháp, bấm Lưu mới áp dụng) + ROI hoà vốn */
 export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakEven }: GroupsEditorProps) {
-  const { settings, saveGroups, resetGroups } = useAdsSettings();
+  const { settings, save: saveSettings, resetGroups } = useAdsSettings();
   const { snapshot } = useAdsData();
   const campaignById = useMemo(() => new Map(snapshot.campaigns.map((c) => [c.id, c])), [snapshot]);
   // Mọi sản phẩm có số trong 7 / 14 / 30 ngày (nhập ROI hoà vốn đủ, kể cả sản phẩm đã loại trừ)
@@ -77,7 +77,21 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   /** Nhóm vừa bấm "Thêm nhóm" → cuộn tới + nổi bật */
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // Lợi nhuận 1 đơn Sếp nhập ở điều kiện theo sản phẩm — sửa trên bản nháp, lưu cùng nút Lưu (Sếp chốt 26/11)
+  const savedProfit = settings.profitPerOrder ?? {};
+  const [profitDraft, setProfitDraft] = useState<Record<string, number>>(savedProfit);
+  const savedProfitKey = JSON.stringify(savedProfit);
+  // Tải xong / lưu xong từ server → lấy lại số đã lưu
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setProfitDraft(savedProfit), [savedProfitKey]);
+  const profitDirty = JSON.stringify(profitDraft) !== JSON.stringify(savedProfit);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved) || profitDirty;
+  const setManualProfit = (id: string, value: number | null) => {
+    const next = { ...profitDraft };
+    if (value == null) delete next[id];
+    else next[id] = value;
+    setProfitDraft(next);
+  };
   const unit = LEVEL_UNIT[level];
 
   // So bản nháp với bản đã lưu để thanh lưu nói rõ thay đổi gì
@@ -92,6 +106,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
     addedCount > 0 && `${addedCount} nhóm mới`,
     editedCount > 0 && `${editedCount} nhóm đã sửa`,
     removedCount > 0 && `${removedCount} nhóm bị xoá`,
+    profitDirty && 'lợi nhuận 1 đơn',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -108,7 +123,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
 
   function save() {
     const clean = draft.map((g) => ({ ...g, name: g.name.trim() }));
-    saveGroups(level, clean);
+    saveSettings({ ...settings, [GROUP_KEY[level]]: normalizeGroups(clean), profitPerOrder: profitDraft });
     setDraft(clean);
     setJustAdded(null);
     setSavedFlash(true);
@@ -116,14 +131,22 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   }
 
   const trends = useTrend();
+  const draftSettings = useMemo<AdsSettings>(() => ({ ...settings, [GROUP_KEY[level]]: draft, profitPerOrder: profitDraft }), [settings, level, draft, profitDraft]);
+  const profits = useMemo(() => profitPerOrderMap(trends.snaps, draftSettings), [trends.snaps, draftSettings]);
   const { counts, unconfirmed } = useMemo(() => {
-    const r = countByGroup(trends.snaps, level, { ...settings, [GROUP_KEY[level]]: draft }, trends.confirmOn);
+    const r = countByGroup(trends.snaps, level, draftSettings, trends.confirmOn);
     // Nhóm hệ thống "Cân nhắc bật lại": đếm theo đánh giá 30 / 14 ngày
     if (level === 'product') r.counts.set(REENABLE_GROUP_ID, reEnableCandidates(trends.snaps, settings).length);
     return r;
-  }, [trends.snaps, trends.confirmOn, level, draft, settings]);
+  }, [trends.snaps, trends.confirmOn, level, draftSettings, settings]);
 
-  const errors = new Map(draft.map((g) => [g.id, validate(g, level)]));
+  const errors = new Map(
+    draft.map((g) => {
+      // Sản phẩm dùng "lần lợi nhuận 1 đơn" mà chưa có số → bắt nhập (Sếp chốt 26/11)
+      const noProfit = Object.entries(g.productConditions ?? {}).filter(([id, sets]) => usesProfit(sets) && !profits.has(id)).length;
+      return [g.id, [...validate(g, level), ...(noProfit ? [`Nhập lợi nhuận 1 đơn cho ${noProfit} sản phẩm`] : [])]];
+    }),
+  );
   const hasErrors = [...errors.values()].some((e) => e.length > 0);
   const fallbackIndex = draft.findIndex((g) => g.kind === 'fallback');
   const lastMovable = (fallbackIndex === -1 ? draft.length : fallbackIndex) - 1;
@@ -169,7 +192,6 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
 
   const missingBe = uniqueProducts.filter((p) => breakEvenOf(settings, p.id) == null).length;
   const prices = productPrices(trends.snaps);
-  const profits = profitPerOrderMap(trends.snaps, settings);
 
   return (
     <div className="space-y-5 p-5">
@@ -284,6 +306,9 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             unsaved={isUnsaved(g)}
             products={uniqueProducts}
             focusProductId={focusProduct ? focusProductId : null}
+            profits={level === 'campaign' ? undefined : profits}
+            manualProfit={profitDraft}
+            onManualProfit={setManualProfit}
           />
         ))}
       </ul>
@@ -310,6 +335,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
               type="button"
               onClick={() => {
                 setDraft(saved);
+                setProfitDraft(savedProfit);
                 setJustAdded(null);
               }}
               className="rounded-xl border border-line px-4 py-2 text-sm font-medium transition-colors hover:bg-canvas"

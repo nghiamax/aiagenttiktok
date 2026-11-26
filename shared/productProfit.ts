@@ -3,10 +3,11 @@
  * (ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo → lợi nhuận = giá bán ÷ ROI hoà vốn)
  * = tiền quảng cáo tối đa cho 1 đơn mà vẫn hoà vốn — dùng cho điều kiện "Chi phí ≥ k lần lợi nhuận 1 đơn".
  *
- * Sếp chỉ nhập ROI hoà vốn. Giá tự lấy (TikTok không trả giá khuyến mãi — đã kiểm 26/11), ưu tiên:
+ * Ưu tiên: lợi nhuận 1 đơn Sếp nhập (`settings.profitPerOrder`, nhập ở Phân nhóm — Sếp chốt 26/11)
+ * → còn lại tính = giá ÷ ROI hoà vốn. Giá tự lấy (TikTok không trả giá khuyến mãi — đã kiểm 26/11), ưu tiên:
  *   1. Giá trị đơn trung bình = doanh thu ÷ đơn của sản phẩm (mọi chiến dịch), 30 → 14 → 7 ngày
  *   2. Giá niêm yết TikTok Shop (`AdsProduct.listPrice`, sản phẩm chưa có đơn)
- * Thiếu giá hoặc ROI hoà vốn → KHÔNG đoán (Sếp chốt 26/11: bỏ mức tạm 100k) — điều kiện "lần lợi nhuận 1 đơn" không khớp.
+ * Không có số nhập và thiếu giá / ROI hoà vốn → KHÔNG đoán (Sếp chốt 26/11: bỏ mức tạm 100k) — điều kiện "lần lợi nhuận 1 đơn" không khớp.
  * Cả 3 khung xét nhóm dùng cùng một mức.
  */
 import type { AdsSnapshot } from './adsSnapshot.js';
@@ -50,12 +51,22 @@ export function productPrices(snaps: Snaps): Map<string, ProductPrice> {
   return out;
 }
 
-/** Lợi nhuận 1 đơn = giá ÷ ROI hoà vốn; thiếu → không có trong map */
+/** Lợi nhuận 1 đơn Sếp nhập (số dương), không có → null */
+export function manualProfitOf(settings: AdsSettings, productId: string): number | null {
+  const v = settings.profitPerOrder?.[productId];
+  return typeof v === 'number' && v > 0 ? v : null;
+}
+
+/** Lợi nhuận 1 đơn = số Sếp nhập, không có thì giá ÷ ROI hoà vốn; thiếu cả hai → không có trong map */
 export function profitPerOrderMap(snaps: Snaps, settings: AdsSettings): ProfitMap {
   const out: ProfitMap = new Map();
   for (const [id, { price }] of productPrices(snaps)) {
     const be = breakEvenOf(settings, id);
     if (be != null) out.set(id, price / be);
+  }
+  for (const id of Object.keys(settings.profitPerOrder ?? {})) {
+    const v = manualProfitOf(settings, id);
+    if (v != null) out.set(id, v);
   }
   return out;
 }

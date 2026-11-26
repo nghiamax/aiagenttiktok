@@ -280,6 +280,9 @@ export function normalizeGroups(groups: GroupDef[]): GroupDef[] {
   return [...groups.filter((g) => g.kind !== 'fallback'), ...groups.filter((g) => g.kind === 'fallback')];
 }
 
+/** Bộ điều kiện có dùng mốc "lần lợi nhuận 1 đơn" (cần lợi nhuận 1 đơn của sản phẩm) */
+export const usesProfit = (sets: ConditionSet[]) => sets.some((s) => s.clauses.some((c) => c.value.type === 'profit'));
+
 /** Nhóm có điều kiện so với ROI hoà vốn (thiếu hoà vốn thì nhóm luôn trống) */
 export function groupUsesBreakEven(group: GroupDef): boolean {
   return [...group.conditionSets, ...Object.values(group.productConditions ?? {}).flat()].some((s) => s.clauses.some((c) => c.value.type === 'breakEven' || c.value.type === 'profit'));

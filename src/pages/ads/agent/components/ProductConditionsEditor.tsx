@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Package, Pencil, X } from 'lucide-react';
 import FilterSelect from '../../../../components/ui/FilterSelect';
-import { conditionSetsText, newClause, type ClauseValue, type ConditionSet, type Metric } from '../../groups';
+import { conditionSetsText, newClause, usesProfit, type ClauseValue, type ConditionSet, type Metric } from '../../groups';
 import type { AdsProduct } from '../../types';
 import MediaThumb from '../../components/MediaThumb';
 import ConditionSetsEditor from './ConditionSetsEditor';
 import BulkAddPanel from './BulkAddPanel';
+import ProfitField from './ProfitField';
 
 interface ProductConditionsEditorProps {
   /** Điều kiện riêng hiện tại theo ID sản phẩm ([] = không xét sản phẩm đó) */
@@ -24,6 +25,11 @@ interface ProductConditionsEditorProps {
    * Thêm sản phẩm = ô điều kiện trống; có nút thêm nhiều sản phẩm cùng điều kiện.
    */
   onlyProducts?: boolean;
+  /** Lợi nhuận 1 đơn đang dùng của từng sản phẩm (số nhập hoặc tính từ ROI hoà vốn) */
+  profits?: Map<string, number>;
+  /** Lợi nhuận 1 đơn Sếp nhập (bản nháp) */
+  manualProfit?: Record<string, number>;
+  onManualProfit?: (productId: string, value: number | null) => void;
 }
 
 /** Ô điều kiện trống (1 cách, chưa có điều kiện) — phải điền mới lưu được */
@@ -45,6 +51,9 @@ export default function ProductConditionsEditor({
   valueTypes,
   focusProductId,
   onlyProducts = false,
+  profits,
+  manualProfit = {},
+  onManualProfit,
 }: ProductConditionsEditorProps) {
   const [open, setOpen] = useState<string | null>(focusProductId && value[focusProductId] ? focusProductId : null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -102,6 +111,9 @@ export default function ProductConditionsEditor({
             const sets = value[id];
             const off = sets.length === 0;
             const unfilled = !off && sets.every((s) => s.clauses.length === 0);
+            const needsProfit = usesProfit(sets);
+            const profit = profits?.get(id) ?? null;
+            const missingProfit = needsProfit && profits != null && profit == null;
             const isOpen = open === id;
             return (
               <li key={id} ref={id === focusProductId ? focusRef : undefined} className="rounded-xl border border-line">
@@ -119,6 +131,7 @@ export default function ProductConditionsEditor({
                     <span className={`block truncate text-xs ${off || unfilled ? 'font-medium text-amber-600' : 'text-muted'}`}>
                       {off ? 'Không xét sản phẩm này vào nhóm' : unfilled ? 'Chưa điền điều kiện' : conditionSetsText(sets)}
                     </span>
+                    {missingProfit && <span className="block text-xs font-medium text-danger">Cần nhập lợi nhuận 1 đơn</span>}
                   </button>
                   <button
                     type="button"
@@ -153,7 +166,24 @@ export default function ProductConditionsEditor({
                       </label>
                     )}
                     {!off && (
-                      <ConditionSetsEditor sets={sets} onChange={(next) => set(id, next)} subject={subject} metrics={metrics} valueTypes={valueTypes} />
+                      <>
+                        {onManualProfit && (
+                          <ProfitField
+                            manual={manualProfit[id] ?? null}
+                            effective={profit}
+                            required={needsProfit}
+                            onChange={(v) => onManualProfit(id, v)}
+                          />
+                        )}
+                        <ConditionSetsEditor
+                          sets={sets}
+                          onChange={(next) => set(id, next)}
+                          subject={subject}
+                          metrics={metrics}
+                          valueTypes={valueTypes}
+                          profitPerOrder={profits ? profit : undefined}
+                        />
+                      </>
                     )}
                   </div>
                 )}

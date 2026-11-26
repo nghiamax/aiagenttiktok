@@ -50,6 +50,10 @@ interface GroupCardProps {
   products?: AdsProduct[];
   /** Mở sẵn điều kiện riêng của sản phẩm này */
   focusProductId?: string | null;
+  /** Lợi nhuận 1 đơn từng sản phẩm (đang dùng) + số Sếp nhập (bản nháp) */
+  profits?: Map<string, number>;
+  manualProfit?: Record<string, number>;
+  onManualProfit?: (productId: string, value: number | null) => void;
 }
 
 const TONES = Object.keys(GROUP_TONES) as GroupTone[];
@@ -72,6 +76,9 @@ export default function GroupCard({
   unsaved = false,
   products = [],
   focusProductId = null,
+  profits,
+  manualProfit,
+  onManualProfit,
 }: GroupCardProps) {
   const [styling, setStyling] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -272,6 +279,9 @@ export default function GroupCard({
             onChange={(next) => onChange({ productConditions: Object.keys(next).length ? next : undefined })}
             general={sets}
             onlyProducts={onlyProducts}
+            profits={profits}
+            manualProfit={manualProfit}
+            onManualProfit={onManualProfit}
             products={products}
             subject={SUBJECT[level]}
             metrics={METRICS_BY_LEVEL[level]}

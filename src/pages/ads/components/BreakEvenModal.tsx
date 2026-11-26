@@ -3,7 +3,7 @@ import { Package } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import { formatNumber } from '../../../lib/format';
 import { useAdsSettings, type AdsSettings } from '../settings';
-import { productPrices, type PriceSource } from '../../../../shared/productProfit';
+import { manualProfitOf, productPrices, type PriceSource } from '../../../../shared/productProfit';
 import { useTrend } from '../trend';
 import type { AdsProduct, Campaign } from '../types';
 import MediaThumb from './MediaThumb';
@@ -129,7 +129,8 @@ export default function BreakEvenModal({
             {(() => {
               const price = prices.get(p.id);
               const be = parseRoi(beDraft[p.id] ?? '');
-              const profit = price && be != null ? price.price / be : null;
+              const manual = manualProfitOf(settings, p.id);
+              const profit = manual ?? (price && be != null ? price.price / be : null);
               return (
                 <div className="flex shrink-0 items-start gap-3">
                   <div className="w-28 pt-4 text-right" title={price ? SOURCE_TITLE[price.source] : 'Chưa có đơn và chưa lấy được giá niêm yết'}>
@@ -151,7 +152,7 @@ export default function BreakEvenModal({
                   </label>
                   <div className="w-24 pt-4 text-right">
                     <span className="block text-[11px] text-muted">Lãi 1 đơn</span>
-                    <span className={`text-sm font-semibold tabular-nums ${profit == null ? 'text-muted' : ''}`} title={profit == null ? 'Cần ROI hoà vốn và giá để tính' : undefined}>
+                    <span className={`text-sm font-semibold tabular-nums ${profit == null ? 'text-muted' : ''}`} title={manual != null ? 'Số Sếp nhập ở Phân nhóm' : profit == null ? 'Cần ROI hoà vốn và giá để tính (hoặc nhập ở Phân nhóm)' : '= giá ÷ ROI hoà vốn'}>
                       {profit == null ? '--' : formatNumber(Math.round(profit))}
                     </span>
                   </div>

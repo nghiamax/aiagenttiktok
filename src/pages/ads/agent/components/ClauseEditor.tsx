@@ -20,6 +20,8 @@ interface ClauseEditorProps {
   metrics?: Metric[];
   /** Mốc so sánh ROI được chọn */
   valueTypes?: ValueType[];
+  /** Lợi nhuận 1 đơn của sản phẩm đang sửa (null = chưa có; không truyền = không gắn sản phẩm) */
+  profitPerOrder?: number | null;
 }
 
 const OPS = Object.keys(OP_LABEL) as Op[];
@@ -70,6 +72,7 @@ export default function ClauseEditor({
   canRemove,
   metrics = ENTITY_METRICS,
   valueTypes = ['number', 'breakEven', 'target'],
+  profitPerOrder,
 }: ClauseEditorProps) {
   const { metric, op, value } = clause;
   const isRoi = metric === 'roi';
@@ -140,7 +143,7 @@ export default function ClauseEditor({
           aria-label="Đơn vị"
           value={value.type}
           onChange={(e) => changeValueType(e.target.value as ValueType)}
-          title="Lợi nhuận 1 đơn = giá khách trả TB (chưa có đơn: giá niêm yết) ÷ ROI hoà vốn của sản phẩm. Chưa nhập ROI hoà vốn → điều kiện không khớp"
+          title="Lợi nhuận 1 đơn của sản phẩm: số Sếp nhập ở điều kiện sản phẩm; chưa nhập thì = giá khách trả TB ÷ ROI hoà vốn"
           className={SELECT}
         >
           <option value="number">đ</option>
@@ -151,7 +154,13 @@ export default function ClauseEditor({
       )}
 
       {value.type === 'profit' ? (
-        <span className="text-xs text-muted">(vd lợi nhuận 1 đơn 100.000đ → {vi.format(100_000 * value.k)}đ)</span>
+        profitPerOrder === undefined ? (
+          <span className="text-xs text-muted">(vd lợi nhuận 1 đơn 100.000đ → {vi.format(100_000 * value.k)}đ)</span>
+        ) : profitPerOrder == null ? (
+          <span className="text-xs font-medium text-danger">chưa có lợi nhuận 1 đơn</span>
+        ) : (
+          <span className="text-xs text-muted">= {vi.format(Math.round(profitPerOrder * value.k))}đ</span>
+        )
       ) : (
         value.type !== 'number' &&
         value.k !== 1 && (

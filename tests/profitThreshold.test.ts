@@ -102,3 +102,19 @@ describe('Ngưỡng "lần lợi nhuận 1 đơn"', () => {
     expect(kept.map((t) => t.target.productId)).toEqual(['pA']);
   });
 });
+
+describe('Lợi nhuận 1 đơn Sếp nhập (Sếp chốt 26/11)', () => {
+  it('số nhập ưu tiên hơn giá ÷ ROI hoà vốn; không cần ROI hoà vốn vẫn dùng được', () => {
+    const s = { ...withBe({ pA: 3 }), profitPerOrder: { pA: 250_000, pB: 50_000 } };
+    const pm = profitPerOrderMap({ d7: snap, d14: null, d30: null }, s);
+    expect(pm.get('pA')).toBe(250_000);
+    expect(pm.get('pB')).toBe(50_000);
+    expect(classifyVideo(idle('pA', 150_000), C, s, pm)?.action).not.toBe('cut');
+    expect(classifyVideo(idle('pB', 60_000), C, s, pm)?.action).toBe('cut');
+  });
+
+  it('số không hợp lệ (0, âm) bị bỏ', () => {
+    const s = { ...withBe({}), profitPerOrder: { pA: 0, pB: -5 } };
+    expect(profitPerOrderMap({ d7: snap, d14: null, d30: null }, s).size).toBe(0);
+  });
+});

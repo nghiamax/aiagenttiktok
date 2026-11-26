@@ -5,7 +5,7 @@ import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
 import { buildTrendIndex } from '../../../../../shared/trend';
 import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../../../shared/reEnable';
-import { productPrices, profitPerOrderMap, PROFIT_FALLBACK_VND } from '../../../../../shared/productProfit';
+import { productPrices, profitPerOrderMap } from '../../../../../shared/productProfit';
 import { useTrend } from '../../trend';
 import { LEVEL_UNIT, newClause, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
@@ -37,7 +37,8 @@ function validate(g: GroupDef, level: GroupLevel): string[] {
   if (g.kind === 'custom') {
     const ownCount = Object.keys(g.productConditions ?? {}).length;
     // Cấp video / sản phẩm: tắt điều kiện chung được nếu có ≥ 1 sản phẩm riêng (Sếp chốt 25/11)
-    if (g.conditionSets.length === 0 && (level === 'campaign' || ownCount === 0))
+    // Cấp video không có điều kiện chung (Sếp chốt 26/11) — nhóm chưa thiết lập sản phẩm nào vẫn lưu được
+    if (level !== 'video' && g.conditionSets.length === 0 && (level === 'campaign' || ownCount === 0))
       errors.push(level === 'campaign' ? 'Cần ít nhất 1 cách nhận diện' : 'Bật điều kiện chung hoặc thêm ít nhất 1 sản phẩm riêng');
     if (g.conditionSets.some((s) => s.clauses.length === 0)) errors.push('Mỗi cách cần ít nhất 1 điều kiện');
     // Điều kiện riêng: [] = không xét sản phẩm (hợp lệ); có cách thì mỗi cách phải có điều kiện
@@ -153,7 +154,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
       kind: 'custom',
       builtin: false,
       showInInbox: true,
-      conditionSets: [{ clauses: [newClause()] }],
+      conditionSets: level === 'video' ? [] : [{ clauses: [newClause()] }],
     };
     const at = fallbackIndex === -1 ? draft.length : fallbackIndex;
     setDraft([...draft.slice(0, at), group, ...draft.slice(at)]);
@@ -167,7 +168,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   }
 
   const missingBe = uniqueProducts.filter((p) => breakEvenOf(settings, p.id) == null).length;
-  const prices = productPrices(trends.snaps, settings);
+  const prices = productPrices(trends.snaps);
   const profits = profitPerOrderMap(trends.snaps, settings);
 
   return (
@@ -184,11 +185,11 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
         <section className="rounded-2xl border border-line bg-canvas/60 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="font-semibold">Giá bán & ROI hoà vốn theo sản phẩm</h3>
+              <h3 className="font-semibold">ROI hoà vốn theo sản phẩm</h3>
               <p className="text-sm text-muted">
-                Dùng cho điều kiện “ROI hoà vốn ×” và “lần lợi nhuận 1 đơn” (lãi 1 đơn = giá bán sau KM ÷ ROI hoà vốn).{' '}
+                Dùng cho điều kiện “ROI hoà vốn ×” và “lần lợi nhuận 1 đơn” (lãi 1 đơn = giá khách trả TB ÷ ROI hoà vốn).{' '}
                 {missingBe > 0
-                  ? `${missingBe}/${uniqueProducts.length} sản phẩm chưa nhập ROI hoà vốn — lãi 1 đơn tạm tính ${formatNumber(PROFIT_FALLBACK_VND)}đ.`
+                  ? `${missingBe}/${uniqueProducts.length} sản phẩm chưa nhập ROI hoà vốn — chưa tính được lãi 1 đơn.`
                   : 'Đã nhập đủ ROI hoà vốn.'}
               </p>
             </div>
@@ -197,7 +198,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
               onClick={onOpenBreakEven}
               className="w-fit rounded-xl bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition hover:shadow-md"
             >
-              Nhập giá bán & ROI hoà vốn
+              Nhập ROI hoà vốn
             </button>
           </div>
           <ul className="mt-3 flex flex-wrap gap-2">
@@ -206,7 +207,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
               const price = prices.get(p.id);
               const profit = profits.get(p.id);
               const priceText = price
-                ? `${formatNumber(Math.round(price.price))}đ (${price.source === 'manual' ? 'Sếp nhập' : price.source === 'aov' ? 'giá trị đơn 30 ngày' : 'giá niêm yết'})`
+                ? `${formatNumber(Math.round(price.price))}đ (${price.source === 'aov' ? 'khách trả TB' : 'giá niêm yết'})`
                 : 'chưa có';
               return (
                 <li
@@ -217,7 +218,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
                   {p.name} · <b className={be == null ? 'text-muted' : ''}>{be == null ? 'chưa nhập' : formatNumber(be, 2)}</b>
                   {' · lãi 1 đơn '}
                   <b className={profit == null ? 'text-muted' : ''}>
-                    {profit == null ? `~${formatNumber(PROFIT_FALLBACK_VND / 1000)}k` : `${formatNumber(Math.round(profit / 1000))}k`}
+                    {profit == null ? '--' : `${formatNumber(Math.round(profit / 1000))}k`}
                   </b>
                 </li>
               );
@@ -235,6 +236,8 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
           </span>
         </p>
         <div className="flex shrink-0 gap-2">
+          {/* Cấp video bỏ Khôi phục mặc định (Sếp chốt 26/11) — mặc định không có điều kiện */}
+          {level !== 'video' && (
           <button
             type="button"
             onClick={restoreDefaults}
@@ -243,6 +246,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             <RotateCcw className="size-4" />
             Khôi phục mặc định
           </button>
+          )}
           <button
             type="button"
             onClick={addGroup}

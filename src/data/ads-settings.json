@@ -19,20 +19,7 @@
       "kind": "custom",
       "builtin": true,
       "showInInbox": true,
-      "conditionSets": [
-        {
-          "clauses": [
-            { "metric": "cost", "op": "gte", "value": { "type": "profit", "k": 1 } },
-            { "metric": "orders", "op": "eq", "value": { "type": "number", "n": 0 } }
-          ]
-        },
-        {
-          "clauses": [
-            { "metric": "cost", "op": "gte", "value": { "type": "profit", "k": 1 } },
-            { "metric": "roi", "op": "lt", "value": { "type": "breakEven", "k": 1 } }
-          ]
-        }
-      ]
+      "conditionSets": []
     },
     {
       "id": "scale",
@@ -42,14 +29,7 @@
       "kind": "custom",
       "builtin": true,
       "showInInbox": true,
-      "conditionSets": [
-        {
-          "clauses": [
-            { "metric": "orders", "op": "gte", "value": { "type": "number", "n": 3 } },
-            { "metric": "roi", "op": "gte", "value": { "type": "target", "k": 1.2 } }
-          ]
-        }
-      ]
+      "conditionSets": []
     },
     {
       "id": "stable",

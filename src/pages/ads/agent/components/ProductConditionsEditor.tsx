@@ -5,6 +5,7 @@ import { conditionSetsText, newClause, type ClauseValue, type ConditionSet, type
 import type { AdsProduct } from '../../types';
 import MediaThumb from '../../components/MediaThumb';
 import ConditionSetsEditor from './ConditionSetsEditor';
+import BulkAddPanel from './BulkAddPanel';
 
 interface ProductConditionsEditorProps {
   /** Điều kiện riêng hiện tại theo ID sản phẩm ([] = không xét sản phẩm đó) */
@@ -18,7 +19,15 @@ interface ProductConditionsEditorProps {
   valueTypes: ClauseValue['type'][];
   /** Mở sẵn khối của sản phẩm này (link "Phân nhóm riêng" từ bảng Sản phẩm) */
   focusProductId?: string | null;
+  /**
+   * Cấp video (Sếp chốt 26/11): không có điều kiện chung — chỉ sản phẩm thiết lập ở đây mới được xét.
+   * Thêm sản phẩm = ô điều kiện trống; có nút thêm nhiều sản phẩm cùng điều kiện.
+   */
+  onlyProducts?: boolean;
 }
+
+/** Ô điều kiện trống (1 cách, chưa có điều kiện) — phải điền mới lưu được */
+const blank = (): ConditionSet[] => [{ clauses: [] }];
 
 const clone = (sets: ConditionSet[]): ConditionSet[] => sets.map((s) => ({ clauses: s.clauses.map((c) => ({ ...c, value: { ...c.value } })) }));
 
@@ -35,12 +44,14 @@ export default function ProductConditionsEditor({
   metrics,
   valueTypes,
   focusProductId,
+  onlyProducts = false,
 }: ProductConditionsEditorProps) {
   const [open, setOpen] = useState<string | null>(focusProductId && value[focusProductId] ? focusProductId : null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const focusRef = useRef<HTMLLIElement>(null);
   const byId = new Map(products.map((p) => [p.id, p]));
-  // Điểm bắt đầu: chép điều kiện chung; điều kiện chung đang tắt (rỗng) → 1 điều kiện mặc định
-  const seed = () => (general.length ? clone(general) : [{ clauses: [newClause()] }]);
+  // Điểm bắt đầu: cấp video = trống; còn lại chép điều kiện chung (chung đang tắt → 1 điều kiện mặc định)
+  const seed = () => (onlyProducts ? blank() : general.length ? clone(general) : [{ clauses: [newClause()] }]);
   const ids = Object.keys(value);
 
   useEffect(() => {
@@ -61,6 +72,12 @@ export default function ProductConditionsEditor({
     onChange({ ...value, [id]: seed() });
     setOpen(id);
   };
+  const addMany = (ids: string[], sets: ConditionSet[]) => {
+    const next = { ...value };
+    for (const id of ids) next[id] = clone(sets);
+    onChange(next);
+    setBulkOpen(false);
+  };
 
   const options = products
     .filter((p) => !value[p.id])
@@ -69,10 +86,13 @@ export default function ProductConditionsEditor({
   return (
     <div className="mt-4 border-t border-line pt-4">
       <p className="text-sm font-semibold">
-        Điều kiện riêng theo sản phẩm{ids.length > 0 && <span className="font-normal text-muted"> ({ids.length})</span>}
+        {onlyProducts ? 'Điều kiện theo sản phẩm' : 'Điều kiện riêng theo sản phẩm'}
+        {ids.length > 0 && <span className="font-normal text-muted"> ({ids.length})</span>}
       </p>
       <p className="mt-0.5 text-xs text-muted">
-        Sản phẩm có điều kiện riêng chỉ xét theo điều kiện riêng, bỏ điều kiện chung — dùng để đẩy mạnh hoặc giữ chặt từng sản phẩm.
+        {onlyProducts
+          ? `${subject} khi khớp điều kiện của sản phẩm video đó gắn vào. Sản phẩm chưa thiết lập thì video không vào nhóm này.`
+          : 'Sản phẩm có điều kiện riêng chỉ xét theo điều kiện riêng, bỏ điều kiện chung — dùng để đẩy mạnh hoặc giữ chặt từng sản phẩm.'}
       </p>
 
       {ids.length > 0 && (
@@ -81,6 +101,7 @@ export default function ProductConditionsEditor({
             const p = byId.get(id);
             const sets = value[id];
             const off = sets.length === 0;
+            const unfilled = !off && sets.every((s) => s.clauses.length === 0);
             const isOpen = open === id;
             return (
               <li key={id} ref={id === focusProductId ? focusRef : undefined} className="rounded-xl border border-line">
@@ -95,8 +116,8 @@ export default function ProductConditionsEditor({
                     <span className="block truncate text-sm font-medium" title={p?.name ?? id}>
                       {p?.name ?? 'Sản phẩm không còn số liệu'} <span className="font-normal text-muted">· …{id.slice(-4)}</span>
                     </span>
-                    <span className={`block truncate text-xs ${off ? 'font-medium text-amber-600' : 'text-muted'}`}>
-                      {off ? 'Không xét sản phẩm này vào nhóm' : conditionSetsText(sets)}
+                    <span className={`block truncate text-xs ${off || unfilled ? 'font-medium text-amber-600' : 'text-muted'}`}>
+                      {off ? 'Không xét sản phẩm này vào nhóm' : unfilled ? 'Chưa điền điều kiện' : conditionSetsText(sets)}
                     </span>
                   </button>
                   <button
@@ -111,8 +132,8 @@ export default function ProductConditionsEditor({
                   <button
                     type="button"
                     onClick={() => remove(id)}
-                    aria-label="Bỏ điều kiện riêng (dùng điều kiện chung)"
-                    title="Bỏ điều kiện riêng — sản phẩm dùng lại điều kiện chung"
+                    aria-label={onlyProducts ? 'Bỏ sản phẩm khỏi nhóm' : 'Bỏ điều kiện riêng (dùng điều kiện chung)'}
+                    title={onlyProducts ? 'Bỏ sản phẩm khỏi nhóm — video của sản phẩm này không vào nhóm' : 'Bỏ điều kiện riêng — sản phẩm dùng lại điều kiện chung'}
                     className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-rose-50 hover:text-danger"
                   >
                     <X className="size-4" />
@@ -120,15 +141,17 @@ export default function ProductConditionsEditor({
                 </div>
                 {isOpen && (
                   <div className="space-y-3 border-t border-line p-3">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={off}
-                        onChange={(e) => set(id, e.target.checked ? [] : seed())}
-                        className="size-4 accent-primary"
-                      />
-                      Không xét sản phẩm này vào nhóm
-                    </label>
+                    {!onlyProducts && (
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={off}
+                          onChange={(e) => set(id, e.target.checked ? [] : seed())}
+                          className="size-4 accent-primary"
+                        />
+                        Không xét sản phẩm này vào nhóm
+                      </label>
+                    )}
                     {!off && (
                       <ConditionSetsEditor sets={sets} onChange={(next) => set(id, next)} subject={subject} metrics={metrics} valueTypes={valueTypes} />
                     )}
@@ -154,7 +177,7 @@ export default function ProductConditionsEditor({
         <FilterSelect
           label="Sản phẩm"
           icon={Package}
-          allLabel="+ Điều kiện riêng cho sản phẩm"
+          allLabel={onlyProducts ? '+ Thêm sản phẩm' : '+ Điều kiện riêng cho sản phẩm'}
           options={options}
           value={null}
           onChange={add}
@@ -162,7 +185,27 @@ export default function ProductConditionsEditor({
           hideAll
         />
         </div>
+        {onlyProducts && options.length > 1 && !bulkOpen && (
+          <button
+            type="button"
+            onClick={() => setBulkOpen(true)}
+            className="w-fit rounded-xl border border-line px-3.5 py-2 text-sm font-medium transition-colors hover:bg-canvas"
+          >
+            + Thêm nhiều sản phẩm
+          </button>
+        )}
       </div>
+
+      {bulkOpen && (
+        <BulkAddPanel
+          products={products.filter((p) => !value[p.id])}
+          subject={subject}
+          metrics={metrics}
+          valueTypes={valueTypes}
+          onApply={addMany}
+          onCancel={() => setBulkOpen(false)}
+        />
+      )}
     </div>
   );
 }

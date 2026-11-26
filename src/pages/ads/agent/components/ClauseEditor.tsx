@@ -140,7 +140,7 @@ export default function ClauseEditor({
           aria-label="Đơn vị"
           value={value.type}
           onChange={(e) => changeValueType(e.target.value as ValueType)}
-          title="Lợi nhuận 1 đơn = giá bán sau khuyến mãi ÷ ROI hoà vốn của sản phẩm (nhập ở hộp Giá bán & ROI hoà vốn; để trống = giá trị đơn 30 ngày). Thiếu → tạm tính 100.000đ"
+          title="Lợi nhuận 1 đơn = giá khách trả TB (chưa có đơn: giá niêm yết) ÷ ROI hoà vốn của sản phẩm. Chưa nhập ROI hoà vốn → điều kiện không khớp"
           className={SELECT}
         >
           <option value="number">đ</option>

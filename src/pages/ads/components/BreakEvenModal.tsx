@@ -3,7 +3,7 @@ import { Package } from 'lucide-react';
 import Modal from '../../../components/ui/Modal';
 import { formatNumber } from '../../../lib/format';
 import { useAdsSettings, type AdsSettings } from '../settings';
-import { productPrices, PROFIT_FALLBACK_VND, type PriceSource } from '../../../../shared/productProfit';
+import { productPrices, type PriceSource } from '../../../../shared/productProfit';
 import { useTrend } from '../trend';
 import type { AdsProduct, Campaign } from '../types';
 import MediaThumb from './MediaThumb';
@@ -27,13 +27,11 @@ function parseRoi(text: string): number | null {
 
 const toText = (n: number | undefined) => (n == null ? '' : String(n).replace('.', ','));
 
-/** Giá bán: chỉ lấy chữ số ("285.000" → 285000) */
-function parseVnd(text: string): number | null {
-  const n = Number(text.replace(/[^d]/g, ''));
-  return text.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : n;
-}
-const vndText = (n: number | undefined) => (n == null ? '' : formatNumber(Math.round(n)));
-const SOURCE_LABEL: Record<PriceSource, string> = { manual: 'Sếp nhập', aov: 'giá trị đơn 30 ngày', list: 'giá niêm yết — sửa nếu đang giảm giá' };
+const SOURCE_LABEL: Record<PriceSource, string> = { aov: 'khách trả TB', list: 'giá niêm yết' };
+const SOURCE_TITLE: Record<PriceSource, string> = {
+  aov: 'Giá khách trả trung bình = doanh thu ÷ đơn của sản phẩm (30 ngày, mọi chiến dịch)',
+  list: 'Sản phẩm chưa có đơn → giá niêm yết TikTok Shop (chưa trừ khuyến mãi)',
+};
 
 const INPUT =
   'w-full rounded-lg border border-line bg-white px-3 py-2 text-right text-sm tabular-nums outline-none transition hover:border-muted/40 focus:border-primary focus:ring-2 focus:ring-primary-soft';
@@ -54,14 +52,11 @@ export default function BreakEvenModal({
   const { loaded } = useAdsSettings();
   const fromSettings = () => Object.fromEntries(uniqueProducts.map((p) => [p.id, toText(settings.breakEvenRoi[p.id])]));
   const [beDraft, setBeDraft] = useState<Record<string, string>>(fromSettings);
-  const priceFromSettings = () => Object.fromEntries(uniqueProducts.map((p) => [p.id, vndText(settings.sellingPrice?.[p.id])]));
-  const [priceDraft, setPriceDraft] = useState<Record<string, string>>(priceFromSettings);
-  // Gợi ý giá bán sau KM khi Sếp để trống: giá trị đơn TB 30 → 14 → 7 ngày, chưa có đơn thì giá niêm yết TikTok Shop
+  // Giá tự lấy (chỉ xem): giá khách trả TB 30 → 14 → 7 ngày, chưa có đơn thì giá niêm yết TikTok Shop
   const { snaps } = useTrend();
-  const suggested = productPrices(snaps, { ...settings, sellingPrice: {} });
+  const prices = productPrices(snaps);
   // Mở hộp lúc server chưa tải xong → tải xong thì điền lại số đã lưu
   useEffect(() => {
-    if (loaded) setPriceDraft(priceFromSettings());
     if (loaded) setBeDraft(fromSettings());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
@@ -72,12 +67,7 @@ export default function BreakEvenModal({
       const value = parseRoi(text);
       if (value != null) breakEvenRoi[id] = value;
     }
-    const sellingPrice: Record<string, number> = {};
-    for (const [id, text] of Object.entries(priceDraft)) {
-      const value = parseVnd(text);
-      if (value != null) sellingPrice[id] = value;
-    }
-    onSave({ ...settings, breakEvenRoi, sellingPrice });
+    onSave({ ...settings, breakEvenRoi });
     onClose();
   }
 
@@ -88,8 +78,8 @@ export default function BreakEvenModal({
 
   return (
     <Modal
-      title="Giá bán & ROI hoà vốn"
-      description={`ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo — video có ROI thấp hơn là đang lỗ. Lãi 1 đơn = giá bán sau khuyến mãi ÷ ROI hoà vốn (dùng cho điều kiện "lần lợi nhuận 1 đơn"). Để trống giá bán = dùng gợi ý; thiếu giá hoặc hoà vốn → lãi 1 đơn tạm tính ${formatNumber(PROFIT_FALLBACK_VND)}đ.`}
+      title="ROI hoà vốn"
+      description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo — video có ROI thấp hơn là đang lỗ. Lãi 1 đơn = giá khách trả TB ÷ ROI hoà vốn (tự tính, dùng cho điều kiện “lần lợi nhuận 1 đơn”). Chưa nhập ROI hoà vốn thì chưa tính được."
       onClose={onClose}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -137,29 +127,15 @@ export default function BreakEvenModal({
               </p>
             </div>
             {(() => {
-              const sug = suggested.get(p.id);
-              const manual = parseVnd(priceDraft[p.id] ?? '');
-              const price = manual ?? sug?.price ?? null;
+              const price = prices.get(p.id);
               const be = parseRoi(beDraft[p.id] ?? '');
-              const profit = price != null && be != null ? price / be : null;
+              const profit = price && be != null ? price.price / be : null;
               return (
-                <div className="flex shrink-0 items-start gap-2">
-                  <label className="w-32">
-                    <span className="block text-[11px] text-muted">Giá bán sau KM</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={sug ? vndText(sug.price) : 'vd 285.000'}
-                      value={priceDraft[p.id] ?? ''}
-                      onChange={(e) => setPriceDraft({ ...priceDraft, [p.id]: e.target.value })}
-                      onBlur={(e) => setPriceDraft({ ...priceDraft, [p.id]: vndText(parseVnd(e.target.value) ?? undefined) })}
-                      aria-label={`Giá bán sau khuyến mãi của ${p.name}`}
-                      className={INPUT}
-                    />
-                    <span className="mt-0.5 block truncate text-[11px] text-muted" title={sug ? SOURCE_LABEL[sug.source] : undefined}>
-                      {manual != null ? 'Sếp nhập' : sug ? `gợi ý: ${SOURCE_LABEL[sug.source]}` : 'chưa có giá'}
-                    </span>
-                  </label>
+                <div className="flex shrink-0 items-start gap-3">
+                  <div className="w-28 pt-4 text-right" title={price ? SOURCE_TITLE[price.source] : 'Chưa có đơn và chưa lấy được giá niêm yết'}>
+                    <span className="block text-[11px] text-muted">Giá {price ? `(${SOURCE_LABEL[price.source]})` : ''}</span>
+                    <span className={`text-sm tabular-nums ${price ? '' : 'text-muted'}`}>{price ? formatNumber(Math.round(price.price)) : '--'}</span>
+                  </div>
                   <label className="w-24">
                     <span className="block text-[11px] text-muted">ROI hoà vốn</span>
                     <input
@@ -175,8 +151,8 @@ export default function BreakEvenModal({
                   </label>
                   <div className="w-24 pt-4 text-right">
                     <span className="block text-[11px] text-muted">Lãi 1 đơn</span>
-                    <span className={`text-sm font-semibold tabular-nums ${profit == null ? 'text-muted' : ''}`} title={profit == null ? `Thiếu giá bán hoặc ROI hoà vốn — tạm tính ${formatNumber(PROFIT_FALLBACK_VND)}đ` : undefined}>
-                      {profit == null ? `~${formatNumber(PROFIT_FALLBACK_VND)}` : formatNumber(Math.round(profit))}
+                    <span className={`text-sm font-semibold tabular-nums ${profit == null ? 'text-muted' : ''}`} title={profit == null ? 'Cần ROI hoà vốn và giá để tính' : undefined}>
+                      {profit == null ? '--' : formatNumber(Math.round(profit))}
                     </span>
                   </div>
                 </div>

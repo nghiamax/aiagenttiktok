@@ -7,8 +7,6 @@ export const REENABLE_GROUP = 'p-reenable';
 export interface AdsSettings {
   /** ROI hoà vốn theo ID sản phẩm (item_group_id) */
   breakEvenRoi: Record<string, number>;
-  /** Giá bán sau khuyến mãi Sếp nhập (đ) — để tính lợi nhuận 1 đơn (shared/productProfit.ts). Thiếu = dùng gợi ý */
-  sellingPrice?: Record<string, number>;
   /** Nhóm video, xét theo thứ tự từ trên xuống (nhóm fallback luôn cuối) */
   groups: GroupDef[];
   /** Nhóm sản phẩm (trong từng chiến dịch) */
@@ -53,7 +51,6 @@ export function normalizeSettings(saved: Partial<AdsSettings> | null | undefined
   };
   return {
     breakEvenRoi: { ...defaults.breakEvenRoi, ...saved?.breakEvenRoi },
-    sellingPrice: { ...defaults.sellingPrice, ...saved?.sellingPrice },
     groups: groupsFor('video'),
     productGroups: groupsFor('product'),
     campaignGroups: groupsFor('campaign'),

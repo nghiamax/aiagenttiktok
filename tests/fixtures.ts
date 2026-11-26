@@ -8,20 +8,28 @@ import defaultsJson from '../src/data/ads-settings.json';
 export const SHIPPED_SETTINGS: AdsSettings = normalizeSettings(defaultsJson as AdsSettings, defaultsJson as AdsSettings);
 
 /**
- * Bộ nhóm cho phần lớn test: Cắt lỗ giữ ngưỡng cố định 100k (bản trước 26/11) để test hành vi khác (gộp video, xác nhận,
- * lỗ âm thầm, engine…) không phụ thuộc ROI hoà vốn / giá trị đơn. Ngưỡng "lần lợi nhuận 1 đơn" test riêng ở profitThreshold.test.ts.
+ * Bộ nhóm cho phần lớn test = shop đã thiết lập Cắt lỗ / Nhân rộng bằng điều kiện chung (bản lưu trước 26/11 — logic chung
+ * vẫn xét điều kiện chung; từ 26/11 giao diện cấp video chỉ thiết lập theo sản phẩm, bản cũ được chuyển ở web).
+ * Cắt lỗ ngưỡng cố định 100k để test hành vi khác không phụ thuộc ROI hoà vốn / giá. Ngưỡng "lần lợi nhuận 1 đơn" ở profitThreshold.test.ts.
  */
+const n = (v: number) => ({ type: 'number' as const, n: v });
 export const DEFAULT_SETTINGS: AdsSettings = {
   ...SHIPPED_SETTINGS,
   groups: SHIPPED_SETTINGS.groups.map((g) =>
     g.id === 'cut'
       ? {
           ...g,
-          conditionSets: g.conditionSets.map((cs) => ({
-            clauses: cs.clauses.map((c) => (c.value.type === 'profit' ? { ...c, value: { type: 'number' as const, n: 100_000 } } : c)),
-          })),
+          conditionSets: [
+            { clauses: [{ metric: 'cost', op: 'gte', value: n(100_000) }, { metric: 'orders', op: 'eq', value: n(0) }] },
+            { clauses: [{ metric: 'cost', op: 'gte', value: n(100_000) }, { metric: 'roi', op: 'lt', value: { type: 'breakEven', k: 1 } }] },
+          ],
         }
-      : g,
+      : g.id === 'scale'
+        ? {
+            ...g,
+            conditionSets: [{ clauses: [{ metric: 'orders', op: 'gte', value: n(3) }, { metric: 'roi', op: 'gte', value: { type: 'target', k: 1.2 } }] }],
+          }
+        : g,
   ),
 };
 

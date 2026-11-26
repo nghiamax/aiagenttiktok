@@ -205,7 +205,7 @@ export default function PlansPage() {
 
       {error && <p className="mx-auto mt-4 max-w-4xl text-sm text-danger">{error}</p>}
 
-      {order && <PaymentModal order={order} billing={billing} onClose={() => setOrder(null)} onPaid={onPaid} />}
+      {order && <PaymentModal order={order} onClose={() => setOrder(null)} onPaid={onPaid} />}
     </>
   );
 }

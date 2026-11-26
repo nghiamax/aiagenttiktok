@@ -33,14 +33,13 @@ const profit = profitPerOrderMap({ d7: snap, d14: null, d30: null }, S);
 const idle = (productId: string, cost: number) => video({ id: `v-${productId}`, campaignId: 'c1', productId, cost, orders: 0 });
 const cut = S.groups.find((g) => g.id === 'cut')!;
 
-describe('Mặc định cấp video (Sếp chốt 26/11): không có điều kiện chung', () => {
-  it('Cắt lỗ / Nhân rộng mặc định trống → không video nào vào cho tới khi thiết lập sản phẩm', () => {
-    for (const id of ['cut', 'scale']) {
-      const g = SHIPPED_SETTINGS.groups.find((x) => x.id === id) as GroupDef;
-      expect(g.conditionSets).toEqual([]);
-      expect(g.productConditions).toBeUndefined();
-    }
-    expect(classifyVideo(idle('pA', 5_000_000), C, SHIPPED_SETTINGS, profit)?.action).toBe('stable');
+describe('Mặc định cấp video: điều kiện chung theo lần lợi nhuận 1 đơn (Sếp đổi lại 26/11)', () => {
+  it('Cắt lỗ: chi ≥ 1 lần lợi nhuận 1 đơn và 0 đơn → vào nhóm; chưa có lợi nhuận 1 đơn → không', () => {
+    const cut = SHIPPED_SETTINGS.groups.find((x) => x.id === 'cut') as GroupDef;
+    expect(cut.conditionSets).toHaveLength(2);
+    expect(classifyVideo(idle('pA', 150_000), C, SHIPPED_SETTINGS, profit)?.action).toBe('cut');
+    expect(classifyVideo(idle('pA', 50_000), C, SHIPPED_SETTINGS, profit)?.action).not.toBe('cut');
+    expect(classifyVideo(idle('pZ', 5_000_000), C, SHIPPED_SETTINGS, profit)?.action).not.toBe('cut');
   });
 });
 

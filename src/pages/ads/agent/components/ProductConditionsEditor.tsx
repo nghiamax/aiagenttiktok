@@ -20,20 +20,12 @@ interface ProductConditionsEditorProps {
   valueTypes: ClauseValue['type'][];
   /** Mở sẵn khối của sản phẩm này (link "Phân nhóm riêng" từ bảng Sản phẩm) */
   focusProductId?: string | null;
-  /**
-   * Cấp video (Sếp chốt 26/11): không có điều kiện chung — chỉ sản phẩm thiết lập ở đây mới được xét.
-   * Thêm sản phẩm = ô điều kiện trống; có nút thêm nhiều sản phẩm cùng điều kiện.
-   */
-  onlyProducts?: boolean;
   /** Lợi nhuận 1 đơn đang dùng của từng sản phẩm (số nhập hoặc tính từ ROI hoà vốn) */
   profits?: Map<string, number>;
   /** Lợi nhuận 1 đơn Sếp nhập (bản nháp) */
   manualProfit?: Record<string, number>;
   onManualProfit?: (productId: string, value: number | null) => void;
 }
-
-/** Ô điều kiện trống (1 cách, chưa có điều kiện) — phải điền mới lưu được */
-const blank = (): ConditionSet[] => [{ clauses: [] }];
 
 const clone = (sets: ConditionSet[]): ConditionSet[] => sets.map((s) => ({ clauses: s.clauses.map((c) => ({ ...c, value: { ...c.value } })) }));
 
@@ -50,7 +42,6 @@ export default function ProductConditionsEditor({
   metrics,
   valueTypes,
   focusProductId,
-  onlyProducts = false,
   profits,
   manualProfit = {},
   onManualProfit,
@@ -59,8 +50,8 @@ export default function ProductConditionsEditor({
   const [bulkOpen, setBulkOpen] = useState(false);
   const focusRef = useRef<HTMLLIElement>(null);
   const byId = new Map(products.map((p) => [p.id, p]));
-  // Điểm bắt đầu: cấp video = trống; còn lại chép điều kiện chung (chung đang tắt → 1 điều kiện mặc định)
-  const seed = () => (onlyProducts ? blank() : general.length ? clone(general) : [{ clauses: [newClause()] }]);
+  // Điểm bắt đầu: chép điều kiện chung (chung đang tắt → 1 điều kiện mặc định)
+  const seed = () => (general.length ? clone(general) : [{ clauses: [newClause()] }]);
   const ids = Object.keys(value);
 
   useEffect(() => {
@@ -95,13 +86,11 @@ export default function ProductConditionsEditor({
   return (
     <div className="mt-4 border-t border-line pt-4">
       <p className="text-sm font-semibold">
-        {onlyProducts ? 'Điều kiện theo sản phẩm' : 'Điều kiện riêng theo sản phẩm'}
+        Điều kiện riêng theo sản phẩm
         {ids.length > 0 && <span className="font-normal text-muted"> ({ids.length})</span>}
       </p>
       <p className="mt-0.5 text-xs text-muted">
-        {onlyProducts
-          ? `${subject} khi khớp điều kiện của sản phẩm video đó gắn vào. Sản phẩm chưa thiết lập thì video không vào nhóm này.`
-          : 'Sản phẩm có điều kiện riêng chỉ xét theo điều kiện riêng, bỏ điều kiện chung — dùng để đẩy mạnh hoặc giữ chặt từng sản phẩm.'}
+        Sản phẩm có điều kiện riêng chỉ xét theo điều kiện riêng, bỏ điều kiện chung — dùng để đẩy mạnh hoặc giữ chặt từng sản phẩm.
       </p>
 
       {ids.length > 0 && (
@@ -145,8 +134,8 @@ export default function ProductConditionsEditor({
                   <button
                     type="button"
                     onClick={() => remove(id)}
-                    aria-label={onlyProducts ? 'Bỏ sản phẩm khỏi nhóm' : 'Bỏ điều kiện riêng (dùng điều kiện chung)'}
-                    title={onlyProducts ? 'Bỏ sản phẩm khỏi nhóm — video của sản phẩm này không vào nhóm' : 'Bỏ điều kiện riêng — sản phẩm dùng lại điều kiện chung'}
+                    aria-label="Bỏ điều kiện riêng (dùng điều kiện chung)"
+                    title="Bỏ điều kiện riêng — sản phẩm dùng lại điều kiện chung"
                     className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-rose-50 hover:text-danger"
                   >
                     <X className="size-4" />
@@ -154,17 +143,15 @@ export default function ProductConditionsEditor({
                 </div>
                 {isOpen && (
                   <div className="space-y-3 border-t border-line p-3">
-                    {!onlyProducts && (
-                      <label className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={off}
-                          onChange={(e) => set(id, e.target.checked ? [] : seed())}
-                          className="size-4 accent-primary"
-                        />
-                        Không xét sản phẩm này vào nhóm
-                      </label>
-                    )}
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={off}
+                        onChange={(e) => set(id, e.target.checked ? [] : seed())}
+                        className="size-4 accent-primary"
+                      />
+                      Không xét sản phẩm này vào nhóm
+                    </label>
                     {!off && (
                       <>
                         {onManualProfit && (
@@ -207,7 +194,7 @@ export default function ProductConditionsEditor({
         <FilterSelect
           label="Sản phẩm"
           icon={Package}
-          allLabel={onlyProducts ? '+ Thêm sản phẩm' : '+ Điều kiện riêng cho sản phẩm'}
+          allLabel="+ Điều kiện riêng cho sản phẩm"
           options={options}
           value={null}
           onChange={add}
@@ -215,7 +202,7 @@ export default function ProductConditionsEditor({
           hideAll
         />
         </div>
-        {onlyProducts && options.length > 1 && !bulkOpen && (
+        {options.length > 1 && !bulkOpen && (
           <button
             type="button"
             onClick={() => setBulkOpen(true)}
@@ -229,6 +216,7 @@ export default function ProductConditionsEditor({
       {bulkOpen && (
         <BulkAddPanel
           products={products.filter((p) => !value[p.id])}
+          initial={general.length ? clone(general) : [{ clauses: [newClause()] }]}
           subject={subject}
           metrics={metrics}
           valueTypes={valueTypes}

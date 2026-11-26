@@ -12,7 +12,6 @@ import { AgentStoreProvider } from './agent/agentStore';
 import { AdsDataProvider } from './data';
 import { AdsSettingsProvider } from './settings';
 import { TrendProvider } from './trend';
-import VideoGroupsMigrator from './VideoGroupsMigrator';
 import { WatchlistProvider } from './watchlist';
 
 /**
@@ -54,7 +53,6 @@ export default function AdsLayout() {
       <AdsDataProvider>
         <AdsSettingsProvider>
           <TrendProvider>
-            <VideoGroupsMigrator />
             <WatchlistProvider>
               <Outlet />
             </WatchlistProvider>

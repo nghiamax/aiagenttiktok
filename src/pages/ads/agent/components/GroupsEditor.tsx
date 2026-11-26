@@ -36,9 +36,8 @@ function validate(g: GroupDef, level: GroupLevel): string[] {
   if (g.name.trim() === '') errors.push('Nhập tên nhóm');
   if (g.kind === 'custom') {
     const ownCount = Object.keys(g.productConditions ?? {}).length;
-    // Cấp video / sản phẩm: tắt điều kiện chung được nếu có ≥ 1 sản phẩm riêng (Sếp chốt 25/11)
-    // Cấp video không có điều kiện chung (Sếp chốt 26/11) — nhóm chưa thiết lập sản phẩm nào vẫn lưu được
-    if (level !== 'video' && g.conditionSets.length === 0 && (level === 'campaign' || ownCount === 0))
+    // Cấp video / sản phẩm: tắt điều kiện chung được nếu có ≥ 1 sản phẩm riêng (Sếp chốt 25/11, cấp video lại có điều kiện chung từ 26/11)
+    if (g.conditionSets.length === 0 && (level === 'campaign' || ownCount === 0))
       errors.push(level === 'campaign' ? 'Cần ít nhất 1 cách nhận diện' : 'Bật điều kiện chung hoặc thêm ít nhất 1 sản phẩm riêng');
     if (g.conditionSets.some((s) => s.clauses.length === 0)) errors.push('Mỗi cách cần ít nhất 1 điều kiện');
     // Điều kiện riêng: [] = không xét sản phẩm (hợp lệ); có cách thì mỗi cách phải có điều kiện
@@ -177,7 +176,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
       kind: 'custom',
       builtin: false,
       showInInbox: true,
-      conditionSets: level === 'video' ? [] : [{ clauses: [newClause()] }],
+      conditionSets: [{ clauses: [newClause()] }],
     };
     const at = fallbackIndex === -1 ? draft.length : fallbackIndex;
     setDraft([...draft.slice(0, at), group, ...draft.slice(at)]);
@@ -265,8 +264,6 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
           </span>
         </p>
         <div className="flex shrink-0 gap-2">
-          {/* Cấp video bỏ Khôi phục mặc định (Sếp chốt 26/11) — mặc định không có điều kiện */}
-          {level !== 'video' && (
           <button
             type="button"
             onClick={restoreDefaults}
@@ -275,7 +272,6 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             <RotateCcw className="size-4" />
             Khôi phục mặc định
           </button>
-          )}
           <button
             type="button"
             onClick={addGroup}

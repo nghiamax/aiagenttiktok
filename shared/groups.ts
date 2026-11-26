@@ -79,31 +79,6 @@ export function setsFor(group: GroupDef, ctx: Pick<EvalContext, 'productId'>): C
   return own ?? group.conditionSets;
 }
 
-/**
- * Cấp video bỏ điều kiện chung (Sếp chốt 26/11): mỗi nhóm điều kiện chỉ xét sản phẩm đã thiết lập.
- * Bản lưu cũ còn điều kiện chung → chép thành điều kiện riêng cho mọi sản phẩm đang có (sản phẩm đã có bộ riêng giữ nguyên),
- * bỏ bộ "[] = không xét" (giờ không thiết lập = không xét). Không có gì để chuyển → trả null.
- */
-export function migrateVideoGeneral(groups: GroupDef[], productIds: string[]): GroupDef[] | null {
-  let changed = false;
-  const next = groups.map((g) => {
-    if (g.kind !== 'custom') return g;
-    const hasEmpty = Object.values(g.productConditions ?? {}).some((sets) => sets.length === 0);
-    if (g.conditionSets.length === 0 && !hasEmpty) return g;
-    changed = true;
-    const own: Record<string, ConditionSet[]> = {};
-    for (const [id, sets] of Object.entries(g.productConditions ?? {})) if (sets.length) own[id] = sets;
-    if (g.conditionSets.length) {
-      for (const id of productIds) {
-        if (id in (g.productConditions ?? {})) continue;
-        own[id] = g.conditionSets.map((s) => ({ clauses: s.clauses.map((c) => ({ ...c, value: { ...c.value } })) }));
-      }
-    }
-    return { ...g, conditionSets: [], productConditions: Object.keys(own).length ? own : undefined };
-  });
-  return changed ? next : null;
-}
-
 /** Đối tượng đang dùng điều kiện riêng của nhóm */
 export const usesProductConditions = (group: GroupDef, ctx: Pick<EvalContext, 'productId'>) =>
   !!ctx.productId && !!group.productConditions?.[ctx.productId];
@@ -172,11 +147,8 @@ export function groupDescription(group: GroupDef, level: GroupLevel = 'video'): 
   }
   if (group.kind === 'fallback') return FALLBACK_TEXT[level];
   const own = productConditionCount(group);
-  // Cấp video không còn điều kiện chung (Sếp chốt 26/11) — chỉ xét sản phẩm đã thiết lập
-  if (group.conditionSets.length === 0) {
-    if (level === 'video') return own ? `Thiết lập cho ${own} sản phẩm` : 'Chưa thiết lập sản phẩm nào';
-    if (own) return `Chỉ ${own} sản phẩm có điều kiện riêng`;
-  }
+  // Điều kiện chung đang tắt → nhóm chỉ xét sản phẩm có điều kiện riêng
+  if (group.conditionSets.length === 0) return own ? `Chỉ ${own} sản phẩm có điều kiện riêng` : 'Chưa có điều kiện';
   return conditionSetsText(group.conditionSets) + (own ? ` · riêng ${own} sản phẩm` : '');
 }
 

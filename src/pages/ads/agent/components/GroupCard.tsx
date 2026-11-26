@@ -97,8 +97,6 @@ export default function GroupCard({
   const sets = group.conditionSets;
   // Điều kiện riêng theo sản phẩm: nhóm có điều kiện, cấp video / sản phẩm (Sếp chốt 25/11)
   const perProduct = editable && level !== 'campaign';
-  // Cấp video không có điều kiện chung (Sếp chốt 26/11) — chỉ thiết lập theo từng sản phẩm
-  const onlyProducts = editable && level === 'video';
   // Điều kiện chung bật / tắt (Sếp chốt 25/11): tắt = conditionSets rỗng → nhóm chỉ xét sản phẩm có điều kiện riêng
   const generalOn = sets.length > 0;
   const lastGeneral = useRef<ConditionSet[] | null>(null);
@@ -237,7 +235,7 @@ export default function GroupCard({
             {groupDescription(group, level)}
             {group.kind === 'platform' && (level === 'product' ? ' (hệ thống tự đánh giá, không sửa được)' : ' (quy tắc của sàn, không sửa được)')}
           </p>
-        ) : onlyProducts ? null : (
+        ) : (
           <>
             {perProduct && (
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -278,7 +276,6 @@ export default function GroupCard({
             value={group.productConditions ?? {}}
             onChange={(next) => onChange({ productConditions: Object.keys(next).length ? next : undefined })}
             general={sets}
-            onlyProducts={onlyProducts}
             profits={profits}
             manualProfit={manualProfit}
             onManualProfit={onManualProfit}
@@ -304,7 +301,7 @@ export default function GroupCard({
           <span className="text-danger">
             Xoá nhóm “{group.name}”?
             {usedByRules > 0 && ` ${usedByRules} quy tắc đang dùng nhóm này sẽ không chạy.`}
-            {group.builtin && level !== 'video' && ' Muốn lấy lại: bấm Khôi phục mặc định.'}
+            {group.builtin && ' Muốn lấy lại: bấm Khôi phục mặc định.'}
           </span>
           <div className="flex gap-2">
             <button

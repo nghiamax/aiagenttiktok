@@ -11,6 +11,8 @@ interface BulkAddPanelProps {
   subject: string;
   metrics: Metric[];
   valueTypes: ClauseValue['type'][];
+  /** Điều kiện bắt đầu (bản chép điều kiện chung) */
+  initial: ConditionSet[];
   onApply: (ids: string[], sets: ConditionSet[]) => void;
   onCancel: () => void;
 }
@@ -18,10 +20,10 @@ interface BulkAddPanelProps {
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase();
 
 /** Thêm nhiều sản phẩm vào nhóm cùng 1 bộ điều kiện (Sếp chốt 26/11) — sau đó sửa riêng từng sản phẩm được */
-export default function BulkAddPanel({ products, subject, metrics, valueTypes, onApply, onCancel }: BulkAddPanelProps) {
+export default function BulkAddPanel({ products, subject, metrics, valueTypes, initial, onApply, onCancel }: BulkAddPanelProps) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [q, setQ] = useState('');
-  const [sets, setSets] = useState<ConditionSet[]>([{ clauses: [] }]);
+  const [sets, setSets] = useState<ConditionSet[]>(initial);
   const shown = q.trim() ? products.filter((p) => fold(`${p.name} ${p.id}`).includes(fold(q.trim()))) : products;
   const allShown = shown.length > 0 && shown.every((p) => picked.has(p.id));
   const filled = sets.length > 0 && sets.every((s) => s.clauses.length > 0);
@@ -45,7 +47,7 @@ export default function BulkAddPanel({ products, subject, metrics, valueTypes, o
 
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-primary/40 bg-primary-soft/40 p-3">
-      <p className="text-sm font-semibold">Thêm nhiều sản phẩm cùng điều kiện</p>
+      <p className="text-sm font-semibold">Đặt điều kiện riêng cho nhiều sản phẩm cùng lúc</p>
 
       <div className="rounded-xl border border-line bg-white">
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">

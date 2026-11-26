@@ -1,7 +1,7 @@
 /** Điều kiện riêng theo sản phẩm trong nhóm (Sếp chốt 25/11): SP có điều kiện riêng chỉ xét bộ riêng, bỏ điều kiện chung */
 import { describe, expect, it } from 'vitest';
 import { classifyProduct, classifyVideo } from '../shared/classify';
-import { groupDescription, migrateVideoGeneral, setsFor, type ConditionSet, type GroupDef } from '../shared/groups';
+import { groupDescription, setsFor, type ConditionSet, type GroupDef } from '../shared/groups';
 import type { AdsSettings } from '../shared/settings';
 import { trendOf } from '../shared/trend';
 import { campaign, product, settingsWith, video } from './fixtures';
@@ -72,31 +72,6 @@ describe('Điều kiện riêng theo sản phẩm', () => {
     const s: AdsSettings = { ...base, groups: base.groups.map((g) => (g.id === 'cut' ? { ...g, conditionSets: [] } : g)) };
     expect(classifyVideo(loss('pA', 320_000), C, s)?.action).toBe('cut');
     expect(classifyVideo(loss('pC', 5_000_000), C, s)?.action).not.toBe('cut');
-    expect(groupDescription(s.groups.find((g) => g.id === 'cut')!)).toBe('Thiết lập cho 1 sản phẩm');
-  });
-});
-
-describe('Cấp video bỏ điều kiện chung (Sếp chốt 26/11)', () => {
-  it('bản cũ: điều kiện chung → chép cho mọi sản phẩm đang có; SP đã có bộ riêng giữ; SP "không xét" bỏ khỏi nhóm', () => {
-    const next = migrateVideoGeneral(S.groups, ['pA', 'pB', 'pC', 'pD'])!;
-    const cut = next.find((g) => g.id === 'cut')!;
-    expect(cut.conditionSets).toEqual([]);
-    expect(Object.keys(cut.productConditions!).sort()).toEqual(['pA', 'pC', 'pD']);
-    expect(cut.productConditions!.pA).toEqual([costAtLeast(300_000)]);
-    expect(cut.productConditions!.pC).toEqual(S.groups.find((g) => g.id === 'cut')!.conditionSets);
-    const s2 = { ...S, groups: next };
-    // Kết quả xếp nhóm như trước khi chuyển
-    expect(classifyVideo(loss('pC', 150_000), C, s2)?.action).toBe('cut');
-    expect(classifyVideo(loss('pB', 5_000_000), C, s2)?.action).not.toBe('cut');
-    // Sản phẩm mới sau khi chuyển: chưa thiết lập → không vào nhóm
-    expect(classifyVideo(loss('pE', 5_000_000), C, s2)?.action).not.toBe('cut');
-    // Chạy lại: không còn gì để chuyển
-    expect(migrateVideoGeneral(next, ['pA', 'pE'])).toBeNull();
-  });
-
-  it('nhóm chưa thiết lập sản phẩm nào: mô tả rõ, không video nào vào', () => {
-    const empty: GroupDef = { id: 'x', name: 'x', tone: 'red', icon: 'scissors', kind: 'custom', builtin: false, showInInbox: true, conditionSets: [] };
-    expect(groupDescription(empty, 'video')).toBe('Chưa thiết lập sản phẩm nào');
-    expect(migrateVideoGeneral([empty], ['pA'])).toBeNull();
+    expect(groupDescription(s.groups.find((g) => g.id === 'cut')!)).toBe('Chỉ 1 sản phẩm có điều kiện riêng');
   });
 });

@@ -7,6 +7,7 @@ import type { EvalContext } from './groups.js';
 import { shortVnd } from './format.js';
 import { effectiveStatus } from './videoStatus.js';
 import { REENABLE_GROUP_ID, reEnableCandidates, reEnableReason } from './reEnable.js';
+import { profitPerOrderMap, type ProfitMap } from './productProfit.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
 export const ruleLevel = (rule: Pick<AgentRule, 'level'>): RuleLevel => rule.level ?? 'video';
@@ -113,7 +114,9 @@ const inScope = (rule: AgentRule, campaignId: string, productId?: string) =>
   (!productId || !rule.productIds || rule.productIds.includes(productId));
 
 /** Đối tượng thuộc nhóm của quy tắc theo snapshot (có tính phạm vi). Cấp video gộp theo (chiến dịch, video). */
-export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot: AdsSnapshot): RuleTarget[] {
+/** profit = lợi nhuận 1 đơn theo sản phẩm (điều kiện "lần lợi nhuận 1 đơn"); thiếu → tính từ chính snapshot */
+export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot: AdsSnapshot, profit?: ProfitMap): RuleTarget[] {
+  const pm = profit ?? profitPerOrderMap({ d7: snapshot, d14: null, d30: null }, settings);
   if (!rule.trigger) return [];
   const level = ruleLevel(rule);
   const campaignById = new Map(snapshot.campaigns.map((c) => [c.id, c]));
@@ -144,7 +147,7 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
   if (level === 'product') {
     return snapshot.products.flatMap((p) => {
       if (!inScope(rule, p.campaignId, p.id)) return [];
-      const cls = classifyProduct(p, campaignById.get(p.campaignId), settings);
+      const cls = classifyProduct(p, campaignById.get(p.campaignId), settings, pm);
       if (cls?.action !== rule.trigger) return [];
       return [
         {
@@ -165,7 +168,7 @@ export function findRuleTargets(rule: AgentRule, settings: AdsSettings, snapshot
 
   return collectVideoTargets(snapshot, settings, (v) => {
     if (!inScope(rule, v.campaignId, v.productId)) return null;
-    const cls = classifyVideo(v, campaignById.get(v.campaignId), settings);
+    const cls = classifyVideo(v, campaignById.get(v.campaignId), settings, pm);
     return cls?.action === rule.trigger ? cls.reason : null;
   });
 }
@@ -269,6 +272,7 @@ export function confirmRuleTargets(
   settings: AdsSettings,
   targets: RuleTarget[],
   snaps: ConfirmSnaps,
+  profit?: ProfitMap,
 ): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[] } {
   const level = ruleLevel(rule);
   const withWindows = (t: RuleTarget, long?: boolean): ConfirmedTarget => ({
@@ -281,8 +285,8 @@ export function confirmRuleTargets(
   });
   const exempt = !snaps.d14 || !rule.trigger || findGroup(settings, rule.trigger, level)?.kind === 'platform';
   if (exempt) return { kept: targets.map((t) => withWindows(t)), unconfirmed: [] };
-  const in14 = new Set(findRuleTargets(rule, settings, snaps.d14!).map((t) => targetKey(level, t.target)));
-  const in30 = snaps.d30 ? new Set(findRuleTargets(rule, settings, snaps.d30).map((t) => targetKey(level, t.target))) : null;
+  const in14 = new Set(findRuleTargets(rule, settings, snaps.d14!, profit).map((t) => targetKey(level, t.target)));
+  const in30 = snaps.d30 ? new Set(findRuleTargets(rule, settings, snaps.d30, profit).map((t) => targetKey(level, t.target))) : null;
   const kept: ConfirmedTarget[] = [];
   const unconfirmed: RuleTarget[] = [];
   for (const t of targets) {
@@ -326,7 +330,7 @@ export const UNCONFIRMED_REASON = 'Mới có dấu hiệu — 14 ngày chưa cù
  * 7 ngày đã không còn khớp → đang hồi phục (chỉ báo, không đề xuất). */
 
 /** Bối cảnh 7 ngày gộp của đối tượng (video = mọi dòng sản phẩm trong chiến dịch) */
-function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: AdsSettings): EvalContext | null {
+function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: AdsSettings, profit?: ProfitMap): EvalContext | null {
   const m = metricsOf(t, d7);
   if (!m) return null;
   const campaign = d7.campaigns.find((c) => c.id === t.campaignId);
@@ -341,7 +345,7 @@ function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: A
     breakEven: level === 'campaign' ? null : breakEvenOf(settings, t.productId),
     target: campaign?.targetRoi ?? null,
     budgetUse: level === 'campaign' && campaign?.budget && campaign.cost != null ? (cost / snapshotDays(d7) / campaign.budget) * 100 : null,
-    ...(level !== 'campaign' && { productId: t.productId }),
+    ...(level !== 'campaign' && { productId: t.productId, profitPerOrder: profit?.get(t.productId) ?? null }),
   };
 }
 
@@ -361,20 +365,22 @@ export function matchRuleTrend(
   if (ruleLevel(rule) === 'product' && rule.trigger === REENABLE_GROUP_ID) {
     return { kept: reEnableRuleTargets(rule, settings, d7, snaps), unconfirmed: [], recovering: [] };
   }
-  const primary = findRuleTargets(rule, settings, d7);
-  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, primary, snaps);
+  // Lợi nhuận 1 đơn: 1 mức cho cả 3 khung (giống buildTrendIndex)
+  const profit = profitPerOrderMap({ d7, d14: snaps.d14, d30: snaps.d30 }, settings);
+  const primary = findRuleTargets(rule, settings, d7, profit);
+  const { kept, unconfirmed } = confirmRuleTargets(rule, settings, primary, snaps, profit);
   const recovering: RuleTarget[] = [];
   const level = ruleLevel(rule);
   const G = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
   if (!snaps.d14 || !snaps.d30 || !isSpendGated(G)) return { kept, unconfirmed, recovering };
 
   const in7 = new Set(primary.map((t) => targetKey(level, t.target)));
-  const in30 = new Set(findRuleTargets(rule, settings, snaps.d30).map((t) => targetKey(level, t.target)));
+  const in30 = new Set(findRuleTargets(rule, settings, snaps.d30, profit).map((t) => targetKey(level, t.target)));
   const campaign7 = new Map(d7.campaigns.map((c) => [c.id, c]));
-  for (const t14 of findRuleTargets(rule, settings, snaps.d14)) {
+  for (const t14 of findRuleTargets(rule, settings, snaps.d14, profit)) {
     const k = targetKey(level, t14.target);
     if (in7.has(k) || !in30.has(k)) continue;
-    const ctx = context7(level, t14.target, d7, settings);
+    const ctx = context7(level, t14.target, d7, settings, profit);
     if (!ctx || ctx.cost <= 0) continue; // 7 ngày không còn chi → không cần làm gì
     if (!isSpendGated(G, ctx)) continue; // điều kiện riêng của sản phẩm này không có ngưỡng chi
     const main = t14.target.videoId

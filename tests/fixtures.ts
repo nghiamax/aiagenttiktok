@@ -4,7 +4,26 @@ import type { AgentGuardrails, AgentRule } from '../shared/agentTypes';
 import { normalizeSettings, type AdsSettings } from '../shared/settings';
 import defaultsJson from '../src/data/ads-settings.json';
 
-export const DEFAULT_SETTINGS: AdsSettings = normalizeSettings(defaultsJson as AdsSettings, defaultsJson as AdsSettings);
+/** Bộ nhóm mặc định đúng như shop mới (Cắt lỗ theo "lần lợi nhuận 1 đơn" — Sếp chốt 26/11) */
+export const SHIPPED_SETTINGS: AdsSettings = normalizeSettings(defaultsJson as AdsSettings, defaultsJson as AdsSettings);
+
+/**
+ * Bộ nhóm cho phần lớn test: Cắt lỗ giữ ngưỡng cố định 100k (bản trước 26/11) để test hành vi khác (gộp video, xác nhận,
+ * lỗ âm thầm, engine…) không phụ thuộc ROI hoà vốn / giá trị đơn. Ngưỡng "lần lợi nhuận 1 đơn" test riêng ở profitThreshold.test.ts.
+ */
+export const DEFAULT_SETTINGS: AdsSettings = {
+  ...SHIPPED_SETTINGS,
+  groups: SHIPPED_SETTINGS.groups.map((g) =>
+    g.id === 'cut'
+      ? {
+          ...g,
+          conditionSets: g.conditionSets.map((cs) => ({
+            clauses: cs.clauses.map((c) => (c.value.type === 'profit' ? { ...c, value: { type: 'number' as const, n: 100_000 } } : c)),
+          })),
+        }
+      : g,
+  ),
+};
 
 export function settingsWith(breakEvenRoi: Record<string, number> = {}): AdsSettings {
   return { ...DEFAULT_SETTINGS, breakEvenRoi };

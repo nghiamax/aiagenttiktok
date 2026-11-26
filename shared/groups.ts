@@ -31,6 +31,8 @@ export type ClauseValue =
   | { type: 'number'; n: number }
   /** ROI hoà vốn của sản phẩm × k */
   | { type: 'breakEven'; k: number }
+  /** Lợi nhuận 1 đơn của sản phẩm × k (= giá trị đơn TB ÷ ROI hoà vốn) — chỉ cho Chi phí / CPA (Sếp chốt 26/11) */
+  | { type: 'profit'; k: number }
   /** ROI mục tiêu của chiến dịch × k */
   | { type: 'target'; k: number };
 
@@ -119,6 +121,7 @@ function metricValueText(metric: Metric, n: number): string {
 
 function refText(value: ClauseValue, metric: Metric): string {
   if (value.type === 'number') return metricValueText(metric, value.n);
+  if (value.type === 'profit') return value.k === 1 ? 'lợi nhuận 1 đơn' : `${formatNumber(value.k, 2)} lần lợi nhuận 1 đơn`;
   const base = value.type === 'breakEven' ? 'ROI hoà vốn' : 'ROI mục tiêu';
   return value.k === 1 ? base : `${formatNumber(value.k, 2)} lần ${base}`;
 }
@@ -172,6 +175,8 @@ export interface EvalContext {
   budgetUse: number | null;
   /** ID sản phẩm (cấp video / sản phẩm) — để lấy điều kiện riêng theo sản phẩm */
   productId?: string;
+  /** Lợi nhuận 1 đơn của sản phẩm (giá trị đơn TB 30 ngày ÷ ROI hoà vốn); null = thiếu hoà vốn / chưa có đơn */
+  profitPerOrder?: number | null;
 }
 
 function metricOf(metric: Metric, ctx: EvalContext): number | null {
@@ -180,6 +185,7 @@ function metricOf(metric: Metric, ctx: EvalContext): number | null {
 
 function resolveValue(value: ClauseValue, ctx: EvalContext): number | null {
   if (value.type === 'number') return value.n;
+  if (value.type === 'profit') return ctx.profitPerOrder == null ? null : ctx.profitPerOrder * value.k;
   const base = value.type === 'breakEven' ? ctx.breakEven : ctx.target;
   return base == null ? null : base * value.k;
 }
@@ -225,7 +231,9 @@ export function reasonFor(set: ConditionSet, ctx: EvalContext): string {
     const refLabel =
       c.value.type === 'number'
         ? metricValueText(c.metric, c.value.n)
-        : `${c.value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} ${ref == null ? '--' : formatNumber(ref, 2)}`;
+        : c.value.type === 'profit'
+          ? `${c.value.k === 1 ? '' : `${formatNumber(c.value.k, 2)} × `}lợi nhuận/đơn ${ref == null ? '--' : metricValueText(c.metric, ref / c.value.k)}`
+          : `${c.value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} ${ref == null ? '--' : formatNumber(ref, 2)}`;
     const part = c.op === 'eq' && actual != null ? '' : `${OP_LABEL[c.op]} ${refLabel}`;
     byMetric.set(c.metric, [...(byMetric.get(c.metric) ?? []), part]);
   }
@@ -246,7 +254,7 @@ export function normalizeGroups(groups: GroupDef[]): GroupDef[] {
 
 /** Nhóm có điều kiện so với ROI hoà vốn (thiếu hoà vốn thì nhóm luôn trống) */
 export function groupUsesBreakEven(group: GroupDef): boolean {
-  return [...group.conditionSets, ...Object.values(group.productConditions ?? {}).flat()].some((s) => s.clauses.some((c) => c.value.type === 'breakEven'));
+  return [...group.conditionSets, ...Object.values(group.productConditions ?? {}).flat()].some((s) => s.clauses.some((c) => c.value.type === 'breakEven' || c.value.type === 'profit'));
 }
 
 /** Nhóm gợi ý khi tạo quy tắc: nhóm tự định nghĩa đầu tiên, không có thì nhóm đầu */

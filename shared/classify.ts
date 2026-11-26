@@ -4,6 +4,7 @@ import { matchesPlatform, matchSet, reasonFor, setsFor, usesProductConditions, t
 import { breakEvenOf, type AdsSettings } from './settings.js';
 import type { AdsProduct, AdsVideo, Campaign } from './adsSnapshot.js';
 import { effectiveStatus } from './videoStatus.js';
+import type { ProfitMap } from './productProfit.js';
 
 /** ID nhóm */
 export type VideoAction = string;
@@ -39,7 +40,8 @@ export function contextForCampaign(c: Campaign, days: number): EvalContext {
 }
 
 /** Bối cảnh so điều kiện cho một sản phẩm trong chiến dịch */
-export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined, settings: AdsSettings): EvalContext {
+/** profit = lợi nhuận 1 đơn theo sản phẩm (productProfit.ts) — thiếu → điều kiện "lần lợi nhuận 1 đơn" không khớp */
+export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined, settings: AdsSettings, profit?: ProfitMap): EvalContext {
   const cost = p.cost ?? 0;
   const orders = p.orders ?? 0;
   return {
@@ -52,11 +54,12 @@ export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined,
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
     productId: p.id,
+    profitPerOrder: profit?.get(p.id) ?? null,
   };
 }
 
 /** Bối cảnh so điều kiện cho một dòng video (chiến dịch + sản phẩm) */
-export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined, settings: AdsSettings): EvalContext {
+export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined, settings: AdsSettings, profit?: ProfitMap): EvalContext {
   const cost = video.cost ?? 0;
   const orders = video.orders ?? 0;
   return {
@@ -69,6 +72,7 @@ export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined,
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
     productId: video.productId,
+    profitPerOrder: profit?.get(video.productId) ?? null,
   };
 }
 
@@ -108,12 +112,13 @@ export function classifyVideo(
   video: AdsVideo,
   campaign: Campaign | undefined,
   settings: AdsSettings,
+  profit?: ProfitMap,
 ): VideoClassification | null {
   if (video.contentType !== 'video') return null;
   // Video không khả dụng (TikTok ngừng chạy): chưa có cách xử lý → không xếp nhóm, chỉ lọc riêng ở bảng Video
   if (effectiveStatus(video) === 'unavailable') return null;
 
-  const ctx = contextForVideo(video, campaign, settings);
+  const ctx = contextForVideo(video, campaign, settings, profit);
   const { cost, orders, revenue } = ctx;
   if (!hasActivity(ctx)) return null;
 
@@ -148,8 +153,9 @@ export function classifyProduct(
   product: AdsProduct,
   campaign: Campaign | undefined,
   settings: AdsSettings,
+  profit?: ProfitMap,
 ): VideoClassification | null {
-  const ctx = contextForProduct(product, campaign, settings);
+  const ctx = contextForProduct(product, campaign, settings, profit);
   if (!hasActivity(ctx)) return null;
   return classifyByGroups(settings.productGroups, ctx, () =>
     ctx.breakEven == null

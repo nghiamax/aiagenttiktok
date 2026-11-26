@@ -8,6 +8,7 @@ import type { AdsSnapshot, AdsVideo } from './adsSnapshot.js';
 import { classifyCampaign, classifyProduct, classifyVideo, contextForCampaign, contextForProduct, contextForVideo } from './classify.js';
 import { matchSet, setsFor, type Clause, type EvalContext, type GroupDef } from './groups.js';
 import { findGroup, type AdsSettings } from './settings.js';
+import { profitPerOrderMap, type ProfitMap } from './productProfit.js';
 import type { RuleLevel } from './agentTypes.js';
 
 export const TREND_DAYS = [7, 14, 30] as const;
@@ -131,7 +132,9 @@ export function trendOf(
 /** Bảng xu hướng cho mọi đối tượng của một cấp (khoá theo videoKey / productKey / id chiến dịch) */
 export function buildTrendIndex(level: RuleLevel, snaps: TrendSnaps, settings: AdsSettings, canConfirm = true): Map<string, TrendInfo> {
   const list = [snaps.d7, snaps.d14, snaps.d30];
-  const perSnap = list.map((s) => (s ? classifyAll(level, s, settings) : null));
+  // Lợi nhuận 1 đơn: 1 mức cho cả 3 khung (30 → 14 → 7 ngày) để không vênh khi xác nhận nhóm
+  const profit = profitPerOrderMap(snaps, settings);
+  const perSnap = list.map((s) => (s ? classifyAll(level, s, settings, profit) : null));
   const out = new Map<string, TrendInfo>();
   // Mọi đối tượng có ở 7, 14 hoặc 30 ngày (Sếp chốt 25/11): đối tượng không có số 7 ngày (vd sản phẩm đã loại trừ) có g7 = null
   // → không thuộc nhóm, không thành dấu hiệu, không đổi số đếm — chỉ thêm số 14 / 30 ngày để đánh giá bật lại
@@ -163,7 +166,7 @@ const cell = (cls: { action: string; reason: string } | null, st: WindowStat, ct
   ctx,
 });
 
-function classifyAll(level: RuleLevel, s: AdsSnapshot, settings: AdsSettings): Map<string, Classified> {
+function classifyAll(level: RuleLevel, s: AdsSnapshot, settings: AdsSettings, profit: ProfitMap): Map<string, Classified> {
   const campaignById = new Map(s.campaigns.map((c) => [c.id, c]));
   const m = new Map<string, Classified>();
   if (level === 'campaign') {
@@ -172,13 +175,13 @@ function classifyAll(level: RuleLevel, s: AdsSnapshot, settings: AdsSettings): M
   } else if (level === 'product') {
     for (const p of s.products) {
       const camp = campaignById.get(p.campaignId);
-      m.set(productKey(p.campaignId, p.id), cell(classifyProduct(p, camp, settings), stat(p), contextForProduct(p, camp, settings)));
+      m.set(productKey(p.campaignId, p.id), cell(classifyProduct(p, camp, settings, profit), stat(p), contextForProduct(p, camp, settings, profit)));
     }
   } else {
     for (const v of s.videos) {
       if (v.contentType !== 'video') continue;
       const camp = campaignById.get(v.campaignId);
-      m.set(videoKey(v), cell(classifyVideo(v, camp, settings), stat(v), contextForVideo(v, camp, settings)));
+      m.set(videoKey(v), cell(classifyVideo(v, camp, settings, profit), stat(v), contextForVideo(v, camp, settings, profit)));
     }
   }
   return m;

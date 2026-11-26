@@ -111,8 +111,8 @@ export const METRICS_BY_LEVEL: Record<RuleLevel, Metric[]> = {
 
 /** Mốc so sánh ROI dùng được (chiến dịch có nhiều sản phẩm nên không so với hoà vốn) */
 export const VALUE_TYPES_BY_LEVEL: Record<RuleLevel, ClauseValue['type'][]> = {
-  video: ['number', 'breakEven', 'target'],
-  product: ['number', 'breakEven', 'target'],
+  video: ['number', 'breakEven', 'target', 'profit'],
+  product: ['number', 'breakEven', 'target', 'profit'],
   campaign: ['number', 'target'],
 };
 

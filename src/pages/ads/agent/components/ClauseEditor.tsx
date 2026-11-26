@@ -73,10 +73,13 @@ export default function ClauseEditor({
 }: ClauseEditorProps) {
   const { metric, op, value } = clause;
   const isRoi = metric === 'roi';
+  // Chi phí / CPA so được với "k lần lợi nhuận 1 đơn" của sản phẩm (Sếp chốt 26/11)
+  const profitable = (m: Metric) => (m === 'cost' || m === 'cpa') && valueTypes.includes('profit');
 
   function changeMetric(m: Metric) {
-    // Chỉ ROI mới so được với hoà vốn / mục tiêu
-    const nextValue: ClauseValue = m !== 'roi' && value.type !== 'number' ? { type: 'number', n: 0 } : value;
+    // ROI so được với hoà vốn / mục tiêu; Chi phí / CPA so được với lợi nhuận 1 đơn; còn lại chỉ số cố định
+    const keep = value.type === 'number' || (m === 'roi' ? value.type !== 'profit' : value.type === 'profit' && profitable(m));
+    const nextValue: ClauseValue = keep ? value : { type: 'number', n: 0 };
     onChange({ ...clause, metric: m, value: nextValue });
   }
 
@@ -113,7 +116,7 @@ export default function ClauseEditor({
         />
       ) : (
         <NumberInput
-          label={`Số lần ${value.type === 'breakEven' ? 'ROI hoà vốn' : 'ROI mục tiêu'}`}
+          label={`Số lần ${value.type === 'breakEven' ? 'ROI hoà vốn' : value.type === 'profit' ? 'lợi nhuận 1 đơn' : 'ROI mục tiêu'}`}
           value={value.k}
           integer={false}
           onCommit={(k) => onChange({ ...clause, value: { type: value.type, k } })}
@@ -130,15 +133,32 @@ export default function ClauseEditor({
           {valueTypes.includes('number') && <option value="number">(số cố định)</option>}
           {valueTypes.includes('breakEven') && <option value="breakEven">lần ROI hoà vốn</option>}
           {valueTypes.includes('target') && <option value="target">lần ROI mục tiêu</option>}
+          {value.type === 'profit' && <option value="profit">lần lợi nhuận 1 đơn</option>}
+        </select>
+      ) : profitable(metric) ? (
+        <select
+          aria-label="Đơn vị"
+          value={value.type}
+          onChange={(e) => changeValueType(e.target.value as ValueType)}
+          title="Lợi nhuận 1 đơn = giá trị đơn trung bình 30 ngày ÷ ROI hoà vốn của sản phẩm (tự tính, mỗi sản phẩm một mức)"
+          className={SELECT}
+        >
+          <option value="number">đ</option>
+          <option value="profit">lần lợi nhuận 1 đơn</option>
         </select>
       ) : (
         <span className="text-sm text-muted">{isMoneyMetric(metric) ? 'đ' : metric === 'orders' ? 'đơn' : metric === 'budgetUse' ? '%' : ''}</span>
       )}
 
-      {value.type !== 'number' && value.k !== 1 && (
-        <span className="text-xs text-muted">
-          (vd {value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} 5 → {vi.format(5 * value.k)})
-        </span>
+      {value.type === 'profit' ? (
+        <span className="text-xs text-muted">(vd lợi nhuận 1 đơn 100.000đ → {vi.format(100_000 * value.k)}đ)</span>
+      ) : (
+        value.type !== 'number' &&
+        value.k !== 1 && (
+          <span className="text-xs text-muted">
+            (vd {value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} 5 → {vi.format(5 * value.k)})
+          </span>
+        )
       )}
 
       {canRemove && (

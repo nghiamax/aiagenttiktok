@@ -253,7 +253,7 @@ export default function ProductTable({
                         )}
                       </div>
                     ) : (
-                      <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
+                      <TrendGroupCell level="product" trend={trend} empty={NO_SPEND_CELL} current={{ group: classifyProduct(p, campaignById.get(p.campaignId), settings, trends.profit)?.action ?? null, cost: p.cost, orders: p.orders, roi: p.roi }} />
                     )}
                   </td>
                   <td className={TD}>

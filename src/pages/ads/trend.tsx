@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { buildTrendIndex, productKey, videoKey, type TrendInfo, type TrendSnaps } from '../../../shared/trend';
 import type { ConfirmSnaps } from '../../../shared/agentMatch';
+import { profitPerOrderMap, type ProfitMap } from '../../../shared/productProfit';
 import { useAgentStore } from './agent/agentStore';
 import { formatDm } from '../../lib/dates';
 import { lastDays, useAdsData } from './data';
@@ -28,6 +29,8 @@ interface TrendValue {
    * khác cả 3 → `ring: null`, ô Nhóm thêm dòng "Khoảng chọn: …" xếp nhóm theo số đang hiện.
    */
   viewing: ViewingRange;
+  /** Lợi nhuận 1 đơn theo sản phẩm (30 → 14 → 7 ngày) — điều kiện "lần lợi nhuận 1 đơn" */
+  profit: ProfitMap;
 }
 
 export interface ViewingRange {
@@ -61,6 +64,7 @@ export function TrendProvider({ children }: { children: ReactNode }) {
       campaign: (c) => idx.campaign.get(c.id),
       ready: !!trendSnaps.d14,
       viewing: viewingOf(from, to),
+      profit: profitPerOrderMap(trendSnaps, settings),
     };
   }, [trendSnaps, settings, confirmOn, from, to]);
 

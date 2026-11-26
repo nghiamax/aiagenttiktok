@@ -237,7 +237,7 @@ export default function VideoTable({
                     ) : (
                       <TrendGroupCell
                         level="video"
-                        current={{ group: classifyVideo(v, campaignById.get(v.campaignId), settings)?.action ?? null, cost: v.cost, orders: v.orders, roi: v.roi }}
+                        current={{ group: classifyVideo(v, campaignById.get(v.campaignId), settings, trends.profit)?.action ?? null, cost: v.cost, orders: v.orders, roi: v.roi }}
                         trend={trend}
                         extra={
                           cut &&

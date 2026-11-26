@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import Modal from '../../../components/ui/Modal';
 import { formatDateTime, formatNumber, formatVnd } from '../../../lib/format';
-import { judgeStep, TUNE_CODES, tuneActionText, tuneHistory, tuneSettingsOf } from '../../../../shared/campaignTune';
+import { judgeStep, TUNE_CODES, TUNE_MODES, tuneActionText, tuneHistory, tuneSettingsOf } from '../../../../shared/campaignTune';
 import { useAgentStore } from '../agent/agentStore';
 import { useAdsSettings } from '../settings';
 import { TUNE_TONE, type CampaignTune } from '../useCampaignTune';
@@ -32,19 +32,26 @@ export default function CampaignTuneModal({ campaign, tune, onClose }: CampaignT
       <div className="space-y-5 p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tune.signal ? 'bg-amber-50 text-amber-700' : TUNE_TONE[tune.kind]}`}>
-            {tune.code.length === 2 && !tune.signal && <span className="mr-1 opacity-70">{tune.code}</span>}
+            {!tune.signal && tune.code !== 'OFF' && <span className="mr-1 opacity-70">{tune.code}</span>}
             {label}
           </span>
           <span className="text-sm text-muted">{tune.reason}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {tune.suggestPause && (
+          <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-danger">
+            <b>Nên tắt chiến dịch.</b> BOT chưa có lệnh tắt — Sếp tắt tay trên TikTok Ads nếu đồng ý.
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {[
             ['ROI thực', formatNumber(e.roi, 2), e.roi != null && e.breakEven != null && e.roi < e.breakEven ? 'text-danger' : ''],
             ['Hoà vốn CD', formatNumber(e.breakEven, 2), ''],
             ['ROI mục tiêu', formatNumber(campaign.targetRoi, 1), ''],
             ['Tiêu NS', e.budgetUse == null ? '--' : `${formatNumber(e.budgetUse)}%`, ''],
             ['Lãi/ngày', money(perDay(e.profit)), (e.profit ?? 0) < 0 ? 'text-danger' : 'text-accent-green'],
+            ['Lời 1 đơn (P)', tune.pRef == null ? '--' : formatVnd(tune.pRef), ''],
           ].map(([k, v, cls]) => (
             <div key={k} className="rounded-xl bg-canvas px-3 py-2">
               <span className="block text-xs text-muted">{k}</span>
@@ -83,7 +90,9 @@ export default function CampaignTuneModal({ campaign, tune, onClose }: CampaignT
 
         <section>
           <h3 className="mb-1 text-sm font-semibold">Lịch sử thử</h3>
-          <p className="mb-3 text-xs text-muted">Mỗi bước đổi 1 thứ, đo {Math.round(s.waitHours / 24)} ngày sau so với trung bình/ngày lúc quyết định</p>
+          <p className="mb-3 text-xs text-muted">
+            Mỗi bước đổi 1 thứ, đo {s.minWaitDays}–{s.maxWaitDays} ngày sau so với trung bình/ngày lúc quyết định · chế độ {TUNE_MODES[s.mode].label}
+          </p>
           {history.length === 0 && !tune.action ? (
             <p className="text-sm text-muted">Chưa có bước thử nào.</p>
           ) : (

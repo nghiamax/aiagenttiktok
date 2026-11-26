@@ -51,6 +51,8 @@ export interface TrendSnaps {
   /** Thiếu (đang tải / lỗi) → không xác nhận được, coi như chỉ xét 7 ngày */
   d14: AdsSnapshot | null;
   d30: AdsSnapshot | null;
+  /** Hôm nay — chỉ BOT chỉnh chiến dịch dùng (lỗ trong ngày, H3) */
+  d1?: AdsSnapshot | null;
 }
 
 /** Khoá đối tượng theo cấp: video = chiến dịch/sản phẩm/video (1 dòng); sản phẩm = chiến dịch/sản phẩm; chiến dịch = id */

@@ -237,6 +237,8 @@ export interface ConfirmSnaps {
   d14: AdsSnapshot | null;
   /** 30 ngày tính cả hôm nay — chỉ để ghi độ tin + số liệu, không quyết định */
   d30: AdsSnapshot | null;
+  /** Hôm nay — BOT chỉnh chiến dịch xét lỗ trong ngày (H3); thiếu = bỏ qua H3 */
+  d1?: AdsSnapshot | null;
 }
 
 /** Đối tượng đã qua xác nhận, kèm số 14 / 30 ngày */
@@ -336,7 +338,7 @@ function tuneRuleTargets(
 ): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
   const kept: ConfirmedTarget[] = [];
   const unconfirmed: RuleTarget[] = [];
-  for (const d of tuneDecisions(d7, snaps.d14, settings, actions, now).values()) {
+  for (const d of tuneDecisions(d7, snaps.d14, settings, actions, now, { d30: snaps.d30, d1: snaps.d1 }).values()) {
     if (!inScope(rule, d.campaignId)) continue;
     const c = d7.campaigns.find((x) => x.id === d.campaignId)!;
     const target = { campaignId: d.campaignId, productId: '', videoId: '' };

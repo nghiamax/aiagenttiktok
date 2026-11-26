@@ -9,6 +9,7 @@ import {
   type RuleTarget,
 } from '../../shared/agentMatch.js';
 import type { AdsSnapshot } from '../../shared/adsSnapshot.js';
+import { isProtectCode } from '../../shared/campaignTune.js';
 import type {
   AgentActionLog,
   AgentActionType,
@@ -133,13 +134,15 @@ export function recheckProposal(
  * Sếp tắt xác nhận / lỗi đọc → null (chỉ xét 1 khung như cũ).
  */
 export async function loadConfirmSnaps(guardrails: AgentGuardrails, fresh = false): Promise<ConfirmSnaps> {
-  if (guardrails.confirmWindow === false) return { d14: null, d30: null };
   const read = (days: number, f: boolean) =>
     getSnapshot({ from: vnDate(days - 1), to: vnDate(0) }, f)
       .then((r) => r.snapshot)
       .catch(() => null);
+  // Hôm nay: BOT chỉnh chiến dịch xét lỗ trong ngày (H3) — khoảng có hôm nay chỉ cache 1 phút
+  const d1 = await read(1, fresh);
+  if (guardrails.confirmWindow === false) return { d14: null, d30: null, d1 };
   const [d14, d30] = await Promise.all([read(14, fresh), read(30, false)]);
-  return { d14: d14 && withRecentActions(d14), d30: d30 && withRecentActions(d30) };
+  return { d14: d14 && withRecentActions(d14), d30: d30 && withRecentActions(d30), d1 };
 }
 
 /** Snapshot cache chưa biết video vừa gỡ / thêm lại → đè trạng thái theo Nhật ký (giống web) */
@@ -220,11 +223,14 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
     const lastTouched = new Map<string, number>();
     const pendingKeys = new Set<string>();
     const touch = (k: string, iso: string) => lastTouched.set(k, Math.max(lastTouched.get(k) ?? 0, Date.parse(iso)));
+    // BOT chỉnh chiến dịch tự đo / chờ sau khi chạy (campaignTune) → chỉ tính thời gian chờ khi Sếp bỏ qua đề xuất
+    const lastRejected = new Map<string, number>();
     for (const p of rt.proposals) {
       const k = keyOf(p.actionType, p.target);
       if (p.status === 'pending') pendingKeys.add(k);
       // Hết hạn / không còn khớp: không tính thời gian chờ
       if (p.status !== 'expired' && p.status !== 'outdated') touch(k, p.createdAt);
+      if (p.status === 'rejected') lastRejected.set(k, Math.max(lastRejected.get(k) ?? 0, Date.parse(p.createdAt)));
     }
     // Lệnh lỗi (chưa chạy được trên TikTok): không tính thời gian chờ
     for (const a of rt.actions) if (a.status !== 'failed') touch(keyOf(a.actionType, a.target), a.executedAt);
@@ -246,7 +252,10 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           skip('Đã có đề xuất đang chờ');
           continue;
         }
-        if (now - (lastTouched.get(k) ?? 0) < cooldownMs) {
+        // BOT chỉnh chiến dịch: bảo vệ / lùi không chờ; bước thử chỉ chờ sau khi Sếp bỏ qua
+        const tuneCode = ruleParams.tune?.code;
+        const since = tuneCode ? (isProtectCode(tuneCode) ? 0 : (lastRejected.get(k) ?? 0)) : (lastTouched.get(k) ?? 0);
+        if (now - since < cooldownMs) {
           skip('Đang trong thời gian chờ');
           continue;
         }

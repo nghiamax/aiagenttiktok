@@ -171,6 +171,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
   const raw7 = useFixedSnapshot(7, range, live, reloadKey, guest);
   const raw14 = useFixedSnapshot(14, range, live, reloadKey, guest);
   const raw30 = useFixedSnapshot(30, range, live, reloadKey, guest);
+  const d1 = useFixedSnapshot(1, range, live, reloadKey, guest);
 
   // Video vừa gỡ / thêm lại thành công mà snapshot lưu sẵn (cache tới 6 giờ) chưa biết → đè trạng thái theo Nhật ký
   // để nhóm, hộp Tổng quan, lọc "Đã gỡ" đổi ngay. Khoá theo các thao tác thành công → không tính lại mỗi lần tải Agent.
@@ -188,7 +189,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
   const d14 = useMemo(() => raw14 && applyRecentActions(raw14, done), [raw14, done]);
   const d30 = useMemo(() => raw30 && applyRecentActions(raw30, done), [raw30, done]);
   const baseline = d7 ?? snapshot;
-  const trendSnaps = useMemo<TrendSnaps>(() => ({ d7: baseline, d14, d30 }), [baseline, d14, d30]);
+  const trendSnaps = useMemo<TrendSnaps>(() => ({ d7: baseline, d14, d30, d1 }), [baseline, d14, d30, d1]);
 
   const value = useMemo<AdsDataValue>(
     () => ({

@@ -282,22 +282,62 @@ describe('BOT chỉnh ROI & ngân sách (Sếp chốt 26/11)', () => {
     mock.settings = settingsWith({ pA: 3.5, pB: 4.5 });
     mock.snapshot = snapshot({
       range: { from: '2026-11-12', to: '2026-11-18' },
-      campaigns: [campaign({ id: 'c1', cost: 3.2e6, revenue: 14e6, orders: 40, budget: 700_000, targetRoi: 4 })],
+      campaigns: [campaign({ id: 'c1', cost: 3.2e6, revenue: 14e6, orders: 40, budget: 480_000, targetRoi: 4 })],
       products: [
         product({ id: 'pA', campaignId: 'c1', revenue: 10e6, cost: 2e6, orders: 30 }),
         product({ id: 'pB', campaignId: 'c1', revenue: 4e6, cost: 1.2e6, orders: 10 }),
       ],
     });
+    // 14 ngày = 2 lần 7 ngày → khung B (7 ngày trước) cùng hướng; hôm nay chưa có số
+    const x2 = <T extends { cost: number | null; revenue: number | null; orders: number | null }>(r: T): T => ({ ...r, cost: r.cost! * 2, revenue: r.revenue! * 2, orders: r.orders! * 2 });
+    mock.byFrom['2026-11-05'] = { ...mock.snapshot, range: { from: '2026-11-05', to: '2026-11-18' }, campaigns: mock.snapshot.campaigns.map(x2), products: mock.snapshot.products.map(x2) };
+    mock.byFrom['2026-11-18'] = snapshot({ range: { from: '2026-11-18', to: '2026-11-18' } });
     mock.config.rules = [rule({ id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', params: {} })];
     const s = await runAgent();
     expect(s.proposals).toBe(1);
     expect(mock.runtime.proposals[0]).toMatchObject({
-      actionType: 'update_roi_target',
+      actionType: 'update_budget',
       target: { campaignId: 'c1' },
-      params: { roiTargetChangePct: 5, tune: { code: 'C2', step: 1 } },
+      params: { budgetChangePct: 20, tune: { code: 'C1', step: 1 } },
     });
     // Chạy lại: đề xuất đang chờ được giữ, không tạo trùng
     await runAgent();
     expect(mock.runtime.proposals.filter((p) => p.status === 'pending')).toHaveLength(1);
+  });
+
+  it('bước thử đã chạy + đo xong (2 ngày) → bước tiếp không bị thời gian chờ 72h của quy tắc chặn; Sếp bỏ qua thì vẫn chờ', async () => {
+    mock.settings = settingsWith({ pA: 3.5, pB: 4.5 });
+    mock.snapshot = snapshot({
+      range: { from: '2026-11-12', to: '2026-11-18' },
+      campaigns: [campaign({ id: 'c1', cost: 3.2e6, revenue: 14e6, orders: 40, budget: 480_000, targetRoi: 4 })],
+      products: [
+        product({ id: 'pA', campaignId: 'c1', revenue: 10e6, cost: 2e6, orders: 30 }),
+        product({ id: 'pB', campaignId: 'c1', revenue: 4e6, cost: 1.2e6, orders: 10 }),
+      ],
+    });
+    const x2 = <T extends { cost: number | null; revenue: number | null; orders: number | null }>(r: T): T => ({ ...r, cost: r.cost! * 2, revenue: r.revenue! * 2, orders: r.orders! * 2 });
+    mock.byFrom['2026-11-05'] = { ...mock.snapshot, range: { from: '2026-11-05', to: '2026-11-18' }, campaigns: mock.snapshot.campaigns.map(x2), products: mock.snapshot.products.map(x2) };
+    mock.byFrom['2026-11-18'] = snapshot({ range: { from: '2026-11-18', to: '2026-11-18' } });
+    const goodDay = (date: string) => ({ date, cost: 0.48e6, revenue: 2.2e6, orders: 7, roi: 4.6 });
+    mock.runtime.actions = [
+      {
+        id: 'a1',
+        executedAt: '2026-11-15T17:00:00Z', // 60 giờ trước
+        actor: 'approved',
+        ruleId: 'tune-campaign',
+        actionType: 'update_budget',
+        target: { campaignId: 'c1', productId: '', videoId: '' },
+        params: { budgetChangePct: 20, prev: { budget: 400_000 }, next: { budget: 480_000 }, tune: { code: 'C1', step: 1 } },
+        before: { from: '2026-11-08T00:00:00+07:00', to: '2026-11-15T00:00:00+07:00', cost: 2.8e6, revenue: 12e6, orders: 40, roi: 4.3, breakEven: 3.74 },
+        after: { from: '', to: '', cost: 0.96e6, revenue: 4.4e6, orders: 14, roi: 4.6, breakEven: null, days: [goodDay('2026-11-16'), goodDay('2026-11-17')] },
+        status: 'success',
+      },
+    ];
+    mock.config.rules = [rule({ id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', params: {}, cooldownHours: 72 })];
+    expect((await runAgent()).proposals).toBe(1);
+    expect(mock.runtime.proposals[0].params.tune).toMatchObject({ code: 'C1', step: 2 });
+    // Sếp bỏ qua → lượt sau không đề xuất lại trong 72h
+    mock.runtime.proposals[0].status = 'rejected';
+    expect((await runAgent()).proposals).toBe(0);
   });
 });

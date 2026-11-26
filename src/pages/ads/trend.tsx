@@ -58,7 +58,7 @@ export function TrendProvider({ children }: { children: ReactNode }) {
     return {
       snaps: trendSnaps,
       confirmOn,
-      confirm: confirmOn ? { d14: trendSnaps.d14, d30: trendSnaps.d30 } : { d14: null, d30: null },
+      confirm: confirmOn ? { d14: trendSnaps.d14, d30: trendSnaps.d30, d1: trendSnaps.d1 } : { d14: null, d30: null, d1: trendSnaps.d1 },
       video: (v) => idx.video.get(videoKey(v)),
       product: (p) => idx.product.get(productKey(p.campaignId, p.id)),
       campaign: (c) => idx.campaign.get(c.id),

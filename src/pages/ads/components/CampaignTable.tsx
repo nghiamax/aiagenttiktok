@@ -168,7 +168,7 @@ export default function CampaignTable({
                     )}
                   </td>
                   <td className={`${TD} whitespace-nowrap text-sm`}>
-                    {tune?.action ? <b>{tuneActionText(tune.action)}</b> : tune?.waitUntil ? <span className="text-muted">Đo lại {formatWait(tune.waitUntil)}</span> : <span className="text-muted">--</span>}
+                    {tune?.action ? <b>{tuneActionText(tune.action)}</b> : tune?.suggestPause ? <b className="text-danger">Nên tắt chiến dịch (tắt tay)</b> : tune?.waitUntil ? <span className="text-muted">Đo lại {formatWait(tune.waitUntil)}</span> : <span className="text-muted">--</span>}
                   </td>
                   <td className={`${TD_NUM} text-muted`}>{formatNumber(c.selectedVideos)}</td>
                   <td className={TD_NUM}>{formatVnd(c.budget)}</td>

@@ -240,7 +240,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
           value={rule.cooldownHours}
           onCommit={(n) => onChange({ cooldownHours: n })}
         />}
-        {tune && <p className="text-xs text-muted sm:col-span-3">Các mức (bước %, ngưỡng tiêu ngân sách, thời gian chờ, sàn / trần ROI mục tiêu) chỉnh ở Chiến lược điều chỉnh.</p>}
+        {tune && <p className="text-xs text-muted sm:col-span-3">Chế độ chạy (Thận trọng / Cân bằng / Tăng trưởng), giới hạn bảo vệ và các mức chỉnh ở Chiến lược điều chỉnh (Phân nhóm → Chiến dịch).</p>}
       </div>
 
       {onRemove && (

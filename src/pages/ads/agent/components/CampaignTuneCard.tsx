@@ -1,18 +1,31 @@
 import { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { ChevronDown, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { DEFAULT_TUNE, tuneSettingsOf, type CampaignTuneSettings } from '../../../../../shared/campaignTune';
+import { useAuth } from '../../../../auth/AuthProvider';
+import { DEFAULT_TUNE, TUNE_MODES, tuneSettingsOf, type CampaignTuneSettings, type TuneMode } from '../../../../../shared/campaignTune';
 import { useAdsSettings } from '../../settings';
 
 type NumKey = { [K in keyof CampaignTuneSettings]: CampaignTuneSettings[K] extends number ? K : never }[keyof CampaignTuneSettings];
 type BoolKey = 'rescue' | 'grow' | 'autoRevert';
+type Field = { key: NumKey; label: string; unit: string; hint?: string };
 
-const SECTIONS: { title: string; fields: { key: NumKey; label: string; unit: string; hint?: string }[] }[] = [
+/** Giới hạn bảo vệ — ai có quyền chỉnh thiết lập đều thấy (P = lợi nhuận 1 đơn tham chiếu của chiến dịch) */
+const PROTECT: Field[] = [
+  { key: 'dayLossP', label: 'Lỗ hôm nay tối đa', unit: '× P', hint: 'Vượt → hạ ngân sách về gần mức đã chi (H3)' },
+  { key: 'weekLossP', label: 'Lỗ 7 ngày tối đa', unit: '× P', hint: 'Vượt → đề xuất Sếp tắt chiến dịch (H4)' },
+  { key: 'warnP', label: 'Chưa có đơn: cảnh báo khi chi ≥', unit: '× P', hint: 'H1' },
+  { key: 'stopP', label: 'Chưa có đơn: bảo vệ khi chi ≥', unit: '× P', hint: 'Tiêu hết ngân sách → hạ ngân sách; tiêu ít → đề xuất tắt (H2)' },
+  { key: 'learningDays', label: 'Chiến dịch mới / vừa bảo vệ: chỉ bảo vệ trong', unit: 'ngày' },
+];
+
+/** Nâng cao — chỉ Quản trị viên */
+const ADVANCED: { title: string; fields: Field[] }[] = [
   {
-    title: 'Mục tiêu',
+    title: 'Đo bước thử',
     fields: [
-      { key: 'maxOrderDropPct', label: 'Đơn/ngày được giảm tối đa', unit: '%', hint: 'Bước thử làm đơn giảm hơn mức này → trả về số cũ' },
-      { key: 'waitHours', label: 'Chờ giữa 2 lần đổi cùng chiến dịch', unit: 'giờ', hint: 'Cũng là thời gian đo kết quả bước thử' },
+      { key: 'minWaitDays', label: 'Đo tối thiểu', unit: 'ngày' },
+      { key: 'maxWaitDays', label: 'Đo tối đa (hết mà thiếu số = không đủ cơ sở)', unit: 'ngày' },
+      { key: 'maxOrderDropPct', label: 'Bước mở rộng: đơn/ngày được giảm tối đa', unit: '%' },
     ],
   },
   {
@@ -23,18 +36,19 @@ const SECTIONS: { title: string; fields: { key: NumKey; label: string; unit: str
     ],
   },
   {
-    title: 'Mỗi bước thử',
+    title: 'Khi lỗ / lời mỏng',
     fields: [
-      { key: 'budgetStepPct', label: 'Tăng ngân sách', unit: '%' },
-      { key: 'roiStepPct', label: 'Đổi ROI mục tiêu', unit: '%' },
-      { key: 'lossRaiseMaxPct', label: 'Đang lỗ: nâng ROI mục tiêu tối đa mỗi lần', unit: '%' },
+      { key: 'roiUpPct', label: 'Nâng ROI mục tiêu mỗi bước', unit: '%' },
+      { key: 'lossRaiseMaxPct', label: 'ROI MT dưới hoà vốn: nâng tối đa mỗi lần', unit: '%' },
+      { key: 'lossBudgetCutPct', label: 'Lỗ + tiêu hết ngân sách: hạ ngân sách', unit: '%' },
+      { key: 'gapPct', label: 'Ngừng siết khi ROI thực thấp hơn ROI MT ≥', unit: '%' },
+      { key: 'thinMarginPct', label: 'Lời mỏng khi ROI thực < hoà vốn +', unit: '%' },
+      { key: 'ceilK', label: 'Lời mỏng: ROI MT mới ≤ ROI thực ×', unit: '' },
     ],
   },
   {
-    title: 'Hàng rào',
+    title: 'Hàng rào số liệu',
     fields: [
-      { key: 'floorK', label: 'Sàn ROI mục tiêu = hoà vốn chiến dịch ×', unit: '' },
-      { key: 'ceilK', label: 'Trần ROI mục tiêu = ROI thực 7 ngày ×', unit: '' },
       { key: 'minOrders', label: 'Cần ít nhất', unit: 'đơn / 7 ngày' },
       { key: 'missingBeMaxPct', label: 'Không đánh giá khi SP thiếu hoà vốn chiếm >', unit: '% doanh thu' },
       { key: 'concentratePct', label: 'Lỗ dồn 1 sản phẩm khi chiếm ≥', unit: '% phần lỗ' },
@@ -42,11 +56,15 @@ const SECTIONS: { title: string; fields: { key: NumKey; label: string; unit: str
   },
 ];
 
+const ALL_FIELDS = [...PROTECT, ...ADVANCED.flatMap((s) => s.fields)];
+
 const SWITCHES: { key: BoolKey; label: string; desc: string }[] = [
-  { key: 'rescue', label: 'Cứu chiến dịch lỗ', desc: 'Nâng ROI mục tiêu khi lỗ (B1 – B5)' },
-  { key: 'grow', label: 'Mở rộng chiến dịch lời', desc: 'Tăng ngân sách / chỉnh ROI mục tiêu (C1 – C4)' },
-  { key: 'autoRevert', label: 'Tự đo & lùi', desc: 'Bước thử làm xấu đi → đề xuất trả về (D2 – D3)' },
+  { key: 'rescue', label: 'Cứu chiến dịch lỗ', desc: 'Nâng ROI mục tiêu / hạ ngân sách khi lỗ (B1 – B7)' },
+  { key: 'grow', label: 'Mở rộng chiến dịch lời', desc: 'Tăng ngân sách / hạ ROI mục tiêu (C1 – C4)' },
+  { key: 'autoRevert', label: 'Tự đo & lùi', desc: 'Bước thử làm xấu đi → đề xuất trả về (D2 – D4)' },
 ];
+
+const MODE_ORDER: TuneMode[] = ['careful', 'balanced', 'growth'];
 
 const toText = (n: number) => String(n).replace('.', ',');
 const parse = (t: string) => {
@@ -54,27 +72,51 @@ const parse = (t: string) => {
   return t.trim() !== '' && Number.isFinite(n) && n >= 0 ? n : null;
 };
 
-/** Chiến lược điều chỉnh ROI mục tiêu & ngân sách chiến dịch (Phân nhóm → Chiến dịch, Sếp chốt 26/11) */
+/** Chiến lược điều chỉnh ROI mục tiêu & ngân sách chiến dịch (Phân nhóm → Chiến dịch; bộ quy tắc v3, Sếp chốt 26/11) */
 export default function CampaignTuneCard() {
   const { settings, save, loaded } = useAdsSettings();
+  const isAdmin = useAuth().can('manage_users');
   const saved = tuneSettingsOf(settings);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [bools, setBools] = useState<Pick<CampaignTuneSettings, BoolKey>>(saved);
+  const [mode, setMode] = useState<TuneMode>(saved.mode);
+  const [advanced, setAdvanced] = useState(false);
   const savedKey = JSON.stringify(saved);
-  useEffect(() => {
-    setDraft(Object.fromEntries(SECTIONS.flatMap((s) => s.fields).map((f) => [f.key, toText(saved[f.key])])));
+  const resetDraft = () => {
+    setDraft(Object.fromEntries(ALL_FIELDS.map((f) => [f.key, toText(saved[f.key])])));
     setBools({ rescue: saved.rescue, grow: saved.grow, autoRevert: saved.autoRevert });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedKey]);
+    setMode(saved.mode);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(resetDraft, [savedKey]);
 
-  const next: Partial<CampaignTuneSettings> = { ...bools };
+  const next: Partial<CampaignTuneSettings> = { ...bools, mode };
   const bad: string[] = [];
-  for (const f of SECTIONS.flatMap((s) => s.fields)) {
+  for (const f of ALL_FIELDS) {
     const v = parse(draft[f.key] ?? '');
     if (v == null) bad.push(f.label);
     else (next as Record<string, number>)[f.key] = v;
   }
-  const dirty = JSON.stringify({ ...saved, ...next }) !== savedKey;
+  const savedPlain = Object.fromEntries(Object.keys(DEFAULT_TUNE).map((k) => [k, saved[k as keyof CampaignTuneSettings]]));
+  const dirty = JSON.stringify({ ...savedPlain, ...next }) !== JSON.stringify(savedPlain);
+
+  const fieldInput = (f: Field) => (
+    <label key={f.key} className="block" title={f.hint}>
+      <span className="mb-1 block text-xs text-muted">{f.label}</span>
+      <span className="flex items-center gap-2">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft[f.key] ?? ''}
+          onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+          className={`w-24 rounded-lg border bg-white px-3 py-2 text-right text-sm tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft ${
+            parse(draft[f.key] ?? '') == null ? 'border-danger' : 'border-line'
+          }`}
+        />
+        {f.unit && <span className="text-sm text-muted">{f.unit}</span>}
+      </span>
+    </label>
+  );
 
   return (
     <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
@@ -82,8 +124,8 @@ export default function CampaignTuneCard() {
         <div>
           <h3 className="text-base font-semibold">Chiến lược điều chỉnh ROI mục tiêu &amp; ngân sách</h3>
           <p className="mt-0.5 max-w-2xl text-sm text-muted">
-            Mục tiêu: tăng tổng lời, số đơn không giảm. BOT xét từng chiến dịch theo tình huống (lỗ / lời / vừa thử), mỗi lần đổi 1 thứ
-            một bước nhỏ, đo lại sau thời gian chờ — tốt thì giữ, xấu thì đề xuất trả về. Chạy khi bật quy tắc{' '}
+            Mục tiêu: tăng tổng lời/ngày, số đơn không giảm. Lỗ thì siết / bảo vệ ngay, lời thì mở rộng từng bước và đo lại — tốt thì giữ, xấu thì
+            trả về. Chạy khi bật quy tắc{' '}
             <Link to="?view=rules" className="font-medium text-primary hover:text-primary-hover">
               BOT chỉnh ROI &amp; ngân sách
             </Link>
@@ -101,30 +143,39 @@ export default function CampaignTuneCard() {
         </button>
       </div>
 
-      {SECTIONS.map((s) => (
-        <div key={s.title} className="mt-5">
-          <p className="mb-2 text-sm font-semibold text-muted">{s.title}</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {s.fields.map((f) => (
-              <label key={f.key} className="block" title={f.hint}>
-                <span className="mb-1 block text-xs text-muted">{f.label}</span>
-                <span className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={draft[f.key] ?? ''}
-                    onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                    className={`w-24 rounded-lg border bg-white px-3 py-2 text-right text-sm tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft ${
-                      parse(draft[f.key] ?? '') == null ? 'border-danger' : 'border-line'
-                    }`}
-                  />
-                  {f.unit && <span className="text-sm text-muted">{f.unit}</span>}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
+      <p className="mb-2 mt-5 text-sm font-semibold text-muted">Chế độ chạy</p>
+      <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Chế độ chạy">
+        {MODE_ORDER.map((m) => {
+          const p = TUNE_MODES[m];
+          const on = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setMode(m)}
+              className={`rounded-xl border p-3 text-left transition ${on ? 'border-primary bg-primary-soft ring-2 ring-primary-soft' : 'border-line hover:bg-canvas'}`}
+            >
+              <b className={`block text-sm ${on ? 'text-primary' : ''}`}>
+                {p.label}
+                {m === 'balanced' && <span className="ml-1.5 text-xs font-normal text-muted">(mặc định)</span>}
+              </b>
+              <span className="block text-xs text-muted">{p.desc}</span>
+              <ul className="mt-2 space-y-0.5 text-xs tabular-nums">
+                <li>Tăng ngân sách mỗi bước +{p.budgetStepPct}%</li>
+                <li>Hạ ROI mục tiêu mỗi bước −{p.roiDownPct}%</li>
+                <li>Lỗ tối đa mỗi lần thử {p.testLossP}P</li>
+                <li>Lời/ngày giảm &gt; {p.profitDropPct}% → trả về</li>
+              </ul>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mb-1 mt-5 text-sm font-semibold text-muted">Giới hạn bảo vệ</p>
+      <p className="mb-2 text-xs text-muted">P = lợi nhuận 1 đơn tham chiếu của chiến dịch (theo cơ cấu đơn 30 ngày). Tắt chiến dịch luôn do Sếp quyết.</p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{PROTECT.map(fieldInput)}</div>
 
       <p className="mb-2 mt-5 text-sm font-semibold text-muted">Tình huống áp dụng</p>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -148,12 +199,33 @@ export default function CampaignTuneCard() {
         ))}
       </div>
 
+      {isAdmin && (
+        <div className="mt-5 border-t border-line pt-4">
+          <button
+            type="button"
+            onClick={() => setAdvanced(!advanced)}
+            aria-expanded={advanced}
+            className="flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-ink"
+          >
+            <ChevronDown className={`size-4 transition-transform ${advanced ? 'rotate-180' : ''}`} />
+            Nâng cao (Quản trị viên)
+          </button>
+          {advanced &&
+            ADVANCED.map((s) => (
+              <div key={s.title} className="mt-4">
+                <p className="mb-2 text-xs font-semibold text-muted">{s.title}</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{s.fields.map(fieldInput)}</div>
+              </div>
+            ))}
+        </div>
+      )}
+
       {(dirty || bad.length > 0) && (
         <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
           {bad.length > 0 && <span className="mr-auto text-sm text-danger">Số chưa hợp lệ: {bad.join(', ')}</span>}
           <button
             type="button"
-            onClick={() => setDraft(Object.fromEntries(SECTIONS.flatMap((s) => s.fields).map((f) => [f.key, toText(saved[f.key])])))}
+            onClick={resetDraft}
             className="rounded-xl border border-line px-4 py-2 text-sm font-medium transition-colors hover:bg-canvas"
           >
             Huỷ
@@ -161,7 +233,7 @@ export default function CampaignTuneCard() {
           <button
             type="button"
             disabled={!loaded || bad.length > 0}
-            onClick={() => save({ ...settings, campaignTune: { ...saved, ...next } })}
+            onClick={() => save({ ...settings, campaignTune: { ...savedPlain, ...next } as Partial<CampaignTuneSettings> })}
             className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Lưu

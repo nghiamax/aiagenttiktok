@@ -99,7 +99,7 @@ export default function BreakEvenModal({
 
   return (
     <Modal
-      title="ROI hoà vốn"
+      title="ROI hoà vốn & lợi nhuận 1 đơn"
       description="ROI hoà vốn = giá bán ÷ lợi nhuận gộp trước quảng cáo — video có ROI thấp hơn là đang lỗ. Lãi 1 đơn dùng cho điều kiện “lần lợi nhuận 1 đơn”: nhập số của Sếp, để trống thì tự tính = giá khách trả TB ÷ ROI hoà vốn."
       onClose={onClose}
       footer={

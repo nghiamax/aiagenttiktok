@@ -5,7 +5,7 @@ import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import { formatNumber } from '../../../../lib/format';
 import { buildTrendIndex } from '../../../../../shared/trend';
 import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../../../shared/reEnable';
-import { productPrices, profitPerOrderMap } from '../../../../../shared/productProfit';
+import { manualProfitOf, productPrices, profitPerOrderMap } from '../../../../../shared/productProfit';
 import { useTrend } from '../../trend';
 import { LEVEL_UNIT, newClause, normalizeGroups, usesProfit, type GroupDef, type GroupLevel } from '../../groups';
 import { breakEvenOf, DEFAULT_SETTINGS, GROUP_KEY, groupsOf, useAdsSettings, type AdsSettings } from '../../settings';
@@ -207,9 +207,9 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
         <section className="rounded-2xl border border-line bg-canvas/60 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="font-semibold">ROI hoà vốn theo sản phẩm</h3>
+              <h3 className="font-semibold">ROI hoà vốn &amp; lợi nhuận 1 đơn theo sản phẩm</h3>
               <p className="text-sm text-muted">
-                Dùng cho điều kiện “ROI hoà vốn ×” và “lần lợi nhuận 1 đơn” (lãi 1 đơn = giá khách trả TB ÷ ROI hoà vốn).{' '}
+                Dùng cho điều kiện “ROI hoà vốn ×” và “lần lợi nhuận 1 đơn”. Lợi nhuận 1 đơn: nhập số của Sếp, để trống thì tự tính = giá khách trả TB ÷ ROI hoà vốn.{' '}
                 {missingBe > 0
                   ? `${missingBe}/${uniqueProducts.length} sản phẩm chưa nhập ROI hoà vốn — chưa tính được lãi 1 đơn.`
                   : 'Đã nhập đủ ROI hoà vốn.'}
@@ -220,7 +220,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
               onClick={onOpenBreakEven}
               className="w-fit rounded-xl bg-white px-3.5 py-2 text-sm font-medium shadow-sm transition hover:shadow-md"
             >
-              Nhập ROI hoà vốn
+              Nhập ROI hoà vốn &amp; lợi nhuận
             </button>
           </div>
           <ul className="mt-3 flex flex-wrap gap-2">
@@ -228,20 +228,27 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
               const be = breakEvenOf(settings, p.id);
               const price = prices.get(p.id);
               const profit = profits.get(p.id);
+              const manual = manualProfitOf(settings, p.id) != null;
               const priceText = price
                 ? `${formatNumber(Math.round(price.price))}đ (${price.source === 'aov' ? 'khách trả TB' : 'giá niêm yết'})`
                 : 'chưa có';
+              // Số trước, tên sau → tên dài bị cắt chứ không cắt mất số
               return (
                 <li
                   key={p.id}
-                  className="max-w-[320px] truncate rounded-lg bg-white px-2.5 py-1 text-xs"
-                  title={`${p.name}\n${campaignById.get(p.campaignId)?.name ?? ''}\nGiá bán: ${priceText}`}
+                  className="flex max-w-[340px] items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs"
+                  title={`${p.name}\n${campaignById.get(p.campaignId)?.name ?? ''}\nGiá bán: ${priceText}${manual ? '\nLãi 1 đơn: số Sếp nhập' : ''}`}
                 >
-                  {p.name} · <b className={be == null ? 'text-muted' : ''}>{be == null ? 'chưa nhập' : formatNumber(be, 2)}</b>
-                  {' · lãi 1 đơn '}
-                  <b className={profit == null ? 'text-muted' : ''}>
-                    {profit == null ? '--' : `${formatNumber(Math.round(profit / 1000))}k`}
-                  </b>
+                  <span className="shrink-0">
+                    hv <b className={be == null ? 'text-muted' : ''}>{be == null ? 'chưa nhập' : formatNumber(be, 2)}</b>
+                    {' · lãi '}
+                    <b className={profit == null ? 'text-muted' : ''}>
+                      {profit == null ? '--' : `${formatNumber(Math.round(profit / 1000))}k`}
+                      {manual && ' ✎'}
+                    </b>
+                    {' ·'}
+                  </span>
+                  <span className="min-w-0 truncate text-muted">{p.name}</span>
                 </li>
               );
             })}

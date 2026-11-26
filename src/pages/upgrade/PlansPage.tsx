@@ -5,7 +5,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../auth/AuthProvider';
 import { api, ApiError } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
-import { monthsLabel, type BillingPublic } from '../../../shared/billing';
+import { isLifetime, monthsLabel, type BillingPublic } from '../../../shared/billing';
 import { FREE_PRICING_CALCS, FREE_PROFIT_ORDERS, type FinanceQuota } from '../../../shared/plans';
 import PaymentModal, { type OrderView } from './PaymentModal';
 
@@ -85,8 +85,11 @@ export default function PlansPage() {
   const { billing, quota, isAdmin } = data;
   const isPro = quota?.plan === 'pro';
   const option = billing.options.find((o) => o.months === months) ?? billing.options[0];
-  // Giá / tháng của gói dài hạn để thấy tiết kiệm
-  const base = billing.options.find((o) => o.months === 1);
+  // Mốc ngắn nhất làm chuẩn giá / tháng → mốc dài hơn thấy % tiết kiệm
+  const base = billing.options.reduce<(typeof billing.options)[number] | undefined>(
+    (a, o) => (isLifetime(o.months) ? a : !a || o.months < a.months ? o : a),
+    undefined,
+  );
 
   const buy = async () => {
     if (!option) return;
@@ -183,12 +186,12 @@ export default function PlansPage() {
             <>
               <p className="mt-5 text-3xl font-bold tabular-nums">{formatNumber(option.price)}đ</p>
               <p className="text-sm text-muted">
-                {monthsLabel(option.months)}
+                {isLifetime(option.months) ? 'Vĩnh viễn — trả 1 lần, không cần gia hạn' : monthsLabel(option.months)}
                 {option.months > 1 &&
                   ` · ~${formatNumber(Math.round(option.price / option.months / 1000) * 1000)}đ/tháng`}
-                {base && option.months > 1 && base.price * option.months > option.price && (
+                {base && option.months > base.months && (base.price / base.months) * option.months > option.price && (
                   <span className="ml-1 font-semibold text-accent-green">
-                    tiết kiệm {Math.round((1 - option.price / (base.price * option.months)) * 100)}%
+                    tiết kiệm {Math.round((1 - option.price / ((base.price / base.months) * option.months)) * 100)}%
                   </span>
                 )}
               </p>

@@ -7,6 +7,10 @@ import {
   extendProUntil,
   GATEWAYS,
   isGatewayId,
+  isLifetime,
+  LEGACY_PRO_MONTHS,
+  MAX_PRO_MONTHS,
+  MAX_PRO_OPTIONS,
   newOrderCode,
   ORDER_TTL_MS,
   type BillingOrder,
@@ -66,13 +70,26 @@ function writeJson(p: string, data: unknown) {
   fs.renameSync(tmp, p);
 }
 
+/** Làm sạch mốc thời hạn: số nguyên 1…60 tháng, bỏ trùng (giữ dòng đầu), xếp tăng dần */
 const cleanOptions = (list: unknown): ProOption[] => {
   const arr = Array.isArray(list) ? list : [];
+  const seen = new Set<number>();
   const opts = arr
     .map((o) => ({ months: Math.round(Number(o?.months)), price: Math.max(0, Math.round(Number(o?.price) || 0)) }))
-    .filter((o) => o.months > 0 && o.months <= 60);
+    .filter((o) => o.months >= 0 && o.months <= MAX_PRO_MONTHS && !seen.has(o.months) && seen.add(o.months))
+    // Vĩnh viễn (0) xếp cuối
+    .sort((a, b) => (isLifetime(a.months) ? 1e9 : a.months) - (isLifetime(b.months) ? 1e9 : b.months))
+    .slice(0, MAX_PRO_OPTIONS);
   return opts.length ? opts : DEFAULT_PRO_MONTHS.map((months) => ({ months, price: 0 }));
 };
+
+/** Cấu hình lưu trước khi có mốc 3/6/9/12 mà vẫn đúng bộ mặc định cũ 1/3/12 → đổi sang mốc mới, giữ giá mốc trùng */
+function migrateOptions(opts: ProOption[]): ProOption[] {
+  const same =
+    opts.length === LEGACY_PRO_MONTHS.length && opts.every((o, i) => o.months === LEGACY_PRO_MONTHS[i]);
+  if (!same) return opts;
+  return DEFAULT_PRO_MONTHS.map((months) => ({ months, price: opts.find((o) => o.months === months)?.price ?? 0 }));
+}
 
 /** Chỉ giữ các ô cổng khai báo (chuỗi), rồi để cổng tự làm sạch */
 function cleanSettings(id: GatewayId, raw: unknown, cur: GatewaySettings = {}): GatewaySettings {
@@ -90,6 +107,7 @@ type StoredConfig = Partial<BillingConfig> & {
   accountName?: string;
   webhookKey?: string;
   payos?: GatewaySettings;
+  optionsV?: number;
 };
 
 export function getBillingConfig(): BillingConfig {
@@ -103,7 +121,8 @@ export function getBillingConfig(): BillingConfig {
   return {
     // File cũ chưa có provider = SePay (cách duy nhất trước đây)
     provider: isGatewayId(c.provider) ? c.provider : 'sepay',
-    options: cleanOptions(c.options),
+    // optionsV 2 = đã có mốc do Quản trị viên tự đặt → không đổi nữa
+    options: c.optionsV === 2 ? cleanOptions(c.options) : migrateOptions(cleanOptions(c.options)),
     gateways,
   };
 }
@@ -126,7 +145,7 @@ export function saveBillingConfig(next: BillingConfigPatch): BillingConfig {
     options: next.options !== undefined ? cleanOptions(next.options) : cur.options,
     gateways,
   };
-  writeJson(file('billing.json'), merged);
+  writeJson(file('billing.json'), { ...merged, optionsV: 2 });
   return merged;
 }
 

@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Landmark, Loader2 } from 'lucide-react';
+import { CheckCircle2, Infinity as InfinityIcon, Landmark, Loader2, Plus, X } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import { api, ApiError } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
 import {
   GATEWAYS,
+  durationText,
   gatewayMeta,
+  isLifetime,
+  LIFETIME_MONTHS,
+  MAX_PRO_MONTHS,
+  MAX_PRO_OPTIONS,
   monthsLabel,
+  parseDuration,
+  proOptionsError,
   providerName,
   type BillingOrder,
   type GatewayId,
@@ -57,6 +64,8 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
   const [draft, setDraft] = useState<BillingConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  /** Chữ đang gõ ở ô thời hạn (theo vị trí dòng) — gõ "Vĩnh viễn" dở dang không bị đổi thành số */
+  const [texts, setTexts] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +98,9 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
     setDraft((d) =>
       d ? { ...d, gateways: { ...d.gateways, [d.provider]: { ...d.gateways[d.provider], [key]: value } } } : d,
     );
+  const setOption = (i: number, patch: Partial<ProOption>) =>
+    setDraft((d) => (d ? { ...d, options: d.options.map((x, k) => (k === i ? { ...x, ...patch } : x)) } : d));
+  const optionsErr = proOptionsError(draft.options);
 
   const save = async () => {
     setSaving(true);
@@ -98,6 +110,7 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
       const d = await api<AdminData>('/billing/admin');
       setData(d);
       setDraft(d.config);
+      setTexts({});
       setMsg({ ok: true, text: 'Đã lưu.' });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Không lưu được' });
@@ -181,27 +194,100 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
           </p>
         )}
 
-        <p className={`${labelCls} mt-5`}>Giá gói Pro (để 0 = không bán thời hạn đó)</p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <p className={`${labelCls} mt-5`}>Thời hạn & giá gói Pro (giá 0 = không bán thời hạn đó)</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {draft.options.map((o, i) => (
-            <label key={o.months} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
-              <span className="w-16 shrink-0 text-sm font-medium">{monthsLabel(o.months)}</span>
+            <div key={i} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
+              {(() => {
+                const text = texts[i] ?? durationText(o.months);
+                const bad = Number.isNaN(o.months);
+                return (
+                  <>
+                    <input
+                      value={text}
+                      placeholder="số tháng"
+                      title='Gõ số tháng (vd 6) hoặc chữ "Vĩnh viễn"'
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTexts((t) => ({ ...t, [i]: v }));
+                        setOption(i, { months: parseDuration(v) });
+                      }}
+                      aria-label={`Thời hạn mốc ${i + 1}`}
+                      aria-invalid={bad}
+                      className={`shrink-0 rounded-md bg-canvas px-1.5 py-1 text-center text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary/30 ${
+                        /^\d{0,2}$/.test(text.trim()) ? 'w-10' : 'w-24'
+                      } ${bad ? 'text-danger ring-1 ring-danger/40' : ''}`}
+                    />
+                    {/^\d+$/.test(text.trim()) && <span className="shrink-0 text-sm text-muted">tháng</span>}
+                  </>
+                );
+              })()}
               <input
                 inputMode="numeric"
                 value={o.price ? formatNumber(o.price) : ''}
                 placeholder="0"
-                onChange={(e) => {
-                  const price = Number(e.target.value.replace(/\D/g, '')) || 0;
-                  setDraft((d) =>
-                    d ? { ...d, options: d.options.map((x, k) => (k === i ? { ...x, price } : x)) } : d,
-                  );
-                }}
-                aria-label={`Giá ${monthsLabel(o.months)}`}
+                onChange={(e) => setOption(i, { price: Number(e.target.value.replace(/\D/g, '')) || 0 })}
+                aria-label={`Giá mốc ${i + 1}`}
                 className="min-w-0 flex-1 text-right text-[15px] tabular-nums outline-none"
               />
               <span className="text-sm text-muted">đ</span>
-            </label>
+              <button
+                type="button"
+                disabled={draft.options.length <= 1}
+                onClick={() => {
+                  setTexts({});
+                  setDraft((d) => (d ? { ...d, options: d.options.filter((_, k) => k !== i) } : d));
+                }}
+                aria-label={`Xoá mốc ${i + 1}`}
+                title="Xoá mốc này"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-canvas hover:text-danger disabled:opacity-30"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {draft.options.length < MAX_PRO_OPTIONS && (
+            <button
+              type="button"
+              onClick={() =>
+                setDraft((d) => {
+                  if (!d) return d;
+                  const nums = d.options.map((o) => o.months).filter((m) => Number.isFinite(m) && !isLifetime(m));
+                  const next = Math.min(MAX_PRO_MONTHS, Math.max(0, ...nums) + 3);
+                  // Chèn trước gói Vĩnh viễn (nếu có) để Vĩnh viễn luôn cuối
+                  const at = d.options.findIndex((o) => isLifetime(o.months));
+                  const options = [...d.options];
+                  options.splice(at < 0 ? options.length : at, 0, { months: next, price: 0 });
+                  setTexts({});
+                  return { ...d, options };
+                })
+              }
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary transition hover:underline"
+            >
+              <Plus className="size-4" /> Thêm mốc thời hạn
+            </button>
+          )}
+          {draft.options.length < MAX_PRO_OPTIONS && !draft.options.some((o) => isLifetime(o.months)) && (
+            <button
+              type="button"
+              onClick={() =>
+                setDraft((d) => (d ? { ...d, options: [...d.options, { months: LIFETIME_MONTHS, price: 0 }] } : d))
+              }
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary transition hover:underline"
+            >
+              <InfinityIcon className="size-4" /> Thêm gói Vĩnh viễn
+            </button>
+          )}
+          {optionsErr ? (
+            <p className="text-sm text-danger">{optionsErr}</p>
+          ) : (
+            <p className="text-sm text-muted">
+              Khách thấy: {draft.options.filter((o) => o.price > 0).map((o) => monthsLabel(o.months)).join(' · ') || 'chưa bán mốc nào'}
+              . Khách đã mua giữ nguyên hạn cũ.
+            </p>
+          )}
         </div>
 
         <GatewayConfig
@@ -216,7 +302,7 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
           {msg && <p className={`text-sm ${msg.ok ? 'text-accent-green' : 'text-danger'}`}>{msg.text}</p>}
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !!optionsErr}
             onClick={() => void save()}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
           >

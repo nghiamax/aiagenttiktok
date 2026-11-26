@@ -455,7 +455,7 @@ export function executeProposal(proposalId: string, by?: ActorRef, actor: 'appro
     const lookback = Math.max(1, cfg.guardrails.lookbackDays ?? 7);
     const snapshot = withRecentActions((await getSnapshot({ from: vnDate(lookback - 1), to: vnDate(0) }, false)).snapshot);
     // Xét lại cả khung 14 ngày (xác nhận) như lúc quét
-    const check = recheckProposal(p, cfg, getSettings(), snapshot, await loadConfirmSnaps(cfg.guardrails));
+    const check = recheckProposal(p, cfg, getSettings(), snapshot, await loadConfirmSnaps(cfg.guardrails), getRuntime().actions);
     if (!check.ok) {
       updateRuntime((r) => {
         const x = r.proposals.find((y) => y.id === proposalId);

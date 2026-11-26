@@ -105,6 +105,8 @@ export function recheckProposal(
   snapshot: AdsSnapshot,
   /** Khung 14 / 30 ngày để xác nhận (thiếu = chỉ xét 1 khung) */
   confirm: ConfirmSnaps = { d14: null, d30: null },
+  /** Nhật ký thao tác (BOT chỉnh ROI & ngân sách xét lịch sử bước thử) */
+  actions: AgentActionLog[] = [],
 ): { ok: true; match: ConfirmedTarget } | { ok: false; reason: string } {
   const rule = cfg.rules.find((r) => r.id === p.ruleId);
   if (!rule) return { ok: false, reason: 'Quy tắc đã bị xoá' };
@@ -112,8 +114,8 @@ export function recheckProposal(
   if (!rule.trigger) return { ok: false, reason: 'Quy tắc chưa chọn nhóm' };
   const k = keyOf(p.actionType, p.target);
   // Đủ 3 khung: đã xác nhận (7 = 14) + lỗ âm thầm (14 + 30, 7 ngày chi ít); dấu hiệu / đang hồi phục → không làm
-  const sameTarget = (t: RuleTarget) => keyOf(rule.actionType, t.target) === k;
-  const r = matchRuleTrend(rule, settings, snapshot, confirm);
+  const sameTarget = (t: RuleTarget) => keyOf(t.actionType ?? rule.actionType, t.target) === k;
+  const r = matchRuleTrend(rule, settings, snapshot, confirm, actions);
   const match = r.kept.find(sameTarget);
   if (!match) {
     if (r.unconfirmed.some(sameTarget)) return { ok: false, reason: `${UNCONFIRMED_REASON} — chờ thêm, chưa nên làm lúc này` };
@@ -121,7 +123,7 @@ export function recheckProposal(
     const range = snapshot.range ? `Số liệu ${ddmm(snapshot.range.from)}–${ddmm(snapshot.range.to)}` : 'Số liệu mới';
     return { ok: false, reason: `${range}:${currentText(p.target, snapshot)} — không còn khớp quy tắc «${rule.name}»` };
   }
-  const why = ineligibleReason(rule.actionType, rule.params, match);
+  const why = ineligibleReason(match.actionType ?? rule.actionType, match.params ?? rule.params, match);
   if (why) return { ok: false, reason: why };
   return { ok: true, match };
 }
@@ -184,8 +186,10 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
     // Xét lại đề xuất đang chờ theo số liệu mới: không còn khớp → tự huỷ; còn khớp → cập nhật số
     for (const p of rt.proposals) {
       if (p.status !== 'pending') continue;
-      const r = recheckProposal(p, cfg, settings, snapshot, confirm);
+      const r = recheckProposal(p, cfg, settings, snapshot, confirm, rt.actions);
       if (r.ok) {
+        // BOT chỉnh ROI & ngân sách: % đổi tính lại theo số mới
+        if (r.match.params) p.params = { ...r.match.params };
         p.before = windowOf(r.match, range);
         p.reason = r.match.reason;
         if (r.match.offset) p.offset = r.match.offset;
@@ -230,11 +234,14 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       const cooldownMs = (rule.cooldownHours ?? guardrails.cooldownHours) * HOUR;
 
       // Chỉ đối tượng đã xác nhận bằng khung 14 ngày (Sếp chốt 22/11); còn lại ghi "bỏ qua"
-      const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm);
+      const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm, rt.actions);
       unconfirmed.forEach(() => skip(UNCONFIRMED_REASON));
       recovering.forEach(() => skip(RECOVERING_REASON));
       for (const t of kept) {
-        const k = keyOf(rule.actionType, t.target);
+        // BOT chỉnh ROI & ngân sách: mỗi chiến dịch có hành động / tham số riêng
+        const actionType = t.actionType ?? rule.actionType;
+        const ruleParams = t.params ?? rule.params;
+        const k = keyOf(actionType, t.target);
         if (pendingKeys.has(k)) {
           skip('Đã có đề xuất đang chờ');
           continue;
@@ -244,7 +251,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           continue;
         }
 
-        if (rule.actionType === 'remind') {
+        if (actionType === 'remind') {
           const log: AgentActionLog = {
             id: crypto.randomUUID(),
             executedAt: ranAt,
@@ -263,7 +270,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           continue;
         }
 
-        const why = ineligibleReason(rule.actionType, rule.params, t);
+        const why = ineligibleReason(actionType, ruleParams, t);
         if (why) {
           skip(why);
           continue;
@@ -272,7 +279,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           skip('Đủ số thao tác tối đa hôm nay');
           continue;
         }
-        if (rule.actionType === 'boost_creative') {
+        if (actionType === 'boost_creative') {
           const budget = rule.params.boostBudget ?? 0;
           if (todayBoost + budget > guardrails.dailyBoostCap) {
             skip('Vượt trần tăng cường hôm nay');
@@ -282,7 +289,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
         }
 
         // Đổi ngân sách vượt giới hạn %/ngày → chỉ đề xuất đúng mức giới hạn
-        const params = { ...rule.params };
+        const params = { ...ruleParams };
         if (params.budgetChangePct != null) {
           params.budgetChangePct = Math.max(
             -guardrails.maxBudgetDecreasePct,
@@ -295,7 +302,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
           createdAt: ranAt,
           expiresAt: new Date(now + PROPOSAL_TTL_HOURS * HOUR).toISOString(),
           ruleId: rule.id,
-          actionType: rule.actionType,
+          actionType,
           target: t.target,
           params,
           reason: t.reason,

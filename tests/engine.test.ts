@@ -276,3 +276,28 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     });
   });
 });
+
+describe('BOT chỉnh ROI & ngân sách (Sếp chốt 26/11)', () => {
+  it('quy tắc c-tune → đề xuất hành động + % riêng của chiến dịch, kèm mã tình huống', async () => {
+    mock.settings = settingsWith({ pA: 3.5, pB: 4.5 });
+    mock.snapshot = snapshot({
+      range: { from: '2026-11-12', to: '2026-11-18' },
+      campaigns: [campaign({ id: 'c1', cost: 3.2e6, revenue: 14e6, orders: 40, budget: 700_000, targetRoi: 4 })],
+      products: [
+        product({ id: 'pA', campaignId: 'c1', revenue: 10e6, cost: 2e6, orders: 30 }),
+        product({ id: 'pB', campaignId: 'c1', revenue: 4e6, cost: 1.2e6, orders: 10 }),
+      ],
+    });
+    mock.config.rules = [rule({ id: 'tune-campaign', level: 'campaign', trigger: 'c-tune', actionType: 'update_roi_target', params: {} })];
+    const s = await runAgent();
+    expect(s.proposals).toBe(1);
+    expect(mock.runtime.proposals[0]).toMatchObject({
+      actionType: 'update_roi_target',
+      target: { campaignId: 'c1' },
+      params: { roiTargetChangePct: 5, tune: { code: 'C2', step: 1 } },
+    });
+    // Chạy lại: đề xuất đang chờ được giữ, không tạo trùng
+    await runAgent();
+    expect(mock.runtime.proposals.filter((p) => p.status === 'pending')).toHaveLength(1);
+  });
+});

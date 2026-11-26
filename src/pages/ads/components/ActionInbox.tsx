@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import CampaignTuneTiles from './CampaignTuneTiles';
+import { useCampaignTune } from '../useCampaignTune';
 import { AlertTriangle, ArrowRight, Bot, Plus, SlidersHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Card from '../../../components/ui/Card';
@@ -70,7 +72,10 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
   // Mọi sản phẩm đều thiếu hoà vốn → nhóm so với hoà vốn chắc chắn trống, nói rõ thay vì hiện 0
   const breakEvenBlocked = level !== 'campaign' && missingBreakEven > 0;
 
-  const levelOptions = LEVEL_TABS.map((l) => ({ value: l, label: `${LEVEL_NAME[l]} ${formatNumber(total(summary[l]))}` }));
+  // Tab Chiến dịch đếm theo BOT chỉnh ROI & ngân sách (số chiến dịch có việc cần làm)
+  const tunes = useCampaignTune();
+  const tuneCount = [...tunes.values()].filter((t) => !t.signal && !!t.action).length;
+  const levelOptions = LEVEL_TABS.map((l) => ({ value: l, label: `${LEVEL_NAME[l]} ${formatNumber(l === 'campaign' ? tuneCount : total(summary[l]))}` }));
 
   return (
     <Card className="overflow-hidden">
@@ -138,7 +143,9 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
         </div>
       )}
 
-      {tiles.length === 0 ? (
+      {level === 'campaign' ? (
+        <CampaignTuneTiles onOpen={(id) => onOpenAction('campaign', id)} />
+      ) : tiles.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted">
           Chưa có nhóm {unit} nào bật “Hiện ở Tổng quan”. Bật trong Care Ads → Nhóm.
         </p>

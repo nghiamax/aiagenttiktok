@@ -36,6 +36,8 @@ export interface AgentRuleParams {
   budgetChangePct?: number;
   /** Đổi ROI mục tiêu của chiến dịch (%): dương = tăng, âm = giảm */
   roiTargetChangePct?: number;
+  /** BOT chỉnh ROI & ngân sách: mã tình huống, bước thử, lùi lại thao tác nào */
+  tune?: { code: string; step?: number; revertOf?: string };
   /** Giá trị trên TikTok trước / sau thao tác (ghi lúc thực thi, dùng để hoàn tác) */
   prev?: ExecutedValues;
   next?: ExecutedValues;

@@ -9,7 +9,7 @@ import {
 import { LEVEL_UNIT } from '../groups';
 import type { AdsSettings } from '../../../../shared/settings';
 import type { AdsSnapshot } from '../types';
-import type { AgentRule } from './types';
+import type { AgentActionLog, AgentRule } from './types';
 
 export interface RuleMatches {
   /** Đơn vị đếm: "chiến dịch" / "sản phẩm" / "video" */
@@ -27,14 +27,16 @@ export function matchRuleTargets(
   snapshot: AdsSnapshot,
   /** Khung 14 / 30 ngày: đối tượng 14 ngày không cùng nhóm → "chưa xác nhận" (giống Agent) */
   confirm: ConfirmSnaps = { d14: null, d30: null },
+  /** Nhật ký (BOT chỉnh ROI & ngân sách cần lịch sử bước thử) */
+  actions: AgentActionLog[] = [],
 ): RuleMatches {
   const names: string[] = [];
   const skipped: Record<string, number> = {};
-  const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm);
+  const { kept, unconfirmed, recovering } = matchRuleTrend(rule, settings, snapshot, confirm, actions);
   if (unconfirmed.length > 0) skipped[UNCONFIRMED_REASON] = unconfirmed.length;
   if (recovering.length > 0) skipped[RECOVERING_REASON] = recovering.length;
   for (const t of kept) {
-    const why = ineligibleReason(rule.actionType, rule.params, t);
+    const why = ineligibleReason(t.actionType ?? rule.actionType, t.params ?? rule.params, t);
     if (why) skipped[why] = (skipped[why] ?? 0) + 1;
     else names.push(t.name);
   }

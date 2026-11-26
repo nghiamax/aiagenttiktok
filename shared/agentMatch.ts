@@ -1,5 +1,6 @@
 import type { AdsSnapshot, AdsVideo, VideoStatus } from './adsSnapshot.js';
-import type { AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
+import type { AgentActionLog, AgentActionType, AgentRule, AgentRuleParams, AgentTarget, RuleLevel, VideoOffset } from './agentTypes.js';
+import { TUNE_CODES, TUNE_TRIGGER, tuneDecisions } from './campaignTune.js';
 import { classifyCampaign, classifyProduct, classifyVideo } from './classify.js';
 import { breakEvenOf, findGroup, type AdsSettings } from './settings.js';
 import { isSpendGated, matchesIgnoringSpend, type WindowStat } from './trend.js';
@@ -107,6 +108,9 @@ export interface RuleTarget {
   campaignRunning: boolean;
   /** Cấp sản phẩm: đã tắt khỏi chiến dịch */
   productExcluded?: boolean;
+  /** Hành động / tham số riêng của đối tượng (BOT chỉnh ROI & ngân sách) — thay hành động của quy tắc */
+  actionType?: AgentActionType;
+  params?: AgentRuleParams;
 }
 
 const inScope = (rule: AgentRule, campaignId: string, productId?: string) =>
@@ -321,6 +325,51 @@ function reEnableRuleTargets(rule: AgentRule, settings: AdsSettings, d7: AdsSnap
     });
 }
 
+/** Đối tượng của quy tắc "BOT chỉnh ROI & ngân sách": chiến dịch có hành động; khác hướng 7 / 14 ngày = dấu hiệu */
+function tuneRuleTargets(
+  rule: AgentRule,
+  settings: AdsSettings,
+  d7: AdsSnapshot,
+  snaps: ConfirmSnaps,
+  actions: AgentActionLog[],
+  now: number,
+): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
+  const kept: ConfirmedTarget[] = [];
+  const unconfirmed: RuleTarget[] = [];
+  for (const d of tuneDecisions(d7, snaps.d14, settings, actions, now).values()) {
+    if (!inScope(rule, d.campaignId)) continue;
+    const c = d7.campaigns.find((x) => x.id === d.campaignId)!;
+    const target = { campaignId: d.campaignId, productId: '', videoId: '' };
+    const t: RuleTarget = {
+      target,
+      name: c.name,
+      reason: `${TUNE_CODES[d.code]}: ${d.reason}`,
+      cost: d.econ.cost,
+      revenue: d.econ.revenue,
+      orders: d.econ.orders,
+      roi: d.econ.roi,
+      breakEven: d.econ.breakEven,
+      campaignRunning: c.status === 'running',
+    };
+    if (d.signal) {
+      unconfirmed.push(t);
+      continue;
+    }
+    if (!d.action) continue;
+    const pct = d.action.pct;
+    kept.push({
+      ...t,
+      actionType: d.action.type,
+      params: {
+        ...(d.action.type === 'update_budget' ? { budgetChangePct: pct } : { roiTargetChangePct: pct }),
+        tune: { code: d.code, ...(d.step && { step: d.step }), ...(d.action.revertOf && { revertOf: d.action.revertOf }) },
+      },
+      windows: { d14: snaps.d14 ? metricsOf(target, snaps.d14) : null, d30: snaps.d30 ? metricsOf(target, snaps.d30) : null },
+    });
+  }
+  return { kept, unconfirmed, recovering: [] };
+}
+
 /** Lý do bỏ qua khi khung 14 ngày không cùng nhóm */
 export const UNCONFIRMED_REASON = 'Mới có dấu hiệu — 14 ngày chưa cùng nhóm';
 
@@ -360,7 +409,12 @@ export function matchRuleTrend(
   settings: AdsSettings,
   d7: AdsSnapshot,
   snaps: ConfirmSnaps,
+  /** Nhật ký thao tác — BOT chỉnh ROI & ngân sách cần lịch sử bước thử */
+  actions: AgentActionLog[] = [],
+  now = Date.now(),
 ): { kept: ConfirmedTarget[]; unconfirmed: RuleTarget[]; recovering: RuleTarget[] } {
+  // BOT chỉnh ROI & ngân sách (Sếp chốt 26/11): bảng quyết định theo tình huống, mỗi chiến dịch 1 hành động riêng
+  if (ruleLevel(rule) === 'campaign' && rule.trigger === TUNE_TRIGGER) return tuneRuleTargets(rule, settings, d7, snaps, actions, now);
   // Nhóm hệ thống "Cân nhắc bật lại": hệ thống tự đánh giá theo 30 / 14 ngày (không dùng luật 7 = 14 ngày)
   if (ruleLevel(rule) === 'product' && rule.trigger === REENABLE_GROUP_ID) {
     return { kept: reEnableRuleTargets(rule, settings, d7, snaps), unconfirmed: [], recovering: [] };

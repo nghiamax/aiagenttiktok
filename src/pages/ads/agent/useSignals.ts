@@ -42,7 +42,7 @@ export function useSignals(): SignalItem[] {
     for (const rule of state.rules) {
       if (rule.mode === 'off' || !rule.trigger || rule.actionType === 'remind') continue;
       const level = ruleLevel(rule);
-      const { unconfirmed, recovering } = matchRuleTrend(rule, settings, d7, trends.confirm);
+      const { unconfirmed, recovering } = matchRuleTrend(rule, settings, d7, trends.confirm, state.actions);
       const list = [...unconfirmed.map((t) => ({ t, kind: 'signal' as const })), ...recovering.map((t) => ({ t, kind: 'recovering' as const }))];
       for (const { t, kind } of list) {
         if (ineligibleReason(rule.actionType, rule.params, t)) continue;

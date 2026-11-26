@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { AlertTriangle, Check, ChevronDown, X } from 'lucide-react';
 import { formatDateTime, formatNumber } from '../../../../lib/format';
+import { Link } from 'react-router-dom';
 import { offsetBadge, offsetTotal } from '../../../../../shared/offsetText';
+import { TUNE_CODES, type TuneCode } from '../../../../../shared/campaignTune';
 import type { AgentProposal } from '../types';
 import { ActionCell, ITEM_GRID, TargetCell } from './AgentBits';
 import MetricWindowBox from './MetricWindowBox';
@@ -53,6 +55,24 @@ export default function ProposalItem({ item, ruleName, selected, busy, onToggle,
 
       <div className="min-w-0">
         <ActionCell actionType={item.actionType} ruleName={ruleName} params={item.params} />
+        {/* BOT chỉnh ROI & ngân sách: bước thử / lùi lại + mã tình huống + mở hộp chi tiết chiến dịch */}
+        {item.params.tune && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                item.params.tune.revertOf ? 'bg-rose-50 text-danger' : 'bg-violet-50 text-accent-violet'
+              }`}
+            >
+              {item.params.tune.revertOf ? 'Lùi lại' : `Bước thử ${item.params.tune.step ?? 1}`}
+            </span>
+            <span className="rounded-full bg-canvas px-2.5 py-1 text-xs font-medium text-muted">
+              {item.params.tune.code} · {TUNE_CODES[item.params.tune.code as TuneCode] ?? ''}
+            </span>
+            <Link to={`/ads?tab=campaigns&tune=${item.target.campaignId}`} className="text-xs font-medium text-primary hover:text-primary-hover">
+              Xem chiến dịch
+            </Link>
+          </div>
+        )}
         {offset && (
           <button
             type="button"

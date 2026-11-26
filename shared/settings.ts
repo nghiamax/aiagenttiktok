@@ -1,4 +1,5 @@
 import { normalizeGroups, type GroupDef, type GroupLevel } from './groups.js';
+import type { CampaignTuneSettings } from './campaignTune.js';
 
 /** ID nhóm hệ thống cấp sản phẩm "Cân nhắc bật lại" (shared/reEnable.ts — để đây tránh vòng import) */
 export const REENABLE_GROUP = 'p-reenable';
@@ -17,6 +18,8 @@ export interface AdsSettings {
   campaignGroups: GroupDef[];
   /** Chỉnh riêng bộ gợi ý cho shop này (shared/suggestRules.ts): tắt gợi ý / đổi hệ số. Thiếu = dùng mặc định chung */
   suggestOverrides?: Record<string, SuggestOverride>;
+  /** Chiến lược điều chỉnh ROI mục tiêu & ngân sách chiến dịch (Sếp chốt 26/11) — thiếu = mặc định DEFAULT_TUNE */
+  campaignTune?: Partial<CampaignTuneSettings>;
 }
 
 export interface SuggestOverride {
@@ -58,6 +61,7 @@ export function normalizeSettings(saved: Partial<AdsSettings> | null | undefined
     productGroups: groupsFor('product'),
     campaignGroups: groupsFor('campaign'),
     suggestOverrides: { ...defaults.suggestOverrides, ...saved?.suggestOverrides },
+    campaignTune: { ...defaults.campaignTune, ...saved?.campaignTune },
   };
 }
 

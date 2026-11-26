@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Plus, RotateCcw } from 'lucide-react';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
+import CampaignTuneCard from './CampaignTuneCard';
 import { formatNumber } from '../../../../lib/format';
 import { buildTrendIndex } from '../../../../../shared/trend';
 import { REENABLE_GROUP_ID, reEnableCandidates } from '../../../../../shared/reEnable';
@@ -192,6 +193,16 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
   const missingBe = uniqueProducts.filter((p) => breakEvenOf(settings, p.id) == null).length;
   const prices = productPrices(trends.snaps);
 
+  // Cấp chiến dịch (Sếp chốt 26/11): thay danh sách nhóm bằng Chiến lược điều chỉnh ROI & ngân sách
+  if (level === 'campaign') {
+    return (
+      <div className="space-y-5 p-5">
+        <SegmentedControl options={LEVEL_OPTIONS} value={level} onChange={changeLevel} ariaLabel="Cấp nhóm" />
+        <CampaignTuneCard />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -202,7 +213,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
       </div>
 
       {/* ROI hoà vốn — dùng trong điều kiện "ROI hoà vốn ×" (chiến dịch không so với hoà vốn) */}
-      {level !== 'campaign' && (
+      {(
         <section className="rounded-2xl border border-line bg-canvas/60 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -283,7 +294,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
         </div>
       </div>
 
-      {focusProduct && level !== 'campaign' && (
+      {focusProduct && (
         <p className="rounded-xl bg-primary-soft px-4 py-3 text-sm text-primary">
           Đang chỉnh riêng cho <b>{focusProduct.name}</b> — ở nhóm muốn đổi, bấm <b>+ Riêng cho {focusProduct.name}</b> rồi sửa điều kiện.
           Sản phẩm này sẽ chỉ xét theo điều kiện riêng ở nhóm đó.
@@ -309,7 +320,7 @@ export default function GroupsEditor({ level, onLevelChange, rules, onOpenBreakE
             unsaved={isUnsaved(g)}
             products={uniqueProducts}
             focusProductId={focusProduct ? focusProductId : null}
-            profits={level === 'campaign' ? undefined : profits}
+            profits={profits}
             manualProfit={profitDraft}
             onManualProfit={setManualProfit}
           />

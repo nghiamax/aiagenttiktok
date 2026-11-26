@@ -26,7 +26,10 @@
       "name": "Tăng cường video tốt",
       "trigger": "scale",
       "actionType": "boost_creative",
-      "params": { "boostBudget": 50000, "boostDays": 1 },
+      "params": {
+        "boostBudget": 50000,
+        "boostDays": 1
+      },
       "mode": "off",
       "cooldownHours": 24,
       "campaignIds": null,
@@ -42,6 +45,17 @@
       "cooldownHours": 72,
       "campaignIds": null,
       "productIds": null
+    },
+    {
+      "id": "tune-campaign",
+      "name": "BOT chỉnh ROI & ngân sách",
+      "level": "campaign",
+      "trigger": "c-tune",
+      "actionType": "update_roi_target",
+      "params": {},
+      "mode": "off",
+      "cooldownHours": 72,
+      "campaignIds": null
     }
   ],
   "proposals": [],

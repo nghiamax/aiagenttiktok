@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { TUNE_TRIGGER } from '../../../../../shared/campaignTune';
+import { useAgentStore } from '../agentStore';
 import { AlertTriangle, ChevronDown, FolderOpen, Package, Trash2 } from 'lucide-react';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import Modal from '../../../../components/ui/Modal';
@@ -49,12 +52,15 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
   const level = ruleLevel(rule);
   // Đếm đúng như Agent: 7 ngày tính cả hôm nay + xác nhận 14 ngày (không theo ô chọn ngày)
   const trends = useTrend();
-  const matches = matchRuleTargets(rule, settings, trends.snaps.d7, trends.confirm);
+  const { state: agentState } = useAgentStore();
+  const matches = matchRuleTargets(rule, settings, trends.snaps.d7, trends.confirm, agentState.actions);
+  // BOT chỉnh ROI & ngân sách (Sếp chốt 26/11): chạy theo Chiến lược điều chỉnh, không chọn nhóm / %
+  const tune = level === 'campaign' && rule.trigger === TUNE_TRIGGER;
   const exampleTarget = campaignTargetRoi(snapshot, rule.campaignIds?.[0] ?? null);
   const unitName = LEVEL_UNIT[level];
   const group = rule.trigger ? findGroup(settings, rule.trigger, level) : undefined;
   // Chưa chọn nhóm (bản cũ) hoặc nhóm đã xoá → mở sẵn ô chọn nhóm
-  const [pickingGroup, setPickingGroup] = useState(!group);
+  const [pickingGroup, setPickingGroup] = useState(!group && !tune);
   const campaignId = rule.campaignIds?.[0] ?? null;
   const productId = rule.productIds?.[0] ?? null;
 
@@ -91,7 +97,15 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
         <dt className="font-semibold text-muted">Khi</dt>
         <dd className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            {group ? (
+            {tune ? (
+              <span>
+                Theo{' '}
+                <Link to="?view=groups&level=campaign" className="font-medium text-primary hover:text-primary-hover">
+                  Chiến lược điều chỉnh
+                </Link>{' '}
+                (Phân nhóm → Chiến dịch): chiến dịch lỗ, lời mà còn dư địa, hoặc bước thử vừa rồi làm xấu đi
+              </span>
+            ) : group ? (
               <>
                 <ActionBadge action={rule.trigger} level={level} />
                 <span>{groupDescription(group, level)}</span>
@@ -103,7 +117,7 @@ export default function RuleCard({ rule, settings, guardrails, onChange, onRemov
                 hoặc xoá quy tắc.
               </span>
             )}
-            {group && (
+            {group && !tune && (
               <button
                 type="button"
                 onClick={() => setPickingGroup((v) => !v)}
@@ -128,7 +142,11 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
           </p>
         </dd>
         <dt className="font-semibold text-muted">Thì</dt>
-        <dd>{actionText(rule)}</dd>
+        <dd>
+          {tune
+            ? 'Mỗi lần đổi 1 thứ — tăng ngân sách, nâng hoặc hạ ROI mục tiêu theo tình huống; đo lại sau thời gian chờ, xấu đi thì đề xuất trả về số cũ'
+            : actionText(rule)}
+        </dd>
         <dt className="font-semibold text-muted md:pt-3">Phạm vi</dt>
         <dd className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <FilterSelect
@@ -192,7 +210,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             )}
           </>
         )}
-        {rule.actionType === 'update_budget' && (
+        {!tune && rule.actionType === 'update_budget' && (
           <PctChangeField
             label="Đổi ngân sách ngày"
             value={rule.params.budgetChangePct ?? 20}
@@ -200,7 +218,7 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             warning={budgetLimitWarning(rule.params, guardrails)}
           />
         )}
-        {rule.actionType === 'update_roi_target' && (
+        {!tune && rule.actionType === 'update_roi_target' && (
           <div>
             <PctChangeField
               label="Đổi ROI mục tiêu"
@@ -215,13 +233,14 @@ onChange={(id) => onChange({ trigger: id, conditionSets: undefined })}
             )}
           </div>
         )}
-        <NumberField
+        {!tune && <NumberField
           label="Thời gian chờ"
           hint={`Không thao tác lại trên cùng ${unitName}`}
           suffix="giờ"
           value={rule.cooldownHours}
           onCommit={(n) => onChange({ cooldownHours: n })}
-        />
+        />}
+        {tune && <p className="text-xs text-muted sm:col-span-3">Các mức (bước %, ngưỡng tiêu ngân sách, thời gian chờ, sàn / trần ROI mục tiêu) chỉnh ở Chiến lược điều chỉnh.</p>}
       </div>
 
       {onRemove && (

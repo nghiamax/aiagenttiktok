@@ -44,6 +44,7 @@ vi.mock('../server/ads/cache', () => ({
 vi.mock('../server/agent/engine', () => ({
   recheckProposal: () => (mock.outdatedReason ? { ok: false, reason: mock.outdatedReason } : { ok: true, match: {} }),
   loadConfirmSnaps: async () => ({ d14: null, d30: null }),
+  withRecentActions: <T,>(s: T) => s,
 }));
 
 vi.mock('../server/store', () => ({

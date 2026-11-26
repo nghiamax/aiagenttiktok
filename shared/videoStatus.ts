@@ -45,3 +45,53 @@ export const effectiveStatus = (v: AdsVideo) => (v.crossProduct && v.mainStatus 
 
 /** Dòng cần ủy quyền giả nằm ở chiến dịch khác với nơi video chạy thật */
 export const isOtherCampaign = (v: AdsVideo) => !!v.crossProduct && !!v.mainCampaignId && v.mainCampaignId !== v.campaignId;
+
+/** Thao tác gỡ / thêm lại video tối thiểu cần để đè trạng thái (khớp AgentActionLog) */
+export interface CreativeActionLike {
+  executedAt: string;
+  actionType: string;
+  status: string;
+  target: { campaignId: string; videoId: string };
+}
+
+/** Thao tác gỡ / thêm lại đã thành công — dùng làm khoá ổn định (đổi mới tính lại) */
+export const creativeSuccesses = <T extends CreativeActionLike>(actions: T[]): T[] =>
+  actions.filter((a) => (a.actionType === 'remove_creative' || a.actionType === 'add_creative') && a.status === 'success');
+
+/**
+ * Snapshot lưu sẵn (cache tới 6 giờ) chưa biết video vừa được gỡ / thêm lại → đè trạng thái theo Nhật ký:
+ * thao tác thành công SAU lúc dựng snapshot, mỗi (chiến dịch, video) lấy thao tác mới nhất.
+ * Gỡ → mọi dòng của video trong chiến dịch thành `excluded`; thêm lại → dòng đang `excluded` thành `delivering`.
+ * Không có gì đổi → trả nguyên snapshot. Dùng chung web (bảng, nhóm, hộp Tổng quan) + server (Agent).
+ */
+export function applyRecentActions<S extends AdsSnapshot>(snapshot: S, actions: CreativeActionLike[]): S {
+  const since = Date.parse(snapshot.updatedAt ?? '') || 0;
+  const latest = new Map<string, CreativeActionLike>();
+  for (const a of creativeSuccesses(actions)) {
+    const t = Date.parse(a.executedAt);
+    if (!(t > since)) continue;
+    const k = `${a.target.campaignId}/${a.target.videoId}`;
+    const prev = latest.get(k);
+    if (!prev || t > Date.parse(prev.executedAt)) latest.set(k, a);
+  }
+  if (latest.size === 0) return snapshot;
+  let changed = false;
+  const videos = snapshot.videos.map((v) => {
+    if (v.contentType === 'product_card') return v;
+    // Dòng cần ủy quyền giả: trạng thái thật nằm ở nơi chạy thật (mainCampaignId)
+    const own = latest.get(`${v.campaignId}/${v.id}`);
+    const main = v.crossProduct && v.mainCampaignId ? latest.get(`${v.mainCampaignId}/${v.id}`) : undefined;
+    let next = v;
+    if (own) {
+      const status = own.actionType === 'remove_creative' ? 'excluded' : v.status === 'excluded' ? 'delivering' : v.status;
+      if (status !== v.status && v.status !== 'authorization_needed') next = { ...next, status };
+    }
+    if (main && next.mainStatus) {
+      const ms = main.actionType === 'remove_creative' ? 'excluded' : next.mainStatus === 'excluded' ? 'delivering' : next.mainStatus;
+      if (ms !== next.mainStatus) next = { ...next, mainStatus: ms };
+    }
+    if (next !== v) changed = true;
+    return next;
+  });
+  return changed ? { ...snapshot, videos } : snapshot;
+}

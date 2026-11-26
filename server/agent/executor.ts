@@ -25,7 +25,7 @@ import { requireAccount } from '../tiktok/link.js';
 import { callReadTool } from '../tiktok/mcpClient.js';
 import { callWriteTool, type WriteTool } from '../tiktok/writeTools.js';
 import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
-import { loadConfirmSnaps, recheckProposal } from './engine.js';
+import { loadConfirmSnaps, recheckProposal, withRecentActions } from './engine.js';
 
 /**
  * GIAI ĐOẠN C — thực thi thật trên TikTok.
@@ -453,7 +453,7 @@ export function executeProposal(proposalId: string, by?: ActorRef, actor: 'appro
     // Số liệu mới không còn khớp quy tắc (vd ROI đã lên trên hoà vốn) → không chạy, đề xuất tự huỷ
     const cfg = getAgentConfig();
     const lookback = Math.max(1, cfg.guardrails.lookbackDays ?? 7);
-    const { snapshot } = await getSnapshot({ from: vnDate(lookback), to: vnDate(1) }, false);
+    const snapshot = withRecentActions((await getSnapshot({ from: vnDate(lookback), to: vnDate(1) }, false)).snapshot);
     // Xét lại cả khung 14 ngày (xác nhận) như lúc quét
     const check = recheckProposal(p, cfg, getSettings(), snapshot, await loadConfirmSnaps(cfg.guardrails));
     if (!check.ok) {

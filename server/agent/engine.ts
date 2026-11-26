@@ -22,7 +22,8 @@ import type {
 import { shortVnd } from '../../shared/format.js';
 import type { AdsSettings } from '../../shared/settings.js';
 import { getSnapshot, todayVN } from '../ads/cache.js';
-import { getAgentConfig, getSettings, updateRuntime } from '../store.js';
+import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
+import { applyRecentActions } from '../../shared/videoStatus.js';
 
 /**
  * Một lượt chạy của Agent: CHỈ ĐỌC số liệu, tạo đề xuất (chờ Sếp duyệt) và ghi nhắc việc.
@@ -136,8 +137,11 @@ export async function loadConfirmSnaps(guardrails: AgentGuardrails, fresh = fals
       .then((r) => r.snapshot)
       .catch(() => null);
   const [d14, d30] = await Promise.all([read(14, fresh), read(30, false)]);
-  return { d14, d30 };
+  return { d14: d14 && withRecentActions(d14), d30: d30 && withRecentActions(d30) };
 }
+
+/** Snapshot cache chưa biết video vừa gỡ / thêm lại → đè trạng thái theo Nhật ký (giống web) */
+export const withRecentActions = (s: AdsSnapshot): AdsSnapshot => applyRecentActions(s, getRuntime().actions);
 
 /** Ghi số 14 / 30 ngày + "kéo dài" vào đề xuất */
 function applyWindows(p: AgentProposal, t: ConfirmedTarget) {
@@ -163,7 +167,7 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
   // Xét n ngày gần nhất tính đến hôm qua (ngày đã đủ số)
   const range = { from: vnDate(lookback), to: vnDate(1) };
   summary.range = range;
-  const { snapshot } = await getSnapshot(range, opts?.fresh === true);
+  const snapshot = withRecentActions((await getSnapshot(range, opts?.fresh === true)).snapshot);
   const confirm = await loadConfirmSnaps(guardrails, opts?.fresh === true);
   const settings = getSettings();
   const now = Date.now();

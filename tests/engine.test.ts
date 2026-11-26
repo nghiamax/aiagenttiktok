@@ -20,6 +20,7 @@ vi.mock('../server/ads/cache', () => ({
 vi.mock('../server/store', () => ({
   getAgentConfig: () => mock.config,
   getSettings: () => mock.settings,
+  getRuntime: () => mock.runtime,
   updateRuntime: (fn: (r: AgentRuntime) => AgentRuntime | void) => {
     mock.runtime = fn(mock.runtime) ?? mock.runtime;
     return mock.runtime;

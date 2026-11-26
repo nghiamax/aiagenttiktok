@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import staticSnapshot from '../../data/ads-snapshot.json';
 import type { AdsSnapshot } from './types';
-import { annotateCrossProduct } from '../../../shared/videoStatus';
+import { annotateCrossProduct, applyRecentActions, creativeSuccesses } from '../../../shared/videoStatus';
+import { useAgentStore } from './agent/agentStore';
 import type { TrendSnaps } from '../../../shared/trend';
 import { notifyAuthRequired } from '../../lib/api';
 import { useAuth } from '../../auth/AuthProvider';
@@ -108,7 +109,7 @@ const AdsDataContext = createContext<AdsDataValue | null>(null);
 export function AdsDataProvider({ children }: { children: ReactNode }) {
   const { guest } = useAuth();
   const [range, setRangeState] = useState<DateRange>(() => readStoredRange() ?? lastDays(7));
-  const [snapshot, setSnapshot] = useState<AdsSnapshot>(guest ? EMPTY : STATIC);
+  const [rawSnapshot, setSnapshot] = useState<AdsSnapshot>(guest ? EMPTY : STATIC);
   const [source, setSource] = useState<AdsDataSource>(guest ? 'live' : 'static');
   const [status, setStatus] = useState<AdsDataStatus>(guest ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
@@ -166,10 +167,26 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
 
   // Số liệu cố định 7 · 14 · 30 ngày đến hôm qua (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
   // không thì tải nền (server có cache). Dùng cho Gợi ý, nhóm đã xác nhận ở các bảng / hộp Tổng quan
-  const live = source === 'live' && status === 'ready' ? snapshot : null;
-  const d7 = useFixedSnapshot(7, range, live, reloadKey, guest);
-  const d14 = useFixedSnapshot(14, range, live, reloadKey, guest);
-  const d30 = useFixedSnapshot(30, range, live, reloadKey, guest);
+  const live = source === 'live' && status === 'ready' ? rawSnapshot : null;
+  const raw7 = useFixedSnapshot(7, range, live, reloadKey, guest);
+  const raw14 = useFixedSnapshot(14, range, live, reloadKey, guest);
+  const raw30 = useFixedSnapshot(30, range, live, reloadKey, guest);
+
+  // Video vừa gỡ / thêm lại thành công mà snapshot lưu sẵn (cache tới 6 giờ) chưa biết → đè trạng thái theo Nhật ký
+  // để nhóm, hộp Tổng quan, lọc "Đã gỡ" đổi ngay. Khoá theo các thao tác thành công → không tính lại mỗi lần tải Agent.
+  const { state: agentState } = useAgentStore();
+  const doneKey = creativeSuccesses(agentState.actions)
+    .map((a) => `${a.id}:${a.executedAt}`)
+    .join(',');
+  const done = useMemo(
+    () => creativeSuccesses(agentState.actions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doneKey],
+  );
+  const snapshot = useMemo(() => applyRecentActions(rawSnapshot, done), [rawSnapshot, done]);
+  const d7 = useMemo(() => raw7 && applyRecentActions(raw7, done), [raw7, done]);
+  const d14 = useMemo(() => raw14 && applyRecentActions(raw14, done), [raw14, done]);
+  const d30 = useMemo(() => raw30 && applyRecentActions(raw30, done), [raw30, done]);
   const baseline = d7 ?? snapshot;
   const trendSnaps = useMemo<TrendSnaps>(() => ({ d7: baseline, d14, d30 }), [baseline, d14, d30]);
 

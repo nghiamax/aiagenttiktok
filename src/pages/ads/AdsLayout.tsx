@@ -50,17 +50,17 @@ export default function AdsLayout() {
     );
   }
   return (
-    <AdsDataProvider>
-      <AdsSettingsProvider>
-        <AgentStoreProvider>
+    <AgentStoreProvider>
+      <AdsDataProvider>
+        <AdsSettingsProvider>
           <TrendProvider>
             <VideoGroupsMigrator />
             <WatchlistProvider>
               <Outlet />
             </WatchlistProvider>
           </TrendProvider>
-        </AgentStoreProvider>
-      </AdsSettingsProvider>
-    </AdsDataProvider>
+        </AdsSettingsProvider>
+      </AdsDataProvider>
+    </AgentStoreProvider>
   );
 }

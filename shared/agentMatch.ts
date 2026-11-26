@@ -7,7 +7,7 @@ import type { EvalContext } from './groups.js';
 import { shortVnd } from './format.js';
 import { effectiveStatus } from './videoStatus.js';
 import { REENABLE_GROUP_ID, reEnableCandidates, reEnableReason } from './reEnable.js';
-import { profitPerOrderMap, type ProfitMap } from './productProfit.js';
+import { profitContext, profitPerOrderMap, type ProfitMap } from './productProfit.js';
 
 /** Cấp của quy tắc (bản lưu cũ không có level = video) */
 export const ruleLevel = (rule: Pick<AgentRule, 'level'>): RuleLevel => rule.level ?? 'video';
@@ -345,7 +345,7 @@ function context7(level: RuleLevel, t: AgentTarget, d7: AdsSnapshot, settings: A
     breakEven: level === 'campaign' ? null : breakEvenOf(settings, t.productId),
     target: campaign?.targetRoi ?? null,
     budgetUse: level === 'campaign' && campaign?.budget && campaign.cost != null ? (cost / snapshotDays(d7) / campaign.budget) * 100 : null,
-    ...(level !== 'campaign' && { productId: t.productId, profitPerOrder: profit?.get(t.productId) ?? null }),
+    ...(level !== 'campaign' && { productId: t.productId, ...profitContext(profit, t.productId) }),
   };
 }
 

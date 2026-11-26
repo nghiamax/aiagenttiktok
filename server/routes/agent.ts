@@ -35,11 +35,12 @@ settingsRouter.put('/', requirePermission('configure'), (req, res) => {
   for (const k of ['groups', 'productGroups', 'campaignGroups'] as const) {
     if (body[k] !== undefined && !Array.isArray(body[k])) return bad(res, `${k} không hợp lệ`);
   }
-  // Chỉ giữ ROI hoà vốn là số dương
-  const breakEvenRoi = Object.fromEntries(
-    Object.entries(body.breakEvenRoi ?? getSettings().breakEvenRoi).filter(([, v]) => typeof v === 'number' && v > 0),
-  );
-  res.json({ settings: saveSettings({ ...getSettings(), ...body, breakEvenRoi }), stored: true });
+  if (body.sellingPrice !== undefined && !isObj(body.sellingPrice)) return bad(res, 'sellingPrice không hợp lệ');
+  // Chỉ giữ ROI hoà vốn / giá bán là số dương
+  const positive = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => typeof v === 'number' && v > 0)) as Record<string, number>;
+  const breakEvenRoi = positive(body.breakEvenRoi ?? getSettings().breakEvenRoi);
+  const sellingPrice = positive(body.sellingPrice ?? getSettings().sellingPrice ?? {});
+  res.json({ settings: saveSettings({ ...getSettings(), ...body, breakEvenRoi, sellingPrice }), stored: true });
 });
 
 /* ───────── Agent ───────── */

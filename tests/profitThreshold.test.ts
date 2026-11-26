@@ -4,7 +4,7 @@ import { matchRuleTrend } from '../shared/agentMatch';
 import type { AgentRule } from '../shared/agentTypes';
 import { classifyVideo } from '../shared/classify';
 import { clauseText, groupUsesBreakEven } from '../shared/groups';
-import { profitPerOrderMap } from '../shared/productProfit';
+import { productPrices, profitPerOrderMap } from '../shared/productProfit';
 import type { AdsSettings } from '../shared/settings';
 import { buildTrendIndex, isSpendGated, videoKey } from '../shared/trend';
 import { campaign, product, SHIPPED_SETTINGS, snapshot, video } from './fixtures';
@@ -35,12 +35,26 @@ describe('Ngưỡng "lần lợi nhuận 1 đơn"', () => {
     expect(classifyVideo(idle('pA', 150_000), C, S, profit)?.reason).toMatch(/Chi 150k ≥ lợi nhuận\/đơn 100k/);
   });
 
-  it('thiếu ROI hoà vốn / chưa có đơn / không truyền bảng lợi nhuận → không khớp', () => {
+  it('thiếu giá bán / hoà vốn → dự phòng 100k (sản phẩm mới chưa có đơn vẫn bị bắt); không truyền bảng → không khớp', () => {
     const noBe = withBe({});
-    expect(classifyVideo(idle('pA', 5_000_000), C, noBe, profitPerOrderMap({ d7: snap, d14: null, d30: null }, noBe))?.action).not.toBe('cut');
-    const noOrders = snapshot({ campaigns: [C], products: [product({ id: 'pA', campaignId: 'c1' })] });
-    expect(classifyVideo(idle('pA', 5_000_000), C, S, profitPerOrderMap({ d7: noOrders, d14: null, d30: null }, S))?.action).not.toBe('cut');
+    const pmNoBe = profitPerOrderMap({ d7: snap, d14: null, d30: null }, noBe);
+    expect(classifyVideo(idle('pA', 150_000), C, noBe, pmNoBe)?.action).toBe('cut');
+    expect(classifyVideo(idle('pA', 50_000), C, noBe, pmNoBe)?.action).not.toBe('cut');
+    expect(classifyVideo(idle('pA', 150_000), C, noBe, pmNoBe)?.reason).toMatch(/dự phòng/);
     expect(classifyVideo(idle('pA', 5_000_000), C, S)?.action).not.toBe('cut');
+  });
+
+  it('giá bán: Sếp nhập > giá trị đơn TB > giá niêm yết', () => {
+    const fresh = snapshot({ campaigns: [C], products: [product({ id: 'pN', campaignId: 'c1', listPrice: 600_000 }), ...products] });
+    const snaps = { d7: fresh, d14: null, d30: null };
+    const base = withBe({ pA: 3, pN: 3 });
+    const prices = productPrices(snaps, { ...base, sellingPrice: { pA: 240_000 } });
+    expect(prices.get('pA')).toEqual({ price: 240_000, source: 'manual' });
+    expect(prices.get('pB')).toEqual({ price: 600_000, source: 'aov' });
+    expect(prices.get('pN')).toEqual({ price: 600_000, source: 'list' });
+    const pm = profitPerOrderMap(snaps, { ...base, sellingPrice: { pA: 240_000 } });
+    expect(pm.get('pA')).toBe(80_000);
+    expect(pm.get('pN')).toBe(200_000); // sản phẩm mới chưa có đơn: giá niêm yết ÷ hoà vốn
   });
 
   it('mô tả + nhóm có ngưỡng chi + cần hoà vốn', () => {

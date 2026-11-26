@@ -13,6 +13,8 @@ export const READ_TOOLS = [
   'campaign_gmv_max_info_get',
   /** Danh sách tài khoản quảng cáo token được quyền (chọn tài khoản sau khi Kết nối TikTok) */
   'auth_advertiser_get',
+  /** Sản phẩm TikTok Shop (giá niêm yết) — gợi ý giá bán cho lợi nhuận 1 đơn (Sếp cho phép đọc 26/11) */
+  'store_product_get',
 ] as const;
 export type ReadTool = (typeof READ_TOOLS)[number];
 

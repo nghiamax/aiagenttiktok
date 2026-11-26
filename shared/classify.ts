@@ -4,7 +4,7 @@ import { matchesPlatform, matchSet, reasonFor, setsFor, usesProductConditions, t
 import { breakEvenOf, type AdsSettings } from './settings.js';
 import type { AdsProduct, AdsVideo, Campaign } from './adsSnapshot.js';
 import { effectiveStatus } from './videoStatus.js';
-import type { ProfitMap } from './productProfit.js';
+import { profitContext, type ProfitMap } from './productProfit.js';
 
 /** ID nhóm */
 export type VideoAction = string;
@@ -54,7 +54,7 @@ export function contextForProduct(p: AdsProduct, campaign: Campaign | undefined,
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
     productId: p.id,
-    profitPerOrder: profit?.get(p.id) ?? null,
+    ...profitContext(profit, p.id),
   };
 }
 
@@ -72,7 +72,7 @@ export function contextForVideo(video: AdsVideo, campaign: Campaign | undefined,
     target: campaign?.targetRoi ?? null,
     budgetUse: null,
     productId: video.productId,
-    profitPerOrder: profit?.get(video.productId) ?? null,
+    ...profitContext(profit, video.productId),
   };
 }
 

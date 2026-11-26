@@ -177,6 +177,8 @@ export interface EvalContext {
   productId?: string;
   /** Lợi nhuận 1 đơn của sản phẩm (giá trị đơn TB 30 ngày ÷ ROI hoà vốn); null = thiếu hoà vốn / chưa có đơn */
   profitPerOrder?: number | null;
+  /** Lợi nhuận 1 đơn đang dùng mức dự phòng (chưa có giá bán / hoà vốn) */
+  profitFallback?: boolean;
 }
 
 function metricOf(metric: Metric, ctx: EvalContext): number | null {
@@ -232,7 +234,7 @@ export function reasonFor(set: ConditionSet, ctx: EvalContext): string {
       c.value.type === 'number'
         ? metricValueText(c.metric, c.value.n)
         : c.value.type === 'profit'
-          ? `${c.value.k === 1 ? '' : `${formatNumber(c.value.k, 2)} × `}lợi nhuận/đơn ${ref == null ? '--' : metricValueText(c.metric, ref / c.value.k)}`
+          ? `${c.value.k === 1 ? '' : `${formatNumber(c.value.k, 2)} × `}lợi nhuận/đơn ${ref == null ? '--' : metricValueText(c.metric, ref / c.value.k)}${ctx.profitFallback ? ' (dự phòng — chưa có giá bán / hoà vốn)' : ''}`
           : `${c.value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} ${ref == null ? '--' : formatNumber(ref, 2)}`;
     const part = c.op === 'eq' && actual != null ? '' : `${OP_LABEL[c.op]} ${refLabel}`;
     byMetric.set(c.metric, [...(byMetric.get(c.metric) ?? []), part]);

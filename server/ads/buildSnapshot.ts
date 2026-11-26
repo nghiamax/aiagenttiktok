@@ -20,8 +20,9 @@ interface ReportData {
  * Phiên bản cách dựng snapshot. ĐỔI CÁCH DỰNG / LỌC / ĐỐI CHIẾU → TĂNG SỐ NÀY để cache cũ (kể cả cache "giữ mãi") tự dựng lại.
  * 2 (21/11/2026): đối chiếu dòng "cần ủy quyền" giả trước khi lọc dòng 0 chi.
  * 3 (25/11/2026): đánh dấu sản phẩm đã loại trừ (`excluded`) theo danh sách sản phẩm đang bật của chiến dịch.
+ * 4 (26/11/2026): giá niêm yết TikTok Shop (`listPrice`) cho từng sản phẩm.
  */
-export const SNAPSHOT_BUILD = 3;
+export const SNAPSHOT_BUILD = 4;
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 20;
@@ -118,6 +119,47 @@ export function markExcluded<T extends Pick<AdsProduct, 'id' | 'campaignId'>>(pr
   });
 }
 
+/** Business Center của shop (store_product_get bắt buộc bc_id) — nhớ trong tiến trình theo shop TikTok */
+const bcByStore = new Map<string, string>();
+async function storeBcId(advertiserId: string, storeId: string): Promise<string | null> {
+  const hit = bcByStore.get(storeId);
+  if (hit) return hit;
+  const data = await callReadTool<{
+    store_list?: { store_id: string; store_authorized_bc_id?: string; exclusive_authorized_advertiser_info?: { advertiser_id?: string } }[];
+  }>('gmv_max_store_list_get', { advertiser_id: advertiserId });
+  const rows = (data.store_list ?? []).filter((s) => s.store_id === storeId && s.store_authorized_bc_id);
+  const pick = rows.find((s) => s.exclusive_authorized_advertiser_info?.advertiser_id === advertiserId) ?? rows[0];
+  if (pick?.store_authorized_bc_id) bcByStore.set(storeId, pick.store_authorized_bc_id);
+  return pick?.store_authorized_bc_id ?? null;
+}
+
+/** Giá niêm yết TikTok Shop theo SPU (min_price; TikTok không trả giá khuyến mãi). Lỗi → map rỗng (không chặn snapshot) */
+export async function fetchListPrices(ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (ids.length === 0) return out;
+  try {
+    const acct = requireAccount();
+    const bcId = await storeBcId(acct.advertiserId, acct.storeId);
+    if (!bcId) return out;
+    for (let i = 0; i < ids.length; i += 10) {
+      const batch = ids.slice(i, i + 10);
+      const data = await callReadTool<{ store_products?: { item_group_id: string; min_price?: string }[] }>('store_product_get', {
+        bc_id: bcId,
+        store_id: acct.storeId,
+        filtering: { item_group_ids: batch },
+        page_size: 10,
+      });
+      for (const p of data.store_products ?? []) {
+        const price = Number(p.min_price);
+        if (Number.isFinite(price) && price > 0) out.set(String(p.item_group_id), price);
+      }
+    }
+  } catch {
+    // không lấy được giá → để trống, web dùng giá trị đơn / Sếp nhập
+  }
+  return out;
+}
+
 /** Dựng snapshot số liệu GMV Max sản phẩm cho khoảng ngày (chỉ gọi tool đọc) */
 export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const acct = requireAccount();
@@ -147,9 +189,11 @@ export async function buildSnapshot(range: DateRange): Promise<AdsSnapshot> {
   const spendIds = (list: AdsVideo[]) =>
     new Set(list.filter((v) => v.contentType === 'video' && (v.cost ?? 0) > 0).map((v) => v.id)).size;
 
+  const listPrices = await fetchListPrices([...new Set(baseProducts.map((p) => p.id))]);
   const products: AdsProduct[] = baseProducts
     .map((p) => ({
       ...p,
+      listPrice: listPrices.get(p.id) ?? null,
       videoCount: videos.filter(
         (v) => v.campaignId === p.campaignId && v.productId === p.id && v.contentType === 'video',
       ).length,

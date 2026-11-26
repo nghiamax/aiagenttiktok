@@ -76,6 +76,8 @@ export interface AdsProduct {
    * Thiếu = đang bật hoặc không biết (chiến dịch tự chọn sản phẩm / không đọc được).
    */
   excluded?: boolean;
+  /** Giá niêm yết trên TikTok Shop (store_product_get, chưa trừ khuyến mãi) — gợi ý giá bán cho sản phẩm chưa có đơn */
+  listPrice?: number | null;
 }
 
 /** Video (creative) quảng cáo cho một sản phẩm */

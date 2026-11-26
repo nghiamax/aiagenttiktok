@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, KeyRound, Landmark, Loader2 } from 'lucide-react';
+import { CheckCircle2, Landmark, Loader2 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import { api, ApiError } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
-import { BANKS, monthsLabel, type BillingOrder, type ProOption } from '../../../shared/billing';
-import { inputCls, labelCls } from './PlanFields';
+import {
+  GATEWAYS,
+  gatewayMeta,
+  monthsLabel,
+  providerName,
+  type BillingOrder,
+  type GatewayId,
+  type GatewaySettings,
+  type ProOption,
+} from '../../../shared/billing';
+import GatewayConfig from './GatewayConfig';
+import { labelCls } from './PlanFields';
 
 interface BillingConfig {
-  bankBin: string;
-  accountNo: string;
-  accountName: string;
+  provider: GatewayId;
   options: ProOption[];
-  webhookKey: string;
+  gateways: Record<GatewayId, GatewaySettings>;
 }
 
 interface UnmatchedTx {
@@ -24,6 +32,8 @@ interface UnmatchedTx {
 
 interface AdminData {
   config: BillingConfig;
+  /** Cổng đã nhập đủ cấu hình */
+  ready: Record<GatewayId, boolean>;
   orders: BillingOrder[];
   unmatched: UnmatchedTx[];
 }
@@ -38,33 +48,10 @@ const STATUS: Record<BillingOrder['status'], { label: string; cls: string }> = {
   cancelled: { label: 'Đã huỷ', cls: 'text-muted' },
 };
 
-function randomKey(): string {
-  const a = new Uint8Array(24);
-  crypto.getRandomValues(a);
-  return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
-          setDone(true);
-          setTimeout(() => setDone(false), 1500);
-        });
-      }}
-      className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition hover:bg-canvas hover:text-ink"
-    >
-      {done ? <Check className="size-4 text-accent-green" /> : <Copy className="size-4" />}
-    </button>
-  );
-}
-
-/** Trang Tài khoản → Thanh toán: ngân hàng nhận tiền, giá gói Pro, webhook SePay, đơn mua, giao dịch chưa khớp */
+/**
+ * Trang Tài khoản → Thanh toán: chọn cổng thanh toán (danh sách GATEWAYS — thêm cổng không phải sửa trang này),
+ * giá gói Pro, cấu hình cổng, đơn mua, giao dịch chưa khớp
+ */
 export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
   const [data, setData] = useState<AdminData | null>(null);
   const [draft, setDraft] = useState<BillingConfig | null>(null);
@@ -95,16 +82,22 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
     );
   }
 
-  const webhookUrl = `${window.location.origin}/api/billing/webhook/sepay`;
-  const isLocal = /localhost|127\.0\.0\.1/.test(window.location.hostname);
-  const set = <K extends keyof BillingConfig>(k: K, v: BillingConfig[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
+  const saved = data.config;
+  const unsaved = JSON.stringify(saved) !== JSON.stringify(draft);
+  const meta = gatewayMeta(draft.provider)!;
+  const setField = (key: string, value: string) =>
+    setDraft((d) =>
+      d ? { ...d, gateways: { ...d.gateways, [d.provider]: { ...d.gateways[d.provider], [key]: value } } } : d,
+    );
 
   const save = async () => {
     setSaving(true);
     setMsg(null);
     try {
-      const { config } = await api<{ config: BillingConfig }>('/billing/admin/config', { method: 'PUT', body: draft });
-      setDraft(config);
+      await api('/billing/admin/config', { method: 'PUT', body: draft });
+      const d = await api<AdminData>('/billing/admin');
+      setData(d);
+      setDraft(d.config);
       setMsg({ ok: true, text: 'Đã lưu.' });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Không lưu được' });
@@ -135,56 +128,60 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
           <div>
             <h3 className="font-semibold">Thanh toán gói Pro</h3>
             <p className="text-sm text-muted">
-              Tài khoản nhận tiền + giá. Khách quét QR chuyển khoản, SePay báo tiền về → tài khoản tự lên Pro.
+              Chọn cổng thanh toán + giá. Khách quét QR chuyển khoản, cổng báo tiền về → tài khoản tự lên Pro. Cấu hình
+              của từng cổng được giữ riêng — đổi qua lại không phải nhập lại.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className={labelCls} htmlFor="bill-bank">
-              Ngân hàng
-            </label>
-            <select
-              id="bill-bank"
-              value={draft.bankBin}
-              onChange={(e) => set('bankBin', e.target.value)}
-              className={`${inputCls} bg-white`}
-            >
-              <option value="">— Chọn ngân hàng —</option>
-              {BANKS.map((b) => (
-                <option key={b.bin} value={b.bin}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="bill-acc">
-              Số tài khoản
-            </label>
-            <input
-              id="bill-acc"
-              value={draft.accountNo}
-              onChange={(e) => set('accountNo', e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="bill-name">
-              Tên chủ tài khoản
-            </label>
-            <input
-              id="bill-name"
-              value={draft.accountName}
-              onChange={(e) => set('accountName', e.target.value)}
-              placeholder="NGUYEN VAN A"
-              className={`${inputCls} uppercase`}
-            />
-          </div>
+        <p className={labelCls}>Cổng thanh toán</p>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label="Cổng thanh toán">
+          {GATEWAYS.map((g) => {
+            const on = draft.provider === g.id;
+            const active = saved.provider === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setDraft((d) => (d ? { ...d, provider: g.id } : d))}
+                className={`rounded-xl border p-3 text-left transition ${
+                  on ? 'border-primary bg-primary-soft' : 'border-line hover:bg-canvas'
+                }`}
+              >
+                <span className={`flex flex-wrap items-center gap-2 font-semibold ${on ? 'text-primary' : 'text-ink'}`}>
+                  <span
+                    className={`size-4 shrink-0 rounded-full border-2 ${on ? 'border-primary bg-primary' : 'border-line'}`}
+                  />
+                  {g.name}
+                  <span className="text-sm font-normal text-muted">{g.site}</span>
+                  <span className="ml-auto flex gap-1.5 text-xs font-medium">
+                    {active && (
+                      <span className="rounded-full bg-accent-green/10 px-2 py-0.5 text-accent-green">Đang dùng</span>
+                    )}
+                    {data.ready[g.id] ? (
+                      <span className="inline-flex items-center gap-1 text-muted">
+                        <CheckCircle2 className="size-3.5" /> Đã cấu hình
+                      </span>
+                    ) : (
+                      <span className="text-muted">Chưa cấu hình</span>
+                    )}
+                  </span>
+                </span>
+                <span className="mt-1 block text-sm text-muted">{g.hint}</span>
+              </button>
+            );
+          })}
         </div>
+        {saved.provider !== draft.provider && (
+          <p className="mt-2 text-sm text-amber-700">
+            Bấm Lưu để chuyển sang {providerName(draft.provider)}. Đơn cũ của {providerName(saved.provider)} chuyển muộn
+            vẫn được nhận.
+          </p>
+        )}
 
-        <p className={`${labelCls} mt-4`}>Giá gói Pro (để 0 = không bán thời hạn đó)</p>
+        <p className={`${labelCls} mt-5`}>Giá gói Pro (để 0 = không bán thời hạn đó)</p>
         <div className="grid gap-3 sm:grid-cols-3">
           {draft.options.map((o, i) => (
             <label key={o.months} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
@@ -195,9 +192,8 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
                 placeholder="0"
                 onChange={(e) => {
                   const price = Number(e.target.value.replace(/\D/g, '')) || 0;
-                  set(
-                    'options',
-                    draft.options.map((x, k) => (k === i ? { ...x, price } : x)),
+                  setDraft((d) =>
+                    d ? { ...d, options: d.options.map((x, k) => (k === i ? { ...x, price } : x)) } : d,
                   );
                 }}
                 aria-label={`Giá ${monthsLabel(o.months)}`}
@@ -208,58 +204,13 @@ export default function BillingAdmin({ onPaid }: { onPaid: () => void }) {
           ))}
         </div>
 
-        <div className="mt-5 rounded-xl border border-line bg-canvas/60 p-4">
-          <p className="flex items-center gap-1.5 text-sm font-semibold">
-            <KeyRound className="size-4 text-primary" /> Tự động xác nhận bằng SePay
-          </p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink/80">
-            <li>Đăng ký sepay.vn, liên kết tài khoản ngân hàng nhận tiền ở trên.</li>
-            <li>
-              SePay → Tích hợp WebHooks → Thêm: sự kiện <b>Có tiền vào</b>, URL bên dưới, chứng thực <b>API Key</b> =
-              khoá bên dưới.
-            </li>
-            <li>Bấm Lưu ở đây. Khách chuyển khoản đúng nội dung → tài khoản lên Pro trong vài giây.</li>
-          </ol>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <div>
-              <p className={labelCls}>URL webhook</p>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={webhookUrl}
-                  className={`${inputCls} bg-white text-sm`}
-                  aria-label="URL webhook"
-                />
-                <CopyButton text={webhookUrl} label="Sao chép URL webhook" />
-              </div>
-              {isLocal && (
-                <p className="mt-1 text-sm text-amber-700">
-                  Đang chạy trên máy (localhost) — SePay không gọi tới được. Dùng địa chỉ web thật sau khi đưa lên
-                  hosting.
-                </p>
-              )}
-            </div>
-            <div>
-              <p className={labelCls}>Khoá API (webhook)</p>
-              <div className="flex gap-2">
-                <input
-                  value={draft.webhookKey}
-                  onChange={(e) => set('webhookKey', e.target.value)}
-                  className={`${inputCls} bg-white font-mono text-sm`}
-                  aria-label="Khoá API webhook"
-                />
-                <CopyButton text={draft.webhookKey} label="Sao chép khoá" />
-                <button
-                  type="button"
-                  onClick={() => set('webhookKey', randomKey())}
-                  className="shrink-0 rounded-lg border border-line bg-white px-3 text-sm font-medium transition hover:bg-canvas"
-                >
-                  Tạo khoá
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <GatewayConfig
+          key={meta.id}
+          meta={meta}
+          settings={draft.gateways[meta.id]}
+          onChange={setField}
+          unsaved={unsaved}
+        />
 
         <div className="mt-4 flex items-center justify-end gap-3">
           {msg && <p className={`text-sm ${msg.ok ? 'text-accent-green' : 'text-danger'}`}>{msg.text}</p>}

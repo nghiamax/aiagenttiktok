@@ -11,7 +11,7 @@ import { authRouter } from './routes/auth.js';
 import { financeRouter } from './routes/finance.js';
 import { usersRouter } from './routes/users.js';
 import { sellerRouter } from './routes/seller.js';
-import { BILLING_WEBHOOK_PATH, billingRouter, billingWebhook } from './routes/billing.js';
+import { BILLING_WEBHOOK_PREFIX, billingRouter, gatewayWebhook } from './routes/billing.js';
 import { CALLBACK_PATH, tiktokCallback, tiktokRouter } from './routes/tiktok.js';
 import { requireAuth, requireShop } from './auth/middleware.js';
 import { hasUsers } from './auth/users.js';
@@ -37,8 +37,8 @@ app.disable('x-powered-by');
 function originGuard(req: Request, res: Response, next: NextFunction) {
   // TikTok chuyển trình duyệt về (Referer = trang TikTok) — route tự kiểm tra đăng nhập + state dùng 1 lần
   if (req.method === 'GET' && req.originalUrl.split('?')[0] === CALLBACK_PATH) return next();
-  // Webhook ngân hàng (SePay gọi từ server của họ) — tự kiểm tra khoá API
-  if (req.method === 'POST' && req.originalUrl.split('?')[0] === BILLING_WEBHOOK_PATH) return next();
+  // Webhook cổng thanh toán (SePay / payOS gọi từ server của họ) — tự kiểm tra khoá / chữ ký
+  if (req.method === 'POST' && req.originalUrl.split('?')[0].startsWith(BILLING_WEBHOOK_PREFIX)) return next();
   const origin = req.get('origin') ?? (req.get('referer') ? new URL(req.get('referer')!).origin : null);
   if (origin && !config.allowedOrigins.includes(origin)) {
     res.status(403).json({ code: 'FORBIDDEN_ORIGIN', error: 'Không được phép' });
@@ -57,7 +57,7 @@ app.get('/api/health', (_req, res) => {
 });
 app.use('/api/auth', authRouter);
 app.get(CALLBACK_PATH, tiktokCallback);
-app.post(BILLING_WEBHOOK_PATH, billingWebhook);
+app.post(`${BILLING_WEBHOOK_PREFIX}:gateway`, gatewayWebhook);
 // Mọi API còn lại: phải đăng nhập (quyền từng route đặt trong router)
 app.use('/api', requireAuth);
 // Mục theo shop: requireShop gắn shop đang mở (thuộc tài khoản người dùng) → mọi dữ liệu bên dưới chỉ của shop đó

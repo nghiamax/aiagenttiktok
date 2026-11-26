@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Check, CheckCircle2, Copy, Loader2 } from 'lucide-react';
+import { Check, CheckCircle2, Copy, ExternalLink, Loader2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import { api } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
-import { bankName, monthsLabel, type BillingOrder, type BillingPublic } from '../../../shared/billing';
+import { bankName, monthsLabel, type BillingOrder, type PayAccount } from '../../../shared/billing';
 
-export type OrderView = BillingOrder & { qrUrl: string | null };
+/** Đơn kèm thông tin chuyển khoản (server tính theo cổng thanh toán của đơn) */
+export type OrderView = BillingOrder & {
+  qrUrl: string | null;
+  account: PayAccount | null;
+  /** Nội dung chuyển khoản phải ghi */
+  content: string;
+  /** payOS: trang thanh toán của payOS */
+  checkoutUrl: string | null;
+};
 
 interface PaymentModalProps {
   order: OrderView;
-  billing: BillingPublic;
   onClose: () => void;
   /** Tiền đã về, tài khoản đã lên Pro */
   onPaid: (o: OrderView) => void;
@@ -44,7 +51,7 @@ function CopyRow({ label, value, copy }: { label: string; value: string; copy?: 
 }
 
 /** Mã QR ngân hàng + thông tin chuyển khoản; tự chuyển sang "Thành công" khi tiền về */
-export default function PaymentModal({ order: initial, billing, onClose, onPaid }: PaymentModalProps) {
+export default function PaymentModal({ order: initial, onClose, onPaid }: PaymentModalProps) {
   const [order, setOrder] = useState(initial);
   const paid = order.status === 'paid';
 
@@ -53,7 +60,7 @@ export default function PaymentModal({ order: initial, billing, onClose, onPaid 
     const t = setInterval(async () => {
       try {
         const { order: o } = await api<{ order: OrderView }>(`/billing/orders/${initial.id}`);
-        setOrder((cur) => ({ ...o, qrUrl: o.qrUrl ?? cur.qrUrl }));
+        setOrder(o);
         if (o.status === 'paid') onPaid(o);
       } catch {
         /* mạng chập chờn → thử lại lượt sau */
@@ -108,17 +115,34 @@ export default function PaymentModal({ order: initial, billing, onClose, onPaid 
         </div>
         <div>
           <div className="divide-y divide-line">
-            <CopyRow label="Ngân hàng" value={bankName(billing.bankBin)} />
-            <CopyRow label="Số tài khoản" value={billing.accountNo} />
-            <CopyRow label="Chủ tài khoản" value={billing.accountName} />
+            {order.account && (
+              <>
+                <CopyRow label="Ngân hàng" value={bankName(order.account.bankBin)} />
+                <CopyRow label="Số tài khoản" value={order.account.accountNo} />
+                <CopyRow label="Chủ tài khoản" value={order.account.accountName} />
+              </>
+            )}
             <CopyRow label="Số tiền" value={`${formatNumber(order.amount)}đ`} copy={String(order.amount)} />
-            <CopyRow label="Nội dung" value={order.code} />
+            <CopyRow label="Nội dung" value={order.content} />
           </div>
           <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Chuyển <b>đúng số tiền</b> và giữ <b>nội dung {order.code}</b> để hệ thống tự kích hoạt.
+            Chuyển <b>đúng số tiền</b> và giữ <b>nội dung {order.content}</b> để hệ thống tự kích hoạt.
           </p>
+          {order.checkoutUrl && (
+            <a
+              href={order.checkoutUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              Mở trang thanh toán payOS <ExternalLink className="size-4" />
+            </a>
+          )}
           <p className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
-            <Loader2 className="size-4 animate-spin" /> Đang chờ tiền về… trang tự cập nhật khi nhận được.
+            <Loader2 className="size-4 animate-spin" />{' '}
+            {order.provider === 'manual'
+              ? 'Chuyển xong, quản trị viên sẽ xác nhận và kích hoạt — trang tự cập nhật khi xong.'
+              : 'Đang chờ tiền về… trang tự cập nhật khi nhận được.'}
           </p>
         </div>
       </div>

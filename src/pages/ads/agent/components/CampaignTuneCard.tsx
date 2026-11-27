@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../../../auth/AuthProvider';
 import { DEFAULT_TUNE, TUNE_MODES, tuneSettingsOf, type CampaignTuneSettings, type TuneMode } from '../../../../../shared/campaignTune';
 import { useAdsSettings } from '../../settings';
 import TuneRulesTable from './TuneRulesTable';
@@ -91,7 +90,6 @@ const parse = (t: string) => {
 /** Chiến lược điều chỉnh ROI mục tiêu & ngân sách chiến dịch (Phân nhóm → Chiến dịch; bộ quy tắc v3, Sếp chốt 26/11) */
 export default function CampaignTuneCard() {
   const { settings, save, loaded } = useAdsSettings();
-  const isAdmin = useAuth().can('manage_users');
   const saved = tuneSettingsOf(settings);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [bools, setBools] = useState<Pick<CampaignTuneSettings, BoolKey>>(saved);
@@ -219,28 +217,33 @@ export default function CampaignTuneCard() {
         ))}
       </div>
 
-      <TuneRulesTable config={draftConfig} />
-
-      {isAdmin && (
-        <div className="mt-5 border-t border-line pt-4">
-          <button
-            type="button"
-            onClick={() => setAdvanced(!advanced)}
-            aria-expanded={advanced}
-            className="flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-ink"
-          >
-            <ChevronDown className={`size-4 transition-transform ${advanced ? 'rotate-180' : ''}`} />
-            Nâng cao (Quản trị viên)
-          </button>
-          {advanced &&
-            ADVANCED.map((s) => (
+      {/* Nâng cao — mọi người dùng chỉnh được (Sếp mở 27/11; số lưu theo shop của từng người) */}
+      <div className="mt-5 border-t border-line pt-4">
+        <button
+          type="button"
+          onClick={() => setAdvanced(!advanced)}
+          aria-expanded={advanced}
+          className="flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors hover:text-ink"
+        >
+          <ChevronDown className={`size-4 transition-transform ${advanced ? 'rotate-180' : ''}`} />
+          Nâng cao
+        </button>
+        {advanced && (
+          <>
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Chỉ chỉnh khi hiểu rõ — số sai có thể làm BOT tăng / giảm sai. Bấm Khôi phục mặc định để về số an toàn.
+            </p>
+            {ADVANCED.map((s) => (
               <div key={s.title} className="mt-4">
                 <p className="mb-2 text-xs font-semibold text-muted">{s.title}</p>
                 <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">{s.fields.map(fieldInput)}</div>
               </div>
             ))}
-        </div>
-      )}
+          </>
+        )}
+      </div>
+
+      <TuneRulesTable config={draftConfig} />
 
       {(dirty || bad.length > 0) && (
         <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">

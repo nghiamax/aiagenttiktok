@@ -186,6 +186,10 @@ export interface AgentActionLog {
   error?: string;
   /** ID hành động được hoàn tác bởi dòng này */
   undoOf?: string;
+  /** Dòng này là lần Gửi lại của dòng gỡ / thêm lại bị lỗi (ID dòng lỗi đầu tiên) */
+  retryOf?: string;
+  /** Gỡ / thêm video đã báo lỗi sau 2 phút: vẫn đọc trạng thái ở nền tới lúc này (TikTok ghi nhận muộn → Thành công) */
+  lateCheckUntil?: string;
   /** Gỡ / thêm video: thời điểm kiểm tra lại trạng thái trên TikTok (ISO) */
   verifyAfter?: string;
   /** Ghi chú trạng thái (vd "Chờ TikTok xác nhận") */

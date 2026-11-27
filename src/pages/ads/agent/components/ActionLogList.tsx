@@ -16,6 +16,7 @@ interface ActionLogListProps {
   evaluateAfterHours: number;
   /** Hoàn tác (chạy thật trên TikTok, đã qua hộp xác nhận) */
   onUndo: (actionId: string) => Promise<ExecOutcome>;
+  onRetry: (actionId: string) => Promise<ExecOutcome>;
   onVerify: (actionId: string) => Promise<ExecOutcome>;
 }
 
@@ -37,7 +38,7 @@ function inPeriod(iso: string, period: Period): boolean {
 }
 
 /** Tab Nhật ký: mọi hành động đã thực hiện, mới nhất trên cùng */
-export default function ActionLogList({ actions, proposals, rules, evaluateAfterHours, onUndo, onVerify }: ActionLogListProps) {
+export default function ActionLogList({ actions, proposals, rules, evaluateAfterHours, onUndo, onRetry, onVerify }: ActionLogListProps) {
   const proposedAt = new Map(proposals.map((p) => [p.id, p.createdAt]));
   const [period, setPeriod] = useState<Period>('7d');
   const [type, setType] = useState<string | null>(null);
@@ -104,6 +105,7 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
               evaluateAfterHours={evaluateAfterHours}
               proposedAt={a.proposalId ? proposedAt.get(a.proposalId) : undefined}
               onUndo={onUndo}
+              onRetry={onRetry}
               onVerify={onVerify}
             />
           ))}

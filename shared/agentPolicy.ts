@@ -24,5 +24,9 @@ export const CREATIVE_INLINE_CHECKS_MS = [3_000, 5_000, 7_000];
 export const CREATIVE_VERIFY_MIN_SEC = 20;
 export const CREATIVE_VERIFY_FAST_MIN = 10;
 export const CREATIVE_VERIFY_MAX_SEC = 300;
-/** Quá thời gian này vẫn chưa đúng trạng thái → báo lỗi */
-export const CREATIVE_VERIFY_TIMEOUT_MIN = 90;
+/** Quá thời gian này vẫn chưa đúng trạng thái → báo lỗi (Sếp chốt 27/11: 2 phút — trước là 90 phút, chờ lâu tưởng lệnh vẫn chạy) */
+export const CREATIVE_VERIFY_TIMEOUT_MIN = 2;
+/** Sau khi báo lỗi vẫn đọc trạng thái ở nền tới mốc này: TikTok ghi nhận muộn → tự chuyển Thành công */
+export const CREATIVE_LATE_CHECK_MIN = 90;
+/** Nút Gửi lại trên dòng Gỡ / Thêm lại bị lỗi: tối đa số lần cho mỗi dòng gốc */
+export const CREATIVE_MAX_RETRIES = 2;

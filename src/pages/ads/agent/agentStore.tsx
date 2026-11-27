@@ -68,6 +68,8 @@ interface AgentStoreValue {
   decide: (proposalId: string, decision: 'approve' | 'reject') => Promise<ExecOutcome>;
   /** Hoàn tác thao tác (chỉ gọi sau hộp xác nhận) */
   undo: (actionId: string) => Promise<ExecOutcome>;
+  /** Gửi lại lệnh Gỡ / Thêm lại bị lỗi */
+  retry: (actionId: string) => Promise<ExecOutcome>;
   /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
   verify: (actionId: string) => Promise<ExecOutcome>;
   /** Thao tác thủ công từ bảng Video (chạy thật — chỉ gọi sau hộp xác nhận) */
@@ -221,6 +223,7 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
         return execute(path);
       },
       undo: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/undo`),
+      retry: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/retry`),
       verify: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/verify`),
       runManual: (actionType, target, params) => execute('/agent/actions/manual', { actionType, target, params }),
     }),

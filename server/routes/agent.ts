@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import type { AdsSettings } from '../../shared/settings.js';
 import type { AgentConfig, AgentGuardrails, AgentRule } from '../../shared/agentTypes.js';
-import { executeManual, executeProposal, PrecheckError, undoAction, verifyAction, type ExecResult, type ManualInput } from '../agent/executor.js';
+import { executeManual, executeProposal, PrecheckError, retryAction, undoAction, verifyAction, type ExecResult, type ManualInput } from '../agent/executor.js';
 import { actorOf, requirePermission } from '../auth/middleware.js';
 import { BOOT_VERSION } from '../buildInfo.js';
 import { AGENT_INTERVAL_MINUTES, getNextRunAt, isAgentRunning, runAgentOnce } from '../agent/scheduler.js';
@@ -162,6 +162,14 @@ agentRouter.post('/actions/manual', requirePermission('execute'), async (req, re
       actorOf(req),
     ),
   );
+});
+
+/** Gửi lại lệnh Gỡ / Thêm lại video bị lỗi (tối đa 2 lần) — CHẠY THẬT, bắt buộc { confirm: true } */
+agentRouter.post('/actions/:id/retry', requirePermission('execute'), async (req, res) => {
+  if ((req.body as { confirm?: unknown } | undefined)?.confirm !== true) {
+    return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi gửi lại lệnh lên TikTok' });
+  }
+  await respondExec(res, () => retryAction(req.params.id, actorOf(req)));
 });
 
 /** Kiểm tra ngay kết quả gỡ / thêm video — CHỈ ĐỌC trạng thái trên TikTok, không gửi lệnh ghi */

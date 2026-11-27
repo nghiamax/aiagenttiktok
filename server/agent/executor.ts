@@ -7,6 +7,8 @@ import {
   CREATIVE_VERIFY_MAX_SEC,
   CREATIVE_VERIFY_MIN_SEC,
   CREATIVE_VERIFY_TIMEOUT_MIN,
+  CREATIVE_LATE_CHECK_MIN,
+  CREATIVE_MAX_RETRIES,
   AUTO_MODE_ENABLED,
   EXECUTION_ENABLED,
   MIN_BOOST_BUDGET_VND,
@@ -149,6 +151,8 @@ async function planCreative(
   info: CampaignInfo,
   target: AgentTarget,
   action: 'REMOVE' | 'ADD',
+  /** Sản phẩm của lệnh gốc (Hoàn tác / Gửi lại): video đã gỡ, 0 chi có thể không còn trong snapshot → gửi thiếu sản phẩm */
+  extraSpuIds: string[] = [],
 ): Promise<Plan> {
   if (info.product_video_specific_type !== 'AUTO_SELECTION') {
     throw new PrecheckError('Chiến dịch không ở chế độ tự chọn video (AUTO_SELECTION) — TikTok không cho gỡ / thêm từng video');
@@ -158,7 +162,7 @@ async function planCreative(
   if (!status) throw new PrecheckError('Không tìm thấy video trong chiến dịch (7 ngày gần nhất)');
   if (action === 'REMOVE' && status === 'excluded') throw new PrecheckError('Video đã bị gỡ khỏi chiến dịch rồi');
   if (action === 'ADD' && status !== 'excluded') throw new PrecheckError('Video đang không bị gỡ — không cần thêm lại');
-  const spuIds = await spuIdsOf(target);
+  const spuIds = [...new Set([...(await spuIdsOf(target)), ...extraSpuIds])].filter(Boolean);
   return {
     tool: 'gmv_max_creative_update',
     params: {
@@ -635,15 +639,15 @@ async function undoPlan(a: AgentActionLog): Promise<Plan> {
     if (!prev.roasBid) throw new PrecheckError('Thiếu ROI mục tiêu cũ để hoàn tác');
     return updatePlan(a.target.campaignId, { roas_bid: prev.roasBid }, { roasBid: info.roas_bid }, { roasBid: prev.roasBid }, `ROI mục tiêu → ${prev.roasBid}`);
   }
-  return buildPlanWithInfo(inverse, a.target, info);
+  return buildPlanWithInfo(inverse, a.target, info, a.params.prev?.spuIds ?? []);
 }
 
-async function buildPlanWithInfo(actionType: AgentActionType, target: AgentTarget, info: CampaignInfo): Promise<Plan> {
+async function buildPlanWithInfo(actionType: AgentActionType, target: AgentTarget, info: CampaignInfo, spuIds: string[] = []): Promise<Plan> {
   switch (actionType) {
     case 'remove_creative':
-      return planCreative(info, target, 'REMOVE');
+      return planCreative(info, target, 'REMOVE', spuIds);
     case 'add_creative':
-      return planCreative(info, target, 'ADD');
+      return planCreative(info, target, 'ADD', spuIds);
     case 'disable_product':
       return planProduct(info, target, false);
     case 'enable_product':
@@ -694,6 +698,69 @@ export function undoAction(actionId: string, by?: ActorRef): Promise<ExecResult>
   });
 }
 
+/** Số lần đã Gửi lại của dòng gỡ / thêm lại (theo dòng lỗi đầu tiên) */
+export function retryInfo(actions: AgentActionLog[], a: AgentActionLog): { root: string; used: number; left: number; done: boolean } {
+  const root = a.retryOf ?? a.id;
+  const tries = actions.filter((x) => x.retryOf === root);
+  return { root, used: tries.length, left: Math.max(0, CREATIVE_MAX_RETRIES - tries.length), done: tries.some((x) => x.status !== 'failed') };
+}
+
+/**
+ * Nút Gửi lại trên dòng Gỡ / Thêm lại bị lỗi (Sếp chốt 27/11) — cũng cần Sếp xác nhận; BOT không tự gửi lại.
+ * Vẫn qua đủ kiểm tra: đọc trạng thái video mới nhất (đã đúng trạng thái → không gửi), giới hạn an toàn; tối đa CREATIVE_MAX_RETRIES lần.
+ */
+export function retryAction(actionId: string, by?: ActorRef): Promise<ExecResult> {
+  return serial(async () => {
+    if (!EXECUTION_ENABLED) throw new PrecheckError('Thực thi trên TikTok đang tắt');
+    const rt = getRuntime();
+    const a = rt.actions.find((x) => x.id === actionId);
+    if (!a) throw new PrecheckError('Không tìm thấy thao tác');
+    if (!isCreative(a)) throw new PrecheckError('Chỉ gửi lại được Gỡ / Thêm lại video');
+    if (a.status !== 'failed') throw new PrecheckError('Chỉ gửi lại được thao tác bị lỗi');
+    const info = retryInfo(rt.actions, a);
+    if (info.done) throw new PrecheckError('Thao tác này đã được gửi lại');
+    if (info.left <= 0) {
+      throw new PrecheckError(`Đã gửi lại ${CREATIVE_MAX_RETRIES} lần mà TikTok vẫn chưa nhận — làm tay trên Ads Manager hoặc liên hệ hỗ trợ TikTok`);
+    }
+    const root = rt.actions.find((x) => x.id === info.root) ?? a;
+    checkGuardrails(rt, a.actionType, {});
+    let plan: Plan;
+    try {
+      const campaign = await getCampaignInfo(a.target.campaignId);
+      if (campaign.operation_status !== 'ENABLE') throw new PrecheckError('Chiến dịch đang tắt trên TikTok');
+      plan = await buildPlanWithInfo(a.actionType, a.target, campaign, [...(root.params.prev?.spuIds ?? []), ...(a.params.prev?.spuIds ?? [])]);
+    } catch (e) {
+      if (e instanceof PrecheckError && /không cần thêm lại|đã bị gỡ khỏi chiến dịch rồi/.test(e.message)) {
+        throw new PrecheckError('TikTok đã ghi nhận lệnh trước — không cần gửi lại (tải lại trang)');
+      }
+      throw e instanceof PrecheckError ? e : new PrecheckError(`Không kiểm tra được điều kiện: ${errText(e)}`);
+    }
+    const retry: AgentActionLog = {
+      id: crypto.randomUUID(),
+      executedAt: new Date().toISOString(),
+      actor: 'manual',
+      ruleId: a.ruleId,
+      actionType: a.actionType,
+      target: a.target,
+      params: { ...a.params, prev: plan.prev, next: plan.next },
+      before: a.before,
+      after: null,
+      status: 'running',
+      note: 'Đang gửi lại lệnh lên TikTok',
+      retryOf: info.root,
+      ...(root.undoOf ? { undoOf: root.undoOf } : {}),
+      ...(by ? { by } : {}),
+    };
+    updateRuntime((r) => {
+      // Đã gửi lại → các dòng lỗi trước thôi đọc muộn ở nền (tránh 2 dòng cùng thành công)
+      for (const x of r.actions) if ((x.id === info.root || x.retryOf === info.root) && x.status === 'failed') x.lateCheckUntil = undefined;
+      r.actions.unshift(retry);
+      r.actions = r.actions.slice(0, 2000);
+    });
+    return send(plan, retry.id, a.target.campaignId);
+  });
+}
+
 /* ───────── Kiểm tra kết quả gỡ / thêm video ───────── */
 
 /** Đọc trạng thái ở nền ngay sau khi gửi lệnh (test tắt `followUp` và gọi followUpCreative trực tiếp) */
@@ -730,7 +797,8 @@ export async function followUpCreative(actionId: string): Promise<void> {
  */
 async function checkCreative(actionId: string): Promise<'done' | 'pending'> {
   const a = getRuntime().actions.find((x) => x.id === actionId);
-  if (!a || a.status !== 'running' || !isCreative(a)) return 'done';
+  if (!a || !isCreative(a) || !(a.status === 'running' || (a.status === 'failed' && a.lateCheckUntil))) return 'done';
+  const late = a.status === 'failed';
   let status: VideoStatus | null;
   try {
     status = await getVideoStatus(a.target.campaignId, a.target.productId, a.target.videoId);
@@ -739,32 +807,47 @@ async function checkCreative(actionId: string): Promise<'done' | 'pending'> {
   }
   const now = Date.now();
   const ok = a.actionType === 'remove_creative' ? status === 'excluded' : status !== null && status !== 'excluded';
-  const timedOut = now - Date.parse(a.executedAt) > CREATIVE_VERIFY_TIMEOUT_MIN * MIN;
+  const elapsedMin = (now - Date.parse(a.executedAt)) / MIN;
+  const timedOut = elapsedMin > CREATIVE_VERIFY_TIMEOUT_MIN;
+  const lateOver = late && now > Date.parse(a.lateCheckUntil!);
   updateRuntime((rt) => {
     const x = rt.actions.find((y) => y.id === actionId);
-    if (!x || x.status !== 'running') return;
+    if (!x || !(x.status === 'running' || (x.status === 'failed' && x.lateCheckUntil))) return;
     if (ok) {
       x.status = 'success';
-      x.note = undefined;
+      x.error = undefined;
+      x.note = late ? `TikTok ghi nhận muộn (sau ${Math.round(elapsedMin)} phút)` : undefined;
       x.verifyAfter = undefined;
+      x.lateCheckUntil = undefined;
       if (x.undoOf) markUndone(rt, x.undoOf);
+    } else if (late) {
+      if (lateOver) {
+        x.lateCheckUntil = undefined;
+        x.verifyAfter = undefined;
+      } else x.verifyAfter = nextVerifyAt(x, now);
     } else if (timedOut) {
+      const what = x.actionType === 'remove_creative' ? 'gỡ' : 'thêm lại';
       x.status = 'failed';
-      x.error = `Sau ${CREATIVE_VERIFY_TIMEOUT_MIN} phút TikTok vẫn chưa ghi nhận (trạng thái video: ${status ?? 'không tìm thấy'})`;
+      x.error = `Sau ${CREATIVE_VERIFY_TIMEOUT_MIN} phút TikTok chưa ${what} video (trạng thái: ${status ?? 'không tìm thấy'}) — kiểm tra trên Ads Manager hoặc bấm Gửi lại`;
       x.note = undefined;
-      x.verifyAfter = undefined;
+      // Vẫn đọc ở nền: TikTok ghi nhận muộn → tự chuyển Thành công
+      x.lateCheckUntil = new Date(Date.parse(x.executedAt) + CREATIVE_LATE_CHECK_MIN * MIN).toISOString();
+      x.verifyAfter = nextVerifyAt(x, now);
     } else {
       x.verifyAfter = nextVerifyAt(x, now);
     }
   });
-  return ok || timedOut ? 'done' : 'pending';
+  return ok || (late ? lateOver : timedOut) ? 'done' : 'pending';
 }
 
 /** Gọi định kỳ (scheduler, mỗi 30 giây): dòng đang chờ đã tới giờ → đọc trạng thái. Trả số dòng đã có kết quả. */
 export async function verifyPendingActions(): Promise<number> {
   const now = Date.now();
   const due = getRuntime().actions.filter(
-    (a) => a.status === 'running' && isCreative(a) && (!a.verifyAfter || Date.parse(a.verifyAfter) <= now),
+    (a) =>
+      (a.status === 'running' || (a.status === 'failed' && a.lateCheckUntil)) &&
+      isCreative(a) &&
+      (!a.verifyAfter || Date.parse(a.verifyAfter) <= now),
   );
   let done = 0;
   for (const a of due) if ((await checkCreative(a.id)) === 'done') done++;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { RefreshCw, Undo2 } from 'lucide-react';
+import { RefreshCw, RotateCw, Undo2 } from 'lucide-react';
+import { CREATIVE_MAX_RETRIES } from '../../../../../shared/agentPolicy';
 import { formatDateTime } from '../../../../lib/format';
 import { useAdsData } from '../../data';
 import { useAuth } from '../../../../auth/AuthProvider';
@@ -23,6 +24,8 @@ interface ActionLogItemProps {
   /** Thời điểm Agent đề xuất (dòng Sếp duyệt) */
   proposedAt?: string;
   onUndo: (actionId: string) => Promise<ExecOutcome>;
+  /** Gửi lại lệnh Gỡ / Thêm lại bị lỗi */
+  onRetry: (actionId: string) => Promise<ExecOutcome>;
   /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
   onVerify: (actionId: string) => Promise<ExecOutcome>;
 }
@@ -30,9 +33,10 @@ interface ActionLogItemProps {
 const DELAY_HINT = 'Đơn TikTok thường về trễ vài giờ nên số ngay sau thao tác có thể chưa đủ.';
 
 /** Một dòng nhật ký: thời gian · hành động · đối tượng · lúc quyết định → sau thao tác · trạng thái */
-export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onVerify }: ActionLogItemProps) {
+export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onRetry, onVerify }: ActionLogItemProps) {
   const { snapshot } = useAdsData();
   const [confirming, setConfirming] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [result, setResult] = useState<ExecOutcome | null>(null);
   const [checking, setChecking] = useState(false);
   const actor = ACTOR_META[item.actor];
@@ -56,6 +60,15 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
             : `Đang lấy số ngày ${day1} từ TikTok…`;
   const canExec = useAuth().can('execute');
   const undoable = canExec && canUndo(item, all);
+  // Gửi lại (Sếp chốt 27/11): dòng gỡ / thêm lại bị lỗi, chưa có lần gửi lại thành công / đang chạy, tối đa CREATIVE_MAX_RETRIES lần
+  const retryRoot = item.retryOf ?? item.id;
+  const retries = all.filter((x) => x.retryOf === retryRoot);
+  const retryLeft = Math.max(0, CREATIVE_MAX_RETRIES - retries.length);
+  const isCreative = item.actionType === 'remove_creative' || item.actionType === 'add_creative';
+  const latestTry = [item, ...retries].sort((a, b) => b.executedAt.localeCompare(a.executedAt))[0];
+  const retryable =
+    canExec && isCreative && item.status === 'failed' && latestTry.id === item.id && !retries.some((x) => x.status !== 'failed');
+  const retryVerb = item.actionType === 'remove_creative' ? 'gỡ' : 'thêm lại';
   // Người bấm: dòng có tên (sau khi có đăng nhập) → "Duyệt bởi …"; dòng cũ giữ nhãn cũ
   const actorText = item.undoOf
     ? `Hoàn tác${item.by ? ` · ${item.by.name}` : ''}`
@@ -118,6 +131,21 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
             {checking ? 'Đang kiểm tra…' : 'Kiểm tra ngay'}
           </button>
         )}
+        {retryable &&
+          (retryLeft > 0 ? (
+            <button
+              type="button"
+              onClick={() => setRetrying(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-canvas hover:text-ink"
+            >
+              <RotateCw className="size-3.5" />
+              Gửi lại (còn {retryLeft} lần)
+            </button>
+          ) : (
+            <p className="max-w-xs text-xs text-danger lg:text-right">
+              Đã gửi lại {CREATIVE_MAX_RETRIES} lần mà TikTok vẫn chưa nhận — làm tay trên Ads Manager hoặc liên hệ hỗ trợ TikTok
+            </p>
+          ))}
         {undoable && (
           <button
             type="button"
@@ -133,6 +161,18 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
         )}
         {result && <p className={`text-xs lg:text-right ${result.ok ? 'text-accent-green' : 'text-danger'}`}>{result.message}</p>}
       </div>
+
+      {retrying && (
+        <ConfirmExecuteModal
+          title={`Gửi lại lệnh ${retryVerb} video lên TikTok?`}
+          lines={[
+            `Gửi lại lệnh ${retryVerb} video ${item.target.videoId}. Server đọc trạng thái mới nhất trước — TikTok đã làm rồi thì không gửi.`,
+          ]}
+          confirmLabel="Gửi lại"
+          onConfirm={async () => setResult(await onRetry(item.id))}
+          onClose={() => setRetrying(false)}
+        />
+      )}
 
       {confirming && (
         <ConfirmExecuteModal

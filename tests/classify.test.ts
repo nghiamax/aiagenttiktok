@@ -99,3 +99,15 @@ describe('Phân loại sản phẩm / chiến dịch', () => {
     expect(classifyCampaign(bad, S, 7)?.action).toBe('c-low-roi');
   });
 });
+
+describe('Mốc so sánh lạ không được rơi về ROI mục tiêu (lỗi 27/11)', () => {
+  it('Chi ≥ [kiểu lạ] → không khớp, lý do ghi "--"', () => {
+    const ctx = { cost: 7000, revenue: 0, orders: 0, roi: 0, cpa: null, breakEven: 3.5, target: 7, budgetUse: null } as unknown as EvalContext;
+    const set = { clauses: [{ metric: 'cost' as const, op: 'gte' as const, value: { type: 'xyz', k: 1 } as never }] };
+    expect(matchSet(set, ctx)).toBe(false);
+    expect(reasonFor(set, ctx)).toContain('--');
+    // Kiểu "target" thật vẫn so với ROI mục tiêu như cũ
+    const roiSet = { clauses: [{ metric: 'roi' as const, op: 'lt' as const, value: { type: 'target' as const, k: 1 } }] };
+    expect(matchSet(roiSet, ctx)).toBe(true);
+  });
+});

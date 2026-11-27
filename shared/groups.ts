@@ -122,6 +122,7 @@ function metricValueText(metric: Metric, n: number): string {
 function refText(value: ClauseValue, metric: Metric): string {
   if (value.type === 'number') return metricValueText(metric, value.n);
   if (value.type === 'profit') return value.k === 1 ? 'lợi nhuận 1 đơn' : `${formatNumber(value.k, 2)} lần lợi nhuận 1 đơn`;
+  if (value.type !== 'breakEven' && value.type !== 'target') return '(mốc không rõ)';
   const base = value.type === 'breakEven' ? 'ROI hoà vốn' : 'ROI mục tiêu';
   return value.k === 1 ? base : `${formatNumber(value.k, 2)} lần ${base}`;
 }
@@ -186,6 +187,9 @@ function metricOf(metric: Metric, ctx: EvalContext): number | null {
 function resolveValue(value: ClauseValue, ctx: EvalContext): number | null {
   if (value.type === 'number') return value.n;
   if (value.type === 'profit') return ctx.profitPerOrder == null ? null : ctx.profitPerOrder * value.k;
+  // Chỉ breakEven / target mới lấy mốc ROI. Kiểu lạ (vd server bản cũ chưa biết kiểu mới) → không khớp,
+  // KHÔNG được rơi về "ROI mục tiêu" (lỗi 27/11: "Chi ≥ 1 lần lợi nhuận 1 đơn" bị hiểu thành "Chi ≥ 7đ")
+  if (value.type !== 'breakEven' && value.type !== 'target') return null;
   const base = value.type === 'breakEven' ? ctx.breakEven : ctx.target;
   return base == null ? null : base * value.k;
 }
@@ -233,7 +237,9 @@ export function reasonFor(set: ConditionSet, ctx: EvalContext): string {
         ? metricValueText(c.metric, c.value.n)
         : c.value.type === 'profit'
           ? `${c.value.k === 1 ? '' : `${formatNumber(c.value.k, 2)} × `}lợi nhuận/đơn ${ref == null ? '--' : metricValueText(c.metric, ref / c.value.k)}`
-          : `${c.value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} ${ref == null ? '--' : formatNumber(ref, 2)}`;
+          : c.value.type === 'breakEven' || c.value.type === 'target'
+            ? `${c.value.type === 'breakEven' ? 'hoà vốn' : 'mục tiêu'} ${ref == null ? '--' : formatNumber(ref, 2)}`
+            : '--';
     const part = c.op === 'eq' && actual != null ? '' : `${OP_LABEL[c.op]} ${refLabel}`;
     byMetric.set(c.metric, [...(byMetric.get(c.metric) ?? []), part]);
   }

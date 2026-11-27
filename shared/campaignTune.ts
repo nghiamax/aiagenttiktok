@@ -800,3 +800,71 @@ export const tuneActionText = (a: TuneAction) =>
   a.type === 'update_budget'
     ? `${a.revertOf ? 'Trả' : a.pct > 0 ? 'Tăng' : 'Giảm'} ngân sách ${vnd(a.from)} → ${vnd(a.to)}`
     : `${a.revertOf ? 'Trả' : a.pct > 0 ? 'Tăng' : 'Hạ'} ROI mục tiêu ${fmt(a.from)} → ${fmt(a.to)}`;
+
+/* ───────── Bảng quy tắc để xem trên giao diện (Sếp yêu cầu 27/11) ───────── */
+
+export type TuneRuleGroup = 'check' | 'protect' | 'measure' | 'loss' | 'profit';
+
+export const TUNE_RULE_GROUPS: { id: TuneRuleGroup; label: string }[] = [
+  { id: 'check', label: 'Kiểm tra trước — chưa chỉnh' },
+  { id: 'protect', label: 'Bảo vệ khẩn — chạy ngay, không chờ' },
+  { id: 'measure', label: 'Đo kết quả bước vừa chỉnh' },
+  { id: 'loss', label: 'Đang lỗ (7 ngày gần nhất và 7 ngày trước đều lỗ)' },
+  { id: 'profit', label: 'Đang lời' },
+];
+
+export interface TuneRuleRow {
+  code: TuneCode;
+  group: TuneRuleGroup;
+  /** Khi nào (có số đang cài) */
+  when: string;
+  /** BOT làm gì */
+  action: string;
+  /** Công tắc nhóm đang tắt → quy tắc không chạy */
+  off?: boolean;
+}
+
+/** Danh sách quy tắc theo đúng thứ tự BOT xét, câu chữ chèn số đang cài trong `s` */
+export function tuneRuleRows(s: TuneConfig): TuneRuleRow[] {
+  const n = (x: number) => String(x).replace('.', ',');
+  const rescueOff = !s.rescue;
+  const growOff = !s.grow;
+  const revertOff = !s.autoRevert;
+  const thin = `hoà vốn × ${n(1 + s.thinMarginPct / 100)}`;
+  return [
+    { code: 'E3', group: 'check', when: 'Chiến dịch đang tắt', action: 'Không làm gì' },
+    { code: 'F8', group: 'check', when: 'Chi theo sản phẩm lệch chi cả chiến dịch > 20% (số liệu có vấn đề)', action: 'Không chỉnh' },
+    { code: 'A1', group: 'check', when: `Sản phẩm chưa nhập ROI hoà vốn chiếm > ${n(s.missingBeMaxPct)}% doanh thu`, action: 'Không chỉnh, nhắc nhập hoà vốn' },
+    { code: 'A2', group: 'check', when: `Dưới ${n(s.minOrders)} đơn trong 7 ngày (hoặc chưa có đơn mà chưa tới ngưỡng cảnh báo)`, action: 'Chờ thêm số liệu' },
+    { code: 'A5', group: 'check', when: 'Chiến dịch không đặt ROI mục tiêu', action: 'Chỉ chỉnh được ngân sách' },
+    { code: 'A6', group: 'check', when: `Chiến dịch mới (7 ngày trước chưa chạy), hoặc vừa hạ ngân sách vì lỗ kéo dài / chưa có đơn (trong ${n(s.learningDays)} ngày)`, action: 'Không tăng ngân sách, không hạ ROI — chỉ bảo vệ' },
+
+    { code: 'H1', group: 'protect', when: `Chưa có đơn, đã chi ≥ ${n(s.warnP)}P`, action: 'Chỉ cảnh báo' },
+    { code: 'H2', group: 'protect', when: `Chưa có đơn, đã chi ≥ ${n(s.stopP)}P`, action: `Tiêu ≥ ${n(s.fullUsePct)}% ngân sách → hạ ngân sách ${n(s.protectCutPct)}%; tiêu ít → báo "Nên tắt chiến dịch"` },
+    { code: 'H3', group: 'protect', when: `Lỗ hôm nay ≥ ${n(s.dayLossP)}P`, action: `Hạ ngân sách về gần mức đã tiêu (tối đa ${n(s.protectCutPct)}%) — phanh tạm, không khoá` },
+    { code: 'H4', group: 'protect', when: `Lỗ 7 ngày ≥ ${n(s.weekLossP)}P`, action: 'Báo "Nên tắt chiến dịch" (Sếp tắt tay), vẫn làm bước cứu lỗ' },
+    { code: 'H5', group: 'protect', when: `Bước vừa chỉnh làm lỗ thêm ≥ ${n(s.testLossP)}P`, action: 'Trả về số cũ ngay' },
+
+    { code: 'A3', group: 'measure', when: `Chưa đủ ${n(s.minWaitDays)} ngày sau khi chỉnh`, action: 'Chờ đo' },
+    { code: 'D2', group: 'measure', when: `Sau bước mở rộng / thử nâng ROI khi lời: đơn/ngày giảm > ${n(s.maxOrderDropPct)}%`, action: 'Trả về số cũ', off: revertOff },
+    { code: 'D3', group: 'measure', when: `Lời/ngày giảm > ${n(s.profitDropPct)}% so với trước khi chỉnh`, action: 'Trả về số cũ', off: revertOff },
+    { code: 'D4', group: 'measure', when: `Đo hết ${n(s.maxWaitDays)} ngày vẫn thiếu đơn`, action: `Giữ số mới, 7 ngày không thử tiếp`, off: revertOff },
+    { code: 'D5', group: 'measure', when: 'Đã trả về 2 lần trong 14 ngày', action: 'Tạm ngừng thử' },
+    { code: 'D6', group: 'measure', when: `Vừa phanh vì lỗ hôm nay (H3), trong ${n(s.learningDays)} ngày có ngày lời + tiêu ≥ ${n(s.fullUsePct)}% + ≥ ${n(s.recoverMinOrders)} đơn`, action: 'Trả thẳng ngân sách cũ' },
+
+    { code: 'B3', group: 'loss', when: `≥ ${n(s.concentratePct)}% phần lỗ nằm ở 1 sản phẩm`, action: 'Không đụng chiến dịch, báo xử lý sản phẩm đó', off: rescueOff },
+    { code: 'B5', group: 'loss', when: 'Đã nâng ROI mục tiêu 3 lần trong 21 ngày mà vẫn lỗ', action: 'Dừng, báo Sếp xem lại giá / sản phẩm', off: rescueOff },
+    { code: 'B1', group: 'loss', when: 'ROI mục tiêu đặt thấp hơn hoà vốn', action: `Nâng ROI mục tiêu, tối đa ${n(s.lossRaiseMaxPct)}% mỗi lần`, off: rescueOff },
+    { code: 'B2a', group: 'loss', when: `Tiêu ≥ ${n(s.fullUsePct)}% ngân sách`, action: `Hạ ngân sách ${n(s.lossBudgetCutPct)}%`, off: rescueOff },
+    { code: 'B6', group: 'loss', when: `ROI thực thấp hơn ROI mục tiêu ≥ ${n(s.gapPct)}%`, action: 'Giữ, báo Sếp (TikTok không đạt nổi mục tiêu)', off: rescueOff },
+    { code: 'B2b', group: 'loss', when: 'Còn lại (tiêu chưa hết ngân sách)', action: `Nâng ROI mục tiêu ${n(s.roiUpPct)}%`, off: rescueOff },
+    { code: 'B7', group: 'loss', when: '7 ngày gần nhất lỗ nhưng 7 ngày trước chưa lỗ / chưa đủ số', action: 'Chờ thêm bằng chứng', off: rescueOff },
+
+    { code: 'C4', group: 'profit', when: `Lời mỏng: ROI thực < ${thin}`, action: `Tiêu ≥ ${n(s.slowUsePct)}% → nâng ROI mục tiêu ${n(s.roiUpPct)}% (≤ ROI thực × ${n(s.ceilK)}); tiêu ít → giữ`, off: growOff },
+    { code: 'C5', group: 'profit', when: `Vừa hạ vì lỗ kéo dài, ${n(s.minWaitDays)} ngày sau lời rõ + tiêu ≥ ${n(s.fullUsePct)}% + ≥ ${n(s.recoverMinOrders)} đơn/ngày`, action: `Mở khoá sớm, tăng ngân sách ${n(s.budgetStepPct)}%`, off: growOff },
+    { code: 'C1', group: 'profit', when: `Lời rõ (ROI thực ≥ ${thin}) và tiêu ≥ ${n(s.fullUsePct)}% ngân sách`, action: `Tăng ngân sách ${n(s.budgetStepPct)}%`, off: growOff },
+    { code: 'C6', group: 'profit', when: `ROI thực ≥ ROI mục tiêu × ${n(s.headroomK)}, hoặc tiêu ${n(s.slowUsePct)}–${n(s.fullUsePct)}% và ROI thực ≥ ROI mục tiêu × ${n(s.nearK)}`, action: `Thử nâng ROI mục tiêu ${n(s.roiRaisePct)}% (bị trả về thì ${n(s.raiseCooldownDays)} ngày không thử lại)`, off: growOff },
+    { code: 'C3', group: 'profit', when: `Tiêu < ${n(s.slowUsePct)}% ngân sách`, action: `Hạ ROI mục tiêu ${n(s.roiDownPct)}%`, off: growOff },
+    { code: 'C9', group: 'profit', when: 'Còn lại', action: 'Giữ nguyên' },
+  ];
+}

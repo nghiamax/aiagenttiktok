@@ -10,6 +10,8 @@ import {
   tuneSettingsOf,
   DEFAULT_TUNE,
   isLegacyCampaignRule,
+  tuneRuleRows,
+  TUNE_CODES,
   TUNE_TRIGGER,
   type CampaignTuneSettings,
   type TuneContext,
@@ -481,5 +483,22 @@ describe('Số chỉnh được ở Nâng cao (Sếp chốt 27/11)', () => {
     const today = { ...snap({ budget: 700_000 }, { revenue: 2.5e6, cost: 0.5e6 }, { revenue: 0.6e6, cost: 0.15e6 }), range: { from: '2026-11-18', to: '2026-11-18' } };
     expect(decide(snap({ budget: 700_000 }), S, [brake], { pRef: 100_000, today }).code).toBe('D6');
     expect(decide(snap({ budget: 700_000 }), withTune(S, { recoverMinOrders: 50 }), [brake], { pRef: 100_000, today }).code).not.toBe('D6');
+  });
+});
+
+describe('Bảng quy tắc trên giao diện', () => {
+  it('đủ mọi mã tình huống (trừ OFF), số theo cấu hình đang cài', () => {
+    const rows = tuneRuleRows(tuneSettingsOf(S));
+    const codes = new Set(rows.map((r) => r.code));
+    for (const c of Object.keys(TUNE_CODES)) if (c !== 'OFF') expect(codes.has(c as keyof typeof TUNE_CODES)).toBe(true);
+    expect(rows.find((r) => r.code === 'H3')!.when).toContain('2P');
+    expect(tuneRuleRows(tuneSettingsOf(withTune(S, { dayLossP: 3 }))).find((r) => r.code === 'H3')!.when).toContain('3P');
+    expect(tuneRuleRows(tuneSettingsOf(withTune(S, { mode: 'growth' }))).find((r) => r.code === 'C1')!.action).toContain('30%');
+  });
+
+  it('công tắc nhóm tắt → các dòng của nhóm đánh dấu "đang tắt"', () => {
+    const rows = tuneRuleRows(tuneSettingsOf(withTune(S, { rescue: false })));
+    expect(rows.filter((r) => r.group === 'loss').every((r) => r.off)).toBe(true);
+    expect(rows.filter((r) => r.group === 'profit').some((r) => r.off)).toBe(false);
   });
 });

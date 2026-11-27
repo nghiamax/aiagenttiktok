@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../../../auth/AuthProvider';
 import { DEFAULT_TUNE, TUNE_MODES, tuneSettingsOf, type CampaignTuneSettings, type TuneMode } from '../../../../../shared/campaignTune';
 import { useAdsSettings } from '../../settings';
+import TuneRulesTable from './TuneRulesTable';
 
 type NumKey = { [K in keyof CampaignTuneSettings]: CampaignTuneSettings[K] extends number ? K : never }[keyof CampaignTuneSettings];
 type BoolKey = 'rescue' | 'grow' | 'autoRevert';
@@ -114,6 +115,8 @@ export default function CampaignTuneCard() {
   }
   const savedPlain = Object.fromEntries(Object.keys(DEFAULT_TUNE).map((k) => [k, saved[k as keyof CampaignTuneSettings]]));
   const dirty = JSON.stringify({ ...savedPlain, ...next }) !== JSON.stringify(savedPlain);
+  // Bảng quy tắc hiện theo bản nháp (chưa lưu) để thấy ngay số vừa gõ
+  const draftConfig = tuneSettingsOf({ campaignTune: { ...savedPlain, ...next } as Partial<CampaignTuneSettings> });
 
   const fieldInput = (f: Field) => (
     <label key={f.key} className="block" title={f.hint}>
@@ -214,6 +217,8 @@ export default function CampaignTuneCard() {
           </button>
         ))}
       </div>
+
+      <TuneRulesTable config={draftConfig} />
 
       {isAdmin && (
         <div className="mt-5 border-t border-line pt-4">

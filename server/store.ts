@@ -105,6 +105,8 @@ function readRuntime(shopId: string): AgentRuntime {
   return {
     lastRunAt: head.lastRunAt ?? null,
     lastRunError: head.lastRunError ?? null,
+    lastRunTrigger: head.lastRunTrigger ?? null,
+    lastRunVersion: head.lastRunVersion ?? null,
     proposals: rows('proposals') as unknown as AgentProposal[],
     actions: rows('actions') as unknown as AgentActionLog[],
   };
@@ -113,7 +115,11 @@ function readRuntime(shopId: string): AgentRuntime {
 /** Ghi lại toàn bộ danh sách (thứ tự = seq). Tối đa 2000 dòng mỗi loại nên ghi lại cả bảng vẫn nhanh. */
 function writeRuntime(shopId: string, rt: AgentRuntime) {
   const db = getDb();
-  writeRow('agent_runtime', { lastRunAt: rt.lastRunAt ?? null, lastRunError: rt.lastRunError ?? null }, shopId);
+  writeRow(
+    'agent_runtime',
+    { lastRunAt: rt.lastRunAt ?? null, lastRunError: rt.lastRunError ?? null, lastRunTrigger: rt.lastRunTrigger ?? null, lastRunVersion: rt.lastRunVersion ?? null },
+    shopId,
+  );
   db.prepare('DELETE FROM proposals WHERE shop_id = ?').run(shopId);
   const insP = db.prepare('INSERT OR REPLACE INTO proposals (id, shop_id, status, created_at, data, seq) VALUES (?, ?, ?, ?, ?, ?)');
   rt.proposals.forEach((p, i) => insP.run(p.id, shopId, p.status, p.createdAt, JSON.stringify(p), i));

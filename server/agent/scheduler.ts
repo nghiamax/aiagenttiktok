@@ -2,6 +2,7 @@ import { updateRuntime } from '../store.js';
 import { maybeShopId, withShop } from '../shopContext.js';
 import { shopsWithTikTok } from '../shops.js';
 import { holdSchedulerLock, releaseSchedulerLock } from './leaderLock.js';
+import { BOOT_VERSION, codeChangedFrom, currentCodeVersion, managedByHost } from '../buildInfo.js';
 
 /** Lượt quét bị chặn vì tiến trình khác đang giữ khoá → thử lại sau ngần này (không đợi tới giờ sau) */
 export const LOCK_RETRY_MS = 60_000;
@@ -13,7 +14,7 @@ import { fillAfterMetrics } from './afterMetrics.js';
 const AFTER_FIRST_MS = 60_000;
 const AFTER_EVERY_MS = 15 * 60_000;
 async function afterTick() {
-  if (!holdSchedulerLock()) return;
+  if (!holdLock()) return;
   try {
     await forEachShop('cập nhật số liệu sau thao tác', async (shop) => {
       const n = await fillAfterMetrics();
@@ -39,7 +40,7 @@ async function forEachShop(what: string, fn: (shopId: string) => Promise<void>) 
 const VERIFY_EVERY_MS = 10_000;
 let verifying = false;
 async function verifyTick() {
-  if (verifying || !holdSchedulerLock()) return;
+  if (verifying || !holdLock()) return;
   verifying = true;
   try {
     await forEachShop('kiểm tra kết quả', async (shop) => {
@@ -62,6 +63,28 @@ const running = new Map<string, Promise<RunSummary>>();
 
 /** Thời điểm lượt quét theo lịch kế tiếp (ms), null nếu lịch tắt */
 let nextRunAt: number | null = null;
+
+/**
+ * Tiến trình chạy code cũ (code trên ổ đĩa đã đổi sau git pull) → nhường lịch, không bao giờ lấy lại khoá.
+ * Lỗi 27/11: hosting LiteSpeed không tắt tiến trình cũ khi Restart → tiến trình từ 25/11 vẫn quét bằng code cũ.
+ * Dưới lsnode / Passenger: thoát hẳn khi rảnh (request sau tự mở tiến trình mới); máy dev / VPS chỉ nhả lịch.
+ */
+let retired = false;
+export function holdLock(): boolean {
+  if (retired) return false;
+  const now = currentCodeVersion();
+  if (codeChangedFrom(BOOT_VERSION, now)) {
+    retired = true;
+    releaseSchedulerLock();
+    console.warn(`[agent] Code trên ổ đĩa đã đổi (${BOOT_VERSION} → ${now}) — tiến trình cũ (pid ${process.pid}) nhường lịch quét`);
+    if (managedByHost()) {
+      const quit = () => (running.size ? setTimeout(quit, 5_000) : process.exit(0));
+      quit();
+    }
+    return false;
+  }
+  return holdSchedulerLock();
+}
 
 /** Shop đang mở có lượt quét đang chạy không */
 export const isAgentRunning = () => {
@@ -134,7 +157,8 @@ export function startScheduler() {
   };
   /** Tiến trình khác đang giữ lịch (cPanel có thể chạy nhiều tiến trình / vừa Restart) → thử lại sau 1 phút, không quét trùng */
   const tryRun = () => {
-    if (!holdSchedulerLock()) {
+    if (!holdLock()) {
+      if (retired) return;
       setTimeout(() => {
         // Chỉ thử lại khi lượt kế tiếp còn xa (tránh chồng lên lượt theo lịch)
         if (nextRunAt && nextRunAt - Date.now() > LOCK_RETRY_MS) tryRun();

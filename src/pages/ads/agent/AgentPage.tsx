@@ -90,6 +90,8 @@ export default function AgentPage() {
           paused={agentState.paused}
           lastRunAt={agentState.lastRunAt}
           lastRunError={agentState.lastRunError ?? null}
+          lastRunTrigger={agentState.lastRunTrigger ?? null}
+          lastRunVersion={agentState.lastRunVersion ?? null}
           running={running}
           connected={connected}
           error={agentError}

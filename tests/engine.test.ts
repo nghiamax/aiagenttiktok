@@ -71,6 +71,14 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect(mock.runtime.proposals).toHaveLength(0);
   });
 
+  it('ghi lượt gần nhất là tự quét / Quét ngay + phiên bản code (phát hiện tiến trình cũ — lỗi 27/11)', async () => {
+    await runAgent();
+    expect(mock.runtime.lastRunTrigger).toBe('schedule');
+    expect(mock.runtime).toHaveProperty('lastRunVersion');
+    await runAgent({ fresh: true });
+    expect(mock.runtime.lastRunTrigger).toBe('manual');
+  });
+
   it('tạo đề xuất gỡ cho 3 video lỗ + nhắc việc cho video cần ủy quyền', async () => {
     const s = await runAgent();
     expect(s.proposals).toBe(3);

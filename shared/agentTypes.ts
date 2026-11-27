@@ -231,6 +231,10 @@ export interface AgentRuntime {
   lastRunAt: string | null;
   /** Lỗi của lượt chạy gần nhất, null nếu ổn */
   lastRunError?: string | null;
+  /** Lượt gần nhất: tự quét theo lịch hay Sếp bấm Quét ngay */
+  lastRunTrigger?: 'schedule' | 'manual' | null;
+  /** Commit code của tiến trình chạy lượt gần nhất (phát hiện tiến trình cũ còn quét — lỗi 27/11) */
+  lastRunVersion?: string | null;
   proposals: AgentProposal[];
   actions: AgentActionLog[];
 }

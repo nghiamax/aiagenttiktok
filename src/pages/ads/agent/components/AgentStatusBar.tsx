@@ -13,6 +13,10 @@ interface AgentStatusBarProps {
   paused: boolean;
   lastRunAt: string | null;
   lastRunError: string | null;
+  /** Lượt gần nhất: tự quét / Quét ngay */
+  lastRunTrigger?: 'schedule' | 'manual' | null;
+  /** Commit code của tiến trình chạy lượt gần nhất */
+  lastRunVersion?: string | null;
   /** Server đang chạy một lượt */
   running: boolean;
   /** Đã kết nối server */
@@ -49,6 +53,8 @@ export default function AgentStatusBar({
   paused,
   lastRunAt,
   lastRunError,
+  lastRunTrigger,
+  lastRunVersion,
   running,
   connected,
   error,
@@ -73,7 +79,12 @@ export default function AgentStatusBar({
   const impact30 = impactTotal(actions, guardrails.evaluateAfterHours, '30d');
 
   const stats = [
-    { label: 'Lần chạy gần nhất', value: lastRunAt ? formatDateTime(lastRunAt) : 'Chưa chạy lần nào' },
+    {
+      label: 'Lần chạy gần nhất',
+      value: lastRunAt
+        ? `${formatDateTime(lastRunAt)}${lastRunTrigger === 'schedule' ? ' · tự quét' : lastRunTrigger === 'manual' ? ' · Quét ngay' : ''}`
+        : 'Chưa chạy lần nào',
+    },
     { label: 'Tăng cường hôm nay', value: `${shortVnd(boostToday)} / ${shortVnd(guardrails.dailyBoostCap)}` },
     {
       label: 'Thao tác hôm nay',
@@ -102,6 +113,8 @@ export default function AgentStatusBar({
   }
 
   const problem = error ?? lastRunError;
+  // Lượt quét chạy bằng tiến trình code cũ (lỗi 27/11: hosting không tắt tiến trình cũ khi Restart)
+  const staleServer = !!lastRunVersion && !!schedule.serverVersion && lastRunVersion !== schedule.serverVersion;
 
   return (
     <Card className="flex flex-col gap-4 p-5">
@@ -173,6 +186,13 @@ export default function AgentStatusBar({
           </div>
         ))}
       </dl>
+
+      {staleServer && (
+        <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          Lượt quét gần nhất chạy bằng server bản cũ — đề xuất có thể sai. Tắt tiến trình cũ trên hosting (xem hướng dẫn cập nhật) rồi bấm Quét ngay.
+        </p>
+      )}
 
       {(problem || result) && (
         <p

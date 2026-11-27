@@ -3,6 +3,7 @@ import type { AdsSettings } from '../../shared/settings.js';
 import type { AgentConfig, AgentGuardrails, AgentRule } from '../../shared/agentTypes.js';
 import { executeManual, executeProposal, PrecheckError, undoAction, verifyAction, type ExecResult, type ManualInput } from '../agent/executor.js';
 import { actorOf, requirePermission } from '../auth/middleware.js';
+import { BOOT_VERSION } from '../buildInfo.js';
 import { AGENT_INTERVAL_MINUTES, getNextRunAt, isAgentRunning, runAgentOnce } from '../agent/scheduler.js';
 import {
   agentConfigStored,
@@ -51,6 +52,8 @@ const stateResponse = () => ({
   configStored: agentConfigStored(),
   nextRunAt: getNextRunAt(),
   intervalMinutes: AGENT_INTERVAL_MINUTES,
+  /** Commit code của tiến trình đang trả lời — web so với lastRunVersion để báo lượt quét chạy bằng code cũ */
+  serverVersion: BOOT_VERSION,
 });
 
 agentRouter.get('/state', requirePermission('view'), (_req, res) => {

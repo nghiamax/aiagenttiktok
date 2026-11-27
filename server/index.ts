@@ -3,6 +3,7 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { config, unsafeDirReason } from './config.js';
 import { startScheduler } from './agent/scheduler.js';
+import { BOOT_VERSION, BOOTED_AT } from './buildInfo.js';
 import { adsRouter } from './routes/ads.js';
 import { agentRouter, settingsRouter } from './routes/agent.js';
 import { watchlistRouter } from './routes/watchlist.js';
@@ -53,7 +54,8 @@ app.use('/api', originGuard);
 app.use('/api', express.json({ limit: '1mb' }));
 // Không cần đăng nhập: kiểm tra server sống + đăng nhập / đăng xuất / thông tin phiên
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+  // version / pid / bootedAt: kiểm tiến trình đang chạy đúng code mới (lỗi 27/11: tiến trình cũ còn sống sau Restart)
+  res.json({ ok: true, version: BOOT_VERSION, bootedAt: BOOTED_AT, pid: process.pid });
 });
 app.use('/api/auth', authRouter);
 app.get(CALLBACK_PATH, tiktokCallback);

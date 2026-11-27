@@ -23,6 +23,7 @@ import type {
 import { shortVnd } from '../../shared/format.js';
 import type { AdsSettings } from '../../shared/settings.js';
 import { getSnapshot, todayVN } from '../ads/cache.js';
+import { BOOT_VERSION } from '../buildInfo.js';
 import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
 import { applyRecentActions } from '../../shared/videoStatus.js';
 
@@ -335,6 +336,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
 
     rt.lastRunAt = ranAt;
     rt.lastRunError = null;
+    rt.lastRunTrigger = opts?.fresh === true ? 'manual' : 'schedule';
+    rt.lastRunVersion = BOOT_VERSION;
     // Giữ nhật ký / đề xuất gọn: tối đa 2000 dòng mỗi loại
     rt.proposals = rt.proposals.slice(0, 2000);
     rt.actions = rt.actions.slice(0, 2000);

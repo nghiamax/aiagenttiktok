@@ -85,7 +85,14 @@ cp -a server-data ~/server-data-backup-$(date +%Y%m%d-%H%M)     # sao lưu trư�
 git checkout -- package-lock.json                                # bỏ thay đổi npm tự ghi (nếu có)
 git pull && npm install --include=dev && npx vite build
 ```
-Sau đó vào Setup Node.js App → **Restart**.
+Sau đó **tắt hết tiến trình cũ** rồi mở lại trang:
+```
+pkill -f "lsnode:/home/necomaxc/tiktok-admin"; sleep 2; pgrep -fl node || echo "Đã tắt hết"
+```
+Mở `https://tool.necomax.com` (tự chạy tiến trình mới) → BOT AI → **Quét ngay**.
+- **Bắt buộc** (lỗi 27/11/2026): hosting chạy app bằng LiteSpeed `lsnode`; nút Restart trong Setup Node.js App **không tắt tiến trình cũ** → tiến trình từ 25/11 vẫn tự quét mỗi giờ bằng code cũ, tạo đề xuất gỡ video sai ("Chi 18đ ≥ mục tiêu 7"). Từ bản này tiến trình cũ tự nhường lịch + tự thoát khi thấy code đã đổi, nhưng vẫn nên `pkill` cho chắc.
+- Kiểm tra: `https://tool.necomax.com/api/health` → `version` = commit mới (`git log -1 --format=%h`). Trang BOT AI hiện dải vàng "Lượt quét gần nhất chạy bằng server bản cũ" nếu còn tiến trình cũ quét.
+- Xem các tiến trình đang chạy: `for p in $(pgrep -f node); do echo "$p | $(ps -o lstart= -p $p)"; done`.
 - Luôn dùng `npm install --include=dev` (hosting chạy chế độ production — thiếu `--include=dev` sẽ mất vite / tsx, server không khởi động).
 - `npx vite build` hỏi "Need to install vite@…" → bấm **n** (thiếu bước `--include=dev` ở trên).
 

@@ -18,12 +18,15 @@ interface ServerState extends AgentState {
   configStored: boolean;
   nextRunAt: string | null;
   intervalMinutes: number;
+  serverVersion?: string | null;
 }
 
 /** Lịch quét của server */
 export interface AgentSchedule {
   nextRunAt: string | null;
   intervalMinutes: number;
+  /** Commit code của tiến trình server đang trả lời */
+  serverVersion?: string | null;
 }
 
 export interface RunSummary {
@@ -101,10 +104,10 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
   const [schedule, setSchedule] = useState<AgentSchedule>({ nextRunAt: null, intervalMinutes: 60 });
 
   const accept = useCallback((s: ServerState) => {
-    const { running: r, configStored: _stored, nextRunAt, intervalMinutes, ...rest } = s;
+    const { running: r, configStored: _stored, nextRunAt, intervalMinutes, serverVersion, ...rest } = s;
     setState(rest);
     setRunning(r);
-    setSchedule({ nextRunAt, intervalMinutes });
+    setSchedule({ nextRunAt, intervalMinutes, serverVersion: serverVersion ?? null });
     setConnected(true);
     setError(null);
   }, []);

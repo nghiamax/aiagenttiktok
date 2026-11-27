@@ -15,7 +15,12 @@ const PROTECT: Field[] = [
   { key: 'weekLossP', label: 'Lỗ 7 ngày tối đa', unit: '× P', hint: 'Vượt → đề xuất Sếp tắt chiến dịch (H4)' },
   { key: 'warnP', label: 'Chưa có đơn: cảnh báo khi chi ≥', unit: '× P', hint: 'H1' },
   { key: 'stopP', label: 'Chưa có đơn: bảo vệ khi chi ≥', unit: '× P', hint: 'Tiêu hết ngân sách → hạ ngân sách; tiêu ít → đề xuất tắt (H2)' },
-  { key: 'learningDays', label: 'Chiến dịch mới / vừa bảo vệ: chỉ bảo vệ trong', unit: 'ngày' },
+  {
+    key: 'learningDays',
+    label: 'Chiến dịch mới / vừa hạ ngân sách vì lỗ kéo dài: không tăng ngân sách trong',
+    unit: 'ngày',
+    hint: 'Mở sớm nếu 2 ngày có lời và tiêu hết ngân sách mới. Hạ vì lỗ trong ngày thì không khoá: hôm sau ngon (lời, tiêu hết, ≥ 3 đơn) là trả lại ngân sách cũ',
+  },
 ];
 
 /** Nâng cao — chỉ Quản trị viên */
@@ -44,6 +49,15 @@ const ADVANCED: { title: string; fields: Field[] }[] = [
       { key: 'gapPct', label: 'Ngừng siết khi ROI thực thấp hơn ROI MT ≥', unit: '%' },
       { key: 'thinMarginPct', label: 'Lời mỏng khi ROI thực < hoà vốn +', unit: '%' },
       { key: 'ceilK', label: 'Lời mỏng: ROI MT mới ≤ ROI thực ×', unit: '' },
+      { key: 'protectCutPct', label: 'Bảo vệ (chưa có đơn / lỗ hôm nay): hạ ngân sách tối đa', unit: '%' },
+    ],
+  },
+  {
+    title: 'Khi đang lời: thử nâng ROI mục tiêu',
+    fields: [
+      { key: 'headroomK', label: 'Bắt buộc thử nâng khi ROI thực ≥ ROI MT ×', unit: '', hint: 'ROI thực vượt hẳn mục tiêu = mục tiêu đặt quá thấp' },
+      { key: 'nearK', label: 'Tiêu 50–90%: chỉ thử nâng khi ROI thực ≥ ROI MT ×', unit: '', hint: '0,85 = ROI thực sát mục tiêu (từ 85% trở lên). Thấp hơn thì không nâng' },
+      { key: 'raiseCooldownDays', label: 'Thử nâng bị trả về: không thử lại trong', unit: 'ngày' },
     ],
   },
   {
@@ -52,6 +66,7 @@ const ADVANCED: { title: string; fields: Field[] }[] = [
       { key: 'minOrders', label: 'Cần ít nhất', unit: 'đơn / 7 ngày' },
       { key: 'missingBeMaxPct', label: 'Không đánh giá khi SP thiếu hoà vốn chiếm >', unit: '% doanh thu' },
       { key: 'concentratePct', label: 'Lỗ dồn 1 sản phẩm khi chiếm ≥', unit: '% phần lỗ' },
+      { key: 'recoverMinOrders', label: 'Vừa hạ ngân sách: ngày ngon để tăng lại cần ít nhất', unit: 'đơn' },
     ],
   },
 ];
@@ -60,7 +75,7 @@ const ALL_FIELDS = [...PROTECT, ...ADVANCED.flatMap((s) => s.fields)];
 
 const SWITCHES: { key: BoolKey; label: string; desc: string }[] = [
   { key: 'rescue', label: 'Cứu chiến dịch lỗ', desc: 'Nâng ROI mục tiêu / hạ ngân sách khi lỗ (B1 – B7)' },
-  { key: 'grow', label: 'Mở rộng chiến dịch lời', desc: 'Tăng ngân sách / hạ ROI mục tiêu (C1 – C4)' },
+  { key: 'grow', label: 'Mở rộng chiến dịch lời', desc: 'Tăng ngân sách / thử nâng hoặc hạ ROI mục tiêu khi đang lời' },
   { key: 'autoRevert', label: 'Tự đo & lùi', desc: 'Bước thử làm xấu đi → đề xuất trả về (D2 – D4)' },
 ];
 
@@ -165,6 +180,7 @@ export default function CampaignTuneCard() {
               <ul className="mt-2 space-y-0.5 text-xs tabular-nums">
                 <li>Tăng ngân sách mỗi bước +{p.budgetStepPct}%</li>
                 <li>Hạ ROI mục tiêu mỗi bước −{p.roiDownPct}%</li>
+                <li>Đang lời: thử nâng ROI +{p.roiRaisePct}%</li>
                 <li>Lỗ tối đa mỗi lần thử {p.testLossP}P</li>
                 <li>Lời/ngày giảm &gt; {p.profitDropPct}% → trả về</li>
               </ul>

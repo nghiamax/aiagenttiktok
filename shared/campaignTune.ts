@@ -26,12 +26,14 @@ export interface TuneModePreset {
   testLossP: number;
   /** Lời/ngày giảm quá (%) → trả về số cũ — D3 */
   profitDropPct: number;
+  /** Đang lời: mỗi bước thử nâng ROI mục tiêu (%) — C6 */
+  roiRaisePct: number;
 }
 
 export const TUNE_MODES: Record<TuneMode, TuneModePreset & { label: string; desc: string }> = {
-  careful: { label: 'Thận trọng', desc: 'Giữ lời trước, mở rộng chậm', budgetStepPct: 10, roiDownPct: 3, testLossP: 1, profitDropPct: 3 },
-  balanced: { label: 'Cân bằng', desc: 'Mở rộng từng bước khi đã xác nhận', budgetStepPct: 20, roiDownPct: 5, testLossP: 2, profitDropPct: 5 },
-  growth: { label: 'Tăng trưởng', desc: 'Mở rộng nhanh hơn, chịu thử lớn hơn', budgetStepPct: 30, roiDownPct: 10, testLossP: 3, profitDropPct: 10 },
+  careful: { label: 'Thận trọng', desc: 'Giữ lời trước, mở rộng chậm', budgetStepPct: 10, roiDownPct: 3, testLossP: 1, profitDropPct: 3, roiRaisePct: 5 },
+  balanced: { label: 'Cân bằng', desc: 'Mở rộng từng bước khi đã xác nhận', budgetStepPct: 20, roiDownPct: 5, testLossP: 2, profitDropPct: 5, roiRaisePct: 10 },
+  growth: { label: 'Tăng trưởng', desc: 'Mở rộng nhanh hơn, chịu thử lớn hơn', budgetStepPct: 30, roiDownPct: 10, testLossP: 3, profitDropPct: 10, roiRaisePct: 10 },
 };
 
 export interface CampaignTuneSettings {
@@ -71,6 +73,16 @@ export interface CampaignTuneSettings {
   /** Lỗ ước tính hôm nay ≥ N × P (H3) / 7 ngày ≥ N × P (H4) */
   dayLossP: number;
   weekLossP: number;
+  /** Bảo vệ (H2 chưa có đơn / H3 lỗ hôm nay): hạ ngân sách tối đa (%) */
+  protectCutPct: number;
+  /** Ngày "ngon" để trả / tăng lại ngân sách sau khi hạ (D6 / C5): ít nhất N đơn */
+  recoverMinOrders: number;
+  /** C6: ROI thực ≥ ROI MT × k → còn dư địa, bắt buộc thử nâng */
+  headroomK: number;
+  /** C6: tiêu 50–90% chỉ thử nâng khi ROI thực ≥ ROI MT × k (sát mục tiêu) */
+  nearK: number;
+  /** C6 bị trả về → bao nhiêu ngày không thử nâng lại */
+  raiseCooldownDays: number;
   /** Bật nhóm tình huống */
   rescue: boolean;
   grow: boolean;
@@ -98,6 +110,11 @@ export const DEFAULT_TUNE: CampaignTuneSettings = {
   stopP: 3,
   dayLossP: 2,
   weekLossP: 5,
+  protectCutPct: 30,
+  recoverMinOrders: 3,
+  headroomK: 1.2,
+  nearK: 0.85,
+  raiseCooldownDays: 14,
   rescue: true,
   grow: true,
   autoRevert: true,
@@ -115,8 +132,8 @@ export function tuneSettingsOf(settings: Pick<AdsSettings, 'campaignTune'>): Tun
   }
   const out = merged as unknown as CampaignTuneSettings;
   if (!TUNE_MODES[out.mode]) out.mode = 'balanced';
-  const { budgetStepPct, roiDownPct, testLossP, profitDropPct } = TUNE_MODES[out.mode];
-  return { ...out, budgetStepPct, roiDownPct, testLossP, profitDropPct };
+  const { budgetStepPct, roiDownPct, testLossP, profitDropPct, roiRaisePct } = TUNE_MODES[out.mode];
+  return { ...out, budgetStepPct, roiDownPct, testLossP, profitDropPct, roiRaisePct };
 }
 
 /** Mã tình huống → tên ngắn (hiện ở badge / đề xuất) */
@@ -147,6 +164,9 @@ export const TUNE_CODES = {
   D3: 'Lùi lại – lãi giảm',
   D4: 'Không đủ cơ sở',
   D5: 'Đã ở điểm tốt',
+  D6: 'Trả ngân sách sau khi phanh',
+  C5: 'Hồi phục — tăng lại ngân sách',
+  C6: 'Lời – thử nâng ROI mục tiêu',
   E3: 'Chiến dịch đang tắt',
   OFF: 'Chưa bật nhóm tình huống',
 } as const;
@@ -163,11 +183,19 @@ export const TUNE_NOTIFY_CODES = new Set<string>(['H1', 'H2', 'H4', 'B3', 'B5', 
 export const needsBossDecision = (d: Pick<TuneDecision, 'code' | 'suggestPause'>) => !!d.suggestPause || TUNE_NOTIFY_CODES.has(d.code);
 
 /** Mã bảo vệ / lùi: không cần xác nhận 2 khung, không chờ thời gian chờ của quy tắc */
-export const isProtectCode = (code: string) => code.startsWith('H') || code === 'D2' || code === 'D3';
-/** Mã bảo vệ có hạ ngân sách — sau đó khoá mở rộng `learningDays` ngày */
+export const isProtectCode = (code: string) => code.startsWith('H') || code === 'D2' || code === 'D3' || code === 'D6';
+/** Mã không cần khung 7 ngày trước xác nhận: bảo vệ / lùi + hồi phục sau khi hạ (quyết bằng số sau khi hạ) */
+const isConfirmFree = (code: string) => isProtectCode(code) || code === 'C5';
+/** Mã bảo vệ có hạ ngân sách — không hạ lại trong 24 giờ (trừ khi đã trả về) */
 const PROTECT_STEP_CODES = new Set(['H2', 'H3', 'B2a']);
-/** Hạ ngân sách khi bảo vệ (H2 / H3) — bằng giới hạn giảm mặc định 30%/ngày */
-const PROTECT_CUT_PCT = 30;
+/**
+ * Hạ ngân sách vì lỗ kéo dài / chưa có đơn → khoá mở rộng `learningDays` ngày, mở sớm khi hồi phục (C5).
+ * H3 (lỗ trong ngày) = phanh tạm, KHÔNG khoá: ngày sau ngon thì trả thẳng ngân sách cũ (D6) — Sếp chốt 27/11.
+ */
+const PROTECT_LOCK_CODES = new Set(['H2', 'B2a']);
+/** Ngày "ngon" để trả / tăng lại ngân sách sau khi hạ: cần ít nhất N đơn */
+export const RECOVER_MIN_ORDERS = 3; // = DEFAULT_TUNE.recoverMinOrders
+
 
 /** Nhóm hiển thị (ô Tổng quan / lọc bảng) */
 export type TuneKind = 'loss' | 'grow' | 'testing' | 'hold' | 'na';
@@ -390,7 +418,8 @@ export function judgeStep(
   const aOrders = aOrdersTotal / days.length;
   const aProfit = dayProfit.every((p) => p != null) ? dayProfit.reduce<number>((x, p) => x + (p ?? 0), 0) / days.length : null;
   const text = `${days.length} ngày: đơn/ngày ${fmt(bOrders)} → ${fmt(aOrders)}${bProfit != null && aProfit != null ? ` · lãi/ngày ${money(bProfit)} → ${money(aProfit)}` : ''}`;
-  const tighten = isTightenStep(a);
+  // C6 nâng ROI MT khi đang lời: mục tiêu là đơn KHÔNG giảm → chấm như bước mở rộng (có D2)
+  const tighten = isTightenStep(a) && a.params.tune?.code !== 'C6';
   const enough = aOrdersTotal >= Math.ceil((s.minOrders * days.length) / 7) || (tighten && bProfit != null);
   if (!enough) return days.length >= s.maxWaitDays ? { keep: true, code: 'D4', text } : null;
   const dropPct = bOrders > 0 ? ((bOrders - aOrders) / bOrders) * 100 : 0;
@@ -416,6 +445,59 @@ function roiTo(current: number, pct: number): number {
 const roiAction = (from: number, to: number): TuneAction => ({ type: 'update_roi_target', pct: Math.round((to / from - 1) * 1000) / 10, from, to });
 const budgetAction = (from: number, to: number): TuneAction => ({ type: 'update_budget', pct: Math.round((to / from - 1) * 1000) / 10, from, to });
 const budgetBy = (from: number, pct: number) => budgetAction(from, Math.round((from * (1 + pct / 100)) / 1000) * 1000);
+
+/** Ngày ngon sau khi hạ: lời > 0, tiêu ≥ fullUsePct% ngân sách đang đặt, ≥ RECOVER_MIN_ORDERS đơn */
+function isGoodDay(m: { cost: number; revenue: number; orders: number }, be: number | null, budget: number, s: TuneConfig): boolean {
+  return !!be && m.revenue / be - m.cost > 0 && m.orders >= s.recoverMinOrders && m.cost >= (budget * s.fullUsePct) / 100;
+}
+
+/**
+ * D6 — có ngày SAU ngày phanh (giờ VN) ngon: hôm nay (đang chạy, số đơn về trễ chỉ làm lời thấp đi → đã lời là chắc)
+ * hoặc một ngày trọn đã đo. Trả câu mô tả, không có → null.
+ */
+function goodDayAfterCut(
+  cut: AgentActionLog,
+  c: Campaign,
+  breakEven: number | null,
+  today: AdsSnapshot | null | undefined,
+  settings: AdsSettings,
+  s: TuneConfig,
+  now: number,
+): string | null {
+  const budget = c.budget ?? 0;
+  const cutDate = vnDateOf(Date.parse(cut.executedAt));
+  const todayDate = vnDateOf(now);
+  const be = cut.before.breakEven ?? breakEven;
+  const todayC = today?.campaigns.find((x) => x.id === c.id);
+  if (today && todayC && todayDate > cutDate) {
+    const t = campaignEcon({ ...todayC, budget }, today, settings, now);
+    if (isGoodDay({ cost: t.cost, revenue: t.revenue, orders: t.orders }, t.breakEven ?? be, budget, s)) {
+      return `hôm nay đang lời ${money(t.profit ?? 0)}, ${t.orders} đơn, đã tiêu ${Math.round((t.cost / budget) * 100)}% ngân sách`;
+    }
+  }
+  const day = (cut.after?.days ?? []).find((d) => d.date > cutDate && d.date < todayDate && isGoodDay(d, be, budget, s));
+  if (day && be) return `ngày ${day.date.slice(8, 10)}/${day.date.slice(5, 7)} lời ${money(day.revenue / be - day.cost)}, ${day.orders} đơn, tiêu hết ngân sách`;
+  return null;
+}
+
+/**
+ * C5 — từ lúc hạ (H2 / B2a) đã ≥ minWaitDays ngày trọn, trung bình: ROI ≥ hoà vốn × (1 + thinMarginPct%),
+ * chi/ngày ≥ fullUsePct% ngân sách đang đặt, ≥ RECOVER_MIN_ORDERS đơn/ngày. Trả câu mô tả, không đạt → null.
+ */
+function recoveredSinceCut(cut: AgentActionLog, budget: number, breakEven: number | null, s: TuneConfig, now: number): string | null {
+  const cutDate = vnDateOf(Date.parse(cut.executedAt));
+  const todayDate = vnDateOf(now);
+  const days = (cut.after?.days ?? []).filter((d) => d.date > cutDate && d.date < todayDate);
+  if (days.length < s.minWaitDays) return null;
+  const be = cut.before.breakEven ?? breakEven;
+  const cost = days.reduce((x, d) => x + d.cost, 0) / days.length;
+  const revenue = days.reduce((x, d) => x + d.revenue, 0) / days.length;
+  const orders = days.reduce((x, d) => x + d.orders, 0) / days.length;
+  if (!be || cost <= 0) return null;
+  const roi = revenue / cost;
+  if (roi < be * (1 + s.thinMarginPct / 100) || cost < (budget * s.fullUsePct) / 100 || orders < s.recoverMinOrders) return null;
+  return `${days.length} ngày lời ${money(revenue / be - cost)}/ngày, ROI ${fmt(roi)}, tiêu hết ngân sách mới`;
+}
 
 export interface TuneContext {
   /** P tham chiếu chiến dịch (đ/đơn); null / thiếu = chưa đủ tin cậy → H1/H2 chỉ cảnh báo */
@@ -465,12 +547,31 @@ export function decideCampaign(
   const sinceLast = last ? now - Date.parse(last.executedAt) : Infinity;
   const lastReverted = !!last && !!(last.params.tune?.revertOf || last.undoOf);
   const use = econ.budgetUse;
-  const recentProtect = hist.find((a) => a.status === 'success' && PROTECT_STEP_CODES.has(a.params.tune?.code ?? '') && now - Date.parse(a.executedAt) < s.learningDays * DAY);
-  const protectedToday = hist.some((a) => a.status === 'success' && PROTECT_STEP_CODES.has(a.params.tune?.code ?? '') && now - Date.parse(a.executedAt) < DAY);
+  // Lần đổi ngân sách gần nhất là bước hạ để bảo vệ, chưa bị trả về / hoàn tác
+  const lastBudget = hist.find((a) => a.actionType === 'update_budget');
+  const activeCut =
+    lastBudget && lastBudget.status === 'success' && !lastBudget.undoOf && !lastBudget.params.tune?.revertOf && PROTECT_STEP_CODES.has(lastBudget.params.tune?.code ?? '')
+      ? lastBudget
+      : undefined;
+  const cutCode = activeCut?.params.tune?.code;
+  const sinceCut = activeCut ? now - Date.parse(activeCut.executedAt) : Infinity;
+  // Không hạ lại trong 24 giờ; đã trả về (D6) thì lần đổi gần nhất không còn là bước hạ → được hạ lại ngay
+  const protectedToday = sinceCut < DAY;
+  // Khoá mở rộng sau khi hạ vì lỗ kéo dài / chưa có đơn (H3 không khoá); có thay đổi ngân sách sau đó (C5…) thì hết khoá
+  const recentProtect = activeCut && PROTECT_LOCK_CODES.has(cutCode ?? '') && sinceCut < s.learningDays * DAY ? activeCut : undefined;
+  const weekOverEarly = pRef != null && econ.profit != null && -econ.profit >= s.weekLossP * pRef;
+
+  // ── D6: vừa phanh vì lỗ trong ngày (H3) mà ngày sau ngon lại → trả thẳng ngân sách cũ (trong `learningDays` ngày)
+  if (activeCut && cutCode === 'H3' && c.budget && c.budget === activeCut.params.next?.budget && sinceCut < s.learningDays * DAY && !weekOverEarly) {
+    const good = goodDayAfterCut(activeCut, c, econ.breakEven, ctx.today, settings, s, now);
+    const back = revertOf(activeCut);
+    if (good && back) return out('D6', 'grow', `Đã hạ ngân sách vì lỗ trong ngày, ${good} → trả về ngân sách cũ`, { action: back });
+  }
 
   // ── Đo bước vừa thử: H5 (lỗ thêm quá giới hạn) → lùi ngay; D2 / D3 → lùi; còn lại nhớ để giữ sau phần bảo vệ
+  // Phanh H3 không phải bước thử → không đo, không chờ
   let waitHold: TuneDecision | null = null;
-  if (last && !lastReverted && last.status === 'success') {
+  if (last && !lastReverted && last.status === 'success' && last.params.tune?.code !== 'H3') {
     const ex = pRef ? stepExtraLoss(last, econ.breakEven, s.maxWaitDays) : null;
     const back = revertOf(last);
     if (ex && pRef && back && ex.extra >= s.testLossP * pRef) {
@@ -501,7 +602,7 @@ export function decideCampaign(
     if (econ.cost >= s.stopP * pRef) {
       if (ctx.isNew) return out('H2', 'loss', `Chưa có đơn, đã chi ${pText} — chiến dịch đang học: Sếp xem lại / tắt tay nếu cần`, { suggestPause: true });
       if (use != null && use >= s.fullUsePct && c.budget && !protectedToday) {
-        return out('H2', 'loss', `Chưa có đơn, đã chi ${pText}, tiêu ${Math.round(use)}% ngân sách → hạ ngân sách ${PROTECT_CUT_PCT}%`, { action: budgetBy(c.budget, -PROTECT_CUT_PCT) });
+        return out('H2', 'loss', `Chưa có đơn, đã chi ${pText}, tiêu ${Math.round(use)}% ngân sách → hạ ngân sách ${s.protectCutPct}%`, { action: budgetBy(c.budget, -s.protectCutPct) });
       }
       return out('H2', 'loss', `Chưa có đơn, đã chi ${pText}${use != null ? `, chỉ tiêu ${Math.round(use)}% ngân sách (hạ ngân sách không tác dụng)` : ''} → nên tắt chiến dịch (tắt tay trên TikTok)`, { suggestPause: true });
     }
@@ -516,7 +617,7 @@ export function decideCampaign(
   if (pRef && todayC && ctx.today && c.budget && !protectedToday) {
     const t = campaignEcon({ ...todayC, budget: c.budget }, ctx.today, settings, now);
     if (t.profit != null && -t.profit >= s.dayLossP * pRef) {
-      const to = Math.max(Math.ceil(t.cost / 1000) * 1000, Math.round((c.budget * (1 - PROTECT_CUT_PCT / 100)) / 1000) * 1000);
+      const to = Math.max(Math.ceil(t.cost / 1000) * 1000, Math.round((c.budget * (1 - s.protectCutPct / 100)) / 1000) * 1000);
       if (to < c.budget) {
         return out('H3', 'loss', `Hôm nay lỗ ước tính ${vnd(-t.profit)} (giới hạn ${s.dayLossP}P = ${vnd(s.dayLossP * pRef)}) → hạ ngân sách về gần mức đã chi`, { action: budgetAction(c.budget, to) });
       }
@@ -537,6 +638,18 @@ export function decideCampaign(
   const mt = c.targetRoi;
   const be = econ.breakEven!;
   const roi = econ.roi ?? 0;
+
+  // ── C5: vừa hạ vì lỗ kéo dài / chưa có đơn, mà từ lúc hạ đã ≥ 2 ngày lời rõ + tiêu hết ngân sách mới → mở khoá sớm, tăng lại từng bước
+  // (quyết bằng số SAU khi hạ — khung 7 ngày có thể còn lỗ từ trước khi hạ)
+  if (recentProtect && s.grow && !weekOver && c.budget && c.budget === recentProtect.params.next?.budget) {
+    const rec = recoveredSinceCut(recentProtect, c.budget, be, s, now);
+    if (rec) {
+      return out('C5', 'grow', `Từ lúc hạ ngân sách: ${rec} → mở khoá sớm, tăng ngân sách ${s.budgetStepPct}%`, {
+        action: budgetBy(c.budget, s.budgetStepPct),
+        step: streak + 1,
+      });
+    }
+  }
 
   // ── P3 đang lỗ
   if (econ.profit != null && econ.profit < 0) {
@@ -601,10 +714,34 @@ export function decideCampaign(
     });
   }
   if (mt == null) return out('A5', 'hold', 'Chiến dịch không đặt ROI mục tiêu — chỉ chỉnh được ngân sách');
-  // Vừa lùi bước nâng ROI → lần này đổi hướng (hạ nhẹ để lấy thêm đơn)
-  const lastRevertWasRaise = recentRevert ? (recentRevert.params.next?.roasBid ?? 0) < (recentRevert.params.prev?.roasBid ?? 0) : false;
-  if ((use != null && use < s.slowUsePct) || lastRevertWasRaise) {
-    return out('C3', 'grow', `${profitText}, ${use != null && use < s.slowUsePct ? `chỉ tiêu ${Math.round(use)}% ngân sách` : 'vừa lùi bước nâng ROI'} → hạ ROI mục tiêu ${s.roiDownPct}% để lấy thêm đơn`, {
+
+  // C6 (Sếp chốt 27/11): thử nâng ROI MT để lời hơn mà đơn không giảm — ROI thực vượt hẳn ROI MT (bắt buộc nâng),
+  // hoặc tiêu 50–90% ngân sách (ROI thực sát dưới ROI MT, vd MT 8 / thực 7 → thử MT 8,8…). Bước này chấm cả đơn (D2) lẫn lời (D3).
+  // Đã thử mà bị trả về / hoàn tác trong 14 ngày → coi như chạm trần, tạm không nâng.
+  const ids = new Map(hist.map((a) => [a.id, a]));
+  const failedRaise = hist.find((a) => {
+    const orig = a.params.tune?.revertOf ?? a.undoOf;
+    return !!orig && ids.get(orig)?.params.tune?.code === 'C6' && now - Date.parse(a.executedAt) < s.raiseCooldownDays * DAY;
+  });
+  const headroom = roi >= mt * s.headroomK;
+  // Trường hợp 2 chỉ khi ROI thực SÁT ROI MT (≥ nearK × MT); thấp xa thì nâng nữa TikTok càng khó đạt → giữ
+  const near = roi >= mt * s.nearK;
+  const midUse = use != null && use >= s.slowUsePct;
+  if (midUse && !headroom && !near) {
+    return out('C9', 'hold', `${profitText}; ROI thực ${fmt(roi)} còn xa ROI mục tiêu ${fmt(mt)} (dưới ${Math.round(s.nearK * 100)}%) — không nâng thêm, giữ`);
+  }
+  if (headroom || midUse) {
+    if (failedRaise) {
+      const until = vnDateOf(Date.parse(failedRaise.executedAt) + s.raiseCooldownDays * DAY);
+      return out('C9', 'hold', `${profitText}; đã thử nâng ROI mục tiêu nhưng đơn / lời giảm — chạm trần ROI, tạm không nâng (đến ${until.slice(8, 10)}/${until.slice(5, 7)})`);
+    }
+    return out('C6', 'grow', `${profitText}, ROI thực ${fmt(roi)} / mục tiêu ${fmt(mt)}${headroom ? ' (còn dư địa)' : `, tiêu ${use != null ? Math.round(use) : '--'}% ngân sách`} → thử nâng ROI mục tiêu ${s.roiRaisePct}%, giữ nếu đơn và lời không giảm`, {
+      action: roiAction(mt, roiTo(mt, s.roiRaisePct)),
+      step: streak + 1,
+    });
+  }
+  if (use != null && use < s.slowUsePct) {
+    return out('C3', 'grow', `${profitText}, chỉ tiêu ${Math.round(use)}% ngân sách → hạ ROI mục tiêu ${s.roiDownPct}% để lấy thêm đơn`, {
       action: roiAction(mt, roiTo(mt, -s.roiDownPct)),
       step: streak + 1,
     });
@@ -642,7 +779,7 @@ export function tuneDecisions(
     const cPrev = prev?.campaigns.find((x) => x.id === c.id);
     const isNew = !!prev && (!cPrev || (cPrev.cost ?? 0) <= 0);
     const d = decideCampaign(c, d7, settings, actions, now, { pRef, today: extra.d1, isNew });
-    if (d.action && !isProtectCode(d.code) && !d.action.revertOf && prev && cPrev) {
+    if (d.action && !isConfirmFree(d.code) && !d.action.revertOf && prev && cPrev) {
       const d2 = decideCampaign({ ...cPrev, budget: c.budget, targetRoi: c.targetRoi, status: c.status }, prev, settings, [], now, { pRef });
       if (familyOf(d2) !== familyOf(d)) {
         out.set(

@@ -125,17 +125,14 @@ describe('Lời — mở rộng', () => {
     expect(decide(s, withTune(S, { mode: 'growth' })).action).toMatchObject({ to: 624_000 });
   });
 
-  it('đã bỏ C2: lời + tiêu vừa → giữ (C9), không nâng ROI mục tiêu', () => {
-    const d = decide(snap({ budget: 700_000 }), S); // ≈ 65%
-    expect(d.code).toBe('C9');
-    expect(d.action).toBeUndefined();
+  it('C6 lời + tiêu vừa (50–90%) → thử nâng ROI mục tiêu theo chế độ', () => {
+    const d = decide(snap({ budget: 700_000 }), S); // ≈ 65%, ROI thực 4,4 / MT 4
+    expect(d).toMatchObject({ code: 'C6', action: { type: 'update_roi_target', from: 4, to: 4.4 } });
   });
 
   it('C3 tiêu chậm → hạ ROI mục tiêu theo chế độ, không có sàn hoà vốn', () => {
     expect(decide(snap({ budget: 2_000_000, targetRoi: 5 }), S).action).toMatchObject({ type: 'update_roi_target', from: 5, to: 4.8 });
     expect(decide(snap({ budget: 2_000_000, targetRoi: 5 }), withTune(S, { mode: 'growth' })).action).toMatchObject({ to: 4.5 });
-    // ROI MT đã dưới hoà vốn chiến dịch (~3,7) mà vẫn lời rõ → vẫn được hạ (Sếp chốt vòng 8)
-    expect(decide(snap({ budget: 2_000_000, targetRoi: 3.4 }), S)).toMatchObject({ code: 'C3', action: { to: 3.2 } });
   });
 
   it('C4 lời mỏng: tiêu ≥ 50% → nâng ROI MT 5% (≤ ROI thực); tiêu ít → giữ', () => {
@@ -330,5 +327,159 @@ describe('Cấp chiến dịch chỉ còn BOT chỉnh (Sếp chốt 26/11)', () 
     expect(kept[0]).toMatchObject({ actionType: 'remind', params: { tune: { code: 'B6' } } });
     const c1 = snap({ budget: 480_000 });
     expect(matchRuleTrend(remind, S, c1, { d14: double(c1), d30: null }, [], NOW).kept).toHaveLength(0);
+  });
+});
+
+describe('Vừa hạ ngân sách mà ngon lại (Sếp chốt 27/11)', () => {
+  // H3 hôm qua 12:00 (VN 17/11): 1.000k → 700k
+  const brake = (p: Partial<AgentActionLog> = {}) =>
+    action({
+      executedAt: '2026-11-17T05:00:00Z',
+      actionType: 'update_budget',
+      params: { budgetChangePct: -30, prev: { budget: 1_000_000 }, next: { budget: 700_000 }, tune: { code: 'H3' } },
+      ...p,
+    });
+  /** Hôm nay: lời, 40 đơn, đã tiêu 650k / 700k */
+  const goodToday = (c: Partial<Campaign> = {}) => ({
+    ...snap({ budget: 700_000, ...c }, { revenue: 2.5e6, cost: 0.5e6 }, { revenue: 0.6e6, cost: 0.15e6 }),
+    range: { from: '2026-11-18', to: '2026-11-18' },
+  });
+
+  it('D6 trong ngày hôm sau: đang lời + tiêu ≥ 90% + ≥ 3 đơn → trả thẳng ngân sách cũ', () => {
+    const d = decide(snap({ budget: 700_000 }), S, [brake()], { pRef: 100_000, today: goodToday() });
+    expect(d).toMatchObject({ code: 'D6', action: { type: 'update_budget', from: 700_000, to: 1_000_000, revertOf: 'a1' } });
+    // Mới 2 đơn → chưa trả
+    expect(decide(snap({ budget: 700_000 }), S, [brake()], { pRef: 100_000, today: goodToday({ orders: 2 }) }).code).not.toBe('D6');
+  });
+
+  it('D6 theo ngày trọn đã đo', () => {
+    const cut = brake({
+      executedAt: '2026-11-16T05:00:00Z',
+      after: after([day('2026-11-17', { cost: 680_000, revenue: 3.4e6, orders: 10 })]),
+    });
+    expect(decide(snap({ budget: 700_000 }), S, [cut], { pRef: 100_000 })).toMatchObject({ code: 'D6', action: { to: 1_000_000 } });
+  });
+
+  it('không D6: quá 3 ngày, hoặc Sếp đã sửa tay ngân sách', () => {
+    const old = brake({ executedAt: '2026-11-14T05:00:00Z' });
+    expect(decide(snap({ budget: 700_000 }), S, [old], { pRef: 100_000, today: goodToday() }).code).not.toBe('D6');
+    expect(decide(snap({ budget: 800_000 }), S, [brake()], { pRef: 100_000, today: goodToday({ budget: 800_000 }) }).code).not.toBe('D6');
+  });
+
+  it('H3 không khoá, không chờ đo: chưa ngon thì xét như thường', () => {
+    const d = decide(snap({ budget: 700_000 }), S, [brake()], { pRef: 100_000 });
+    expect(d.code).toBe('C6'); // tiêu ~65% ngân sách → xét như thường (không A3 / A6)
+  });
+
+  it('đã trả về (D6) mà lại lỗ hôm nay ≥ 2P → hạ lại ngay, không chờ 24 giờ', () => {
+    const back = action({
+      id: 'a2',
+      executedAt: '2026-11-18T01:00:00Z',
+      actionType: 'update_budget',
+      params: { budgetChangePct: 42.9, prev: { budget: 700_000 }, next: { budget: 1_000_000 }, tune: { code: 'D6', revertOf: 'a1' } },
+    });
+    const lossToday = one({}, { revenue: 1e6, cost: 500_000, orders: 3 }, { from: '2026-11-18', to: '2026-11-18' });
+    const d = decide(snap({ budget: 1_000_000 }), S, [brake(), back], { pRef: 100_000, today: lossToday });
+    expect(d).toMatchObject({ code: 'H3', action: { to: 700_000 } });
+  });
+
+  it('C5: hạ vì lỗ kéo dài, 2 ngày sau lời rõ + tiêu hết ngân sách mới → mở khoá sớm, tăng lại theo bước', () => {
+    const cut = action({
+      executedAt: '2026-11-15T06:00:00Z', // VN 15/11 13:00 — còn trong khoá 3 ngày
+      actionType: 'update_budget',
+      params: { budgetChangePct: -20, prev: { budget: 600_000 }, next: { budget: 480_000 }, tune: { code: 'B2a', step: 1 } },
+      before: { from: '2026-11-08T00:00:00+07:00', to: '2026-11-15T00:00:00+07:00', cost: 7e6, revenue: 21e6, orders: 70, roi: 3, breakEven: 4 },
+      after: after([day('2026-11-16', { cost: 460_000, revenue: 2.3e6, orders: 10 }), day('2026-11-17', { cost: 460_000, revenue: 2.3e6, orders: 10 })]),
+    });
+    expect(decide(snap({ budget: 480_000 }), S, [cut])).toMatchObject({ code: 'C5', action: { type: 'update_budget', from: 480_000, to: 576_000 } });
+    // Mới 1 ngày → chưa mở
+    const early = { ...cut, after: after([day('2026-11-16', { cost: 460_000, revenue: 2.3e6, orders: 10 })]) };
+    const d = decide(snap({ budget: 480_000 }), S, [early]);
+    expect(d.code).not.toBe('C5');
+    expect(d.action).toBeUndefined();
+  });
+
+  it('C5 không cần khung 7 ngày trước xác nhận', () => {
+    const cut = action({
+      executedAt: '2026-11-15T06:00:00Z', // VN 15/11 13:00 — còn trong khoá 3 ngày
+      actionType: 'update_budget',
+      params: { budgetChangePct: -20, prev: { budget: 600_000 }, next: { budget: 480_000 }, tune: { code: 'B2a', step: 1 } },
+      before: { from: '2026-11-08T00:00:00+07:00', to: '2026-11-15T00:00:00+07:00', cost: 7e6, revenue: 21e6, orders: 70, roi: 3, breakEven: 4 },
+      after: after([day('2026-11-16', { cost: 460_000, revenue: 2.3e6, orders: 10 }), day('2026-11-17', { cost: 460_000, revenue: 2.3e6, orders: 10 })]),
+    });
+    const d7 = snap({ budget: 480_000 });
+    const d14 = { ...double(d7), campaigns: [{ ...d7.campaigns[0], cost: 3.2e6 + 3e6, revenue: 14e6 + 9e6, orders: 80 }] }; // khung B lỗ
+    expect(tuneDecisions(d7, d14, S, [cut], NOW).get('c1')).toMatchObject({ code: 'C5' });
+  });
+});
+
+describe('C6 — đang lời, thử nâng ROI mục tiêu mà đơn không giảm (Sếp chốt 27/11)', () => {
+  it('ROI thực sát dưới ROI MT (MT 8, thực 7), tiêu 70% → nâng 8 → 8,8 (Cân bằng) / 8,4 (Thận trọng)', () => {
+    const s7 = one({ targetRoi: 8, budget: 715_000 }, { revenue: 24.5e6, cost: 3.5e6 });
+    expect(decide(s7, S1())).toMatchObject({ code: 'C6', action: { from: 8, to: 8.8 } });
+    expect(decide(s7, withTune(S1(), { mode: 'careful' })).action).toMatchObject({ to: 8.4 });
+  });
+
+  it('ROI thực cao hơn hẳn ROI MT (thực 6, MT 4) → bắt buộc nâng, kể cả tiêu ít', () => {
+    const s7 = one({ targetRoi: 4, budget: 1_430_000 }, { revenue: 18e6, cost: 3e6 }); // tiêu ~30%
+    expect(decide(s7, S1())).toMatchObject({ code: 'C6', action: { from: 4, to: 4.4 } });
+  });
+
+  it('tiêu hết ngân sách → ưu tiên tăng ngân sách (C1), không nâng ROI', () => {
+    expect(decide(snap({ budget: 480_000 }), S).code).toBe('C1');
+  });
+
+  const raise = (after_: ReturnType<typeof after>) =>
+    action({
+      executedAt: '2026-11-11T03:00:00Z',
+      params: { roiTargetChangePct: 10, prev: { roasBid: 4 }, next: { roasBid: 4.4 }, tune: { code: 'C6', step: 1 } },
+      after: after_,
+    });
+
+  it('chấm bước C6: đơn giảm > 10% → trả về (D2); đơn giảm 5%, lời giữ → giữ', () => {
+    // Trước: 10 đơn/ngày, lời 250k/ngày (DT 5tr, chi 1tr, hoà vốn 4)
+    expect(judgeStep(raise(after(days(2, { cost: 0.85e6, revenue: 4.6e6, orders: 8.5 }))), tuneSettingsOf(S), 4)).toMatchObject({ keep: false, code: 'D2' });
+    expect(judgeStep(raise(after(days(2, { cost: 0.9e6, revenue: 4.8e6, orders: 9.5 }))), tuneSettingsOf(S), 4)).toMatchObject({ keep: true });
+  });
+
+  it('đã thử nâng mà bị trả về trong 14 ngày → giữ (C9), không nâng nữa', () => {
+    const tried = raise(after(days(2, { cost: 0.85e6, revenue: 4.6e6, orders: 8.5 })));
+    const back = action({
+      id: 'a2',
+      executedAt: '2026-11-14T03:00:00Z',
+      params: { roiTargetChangePct: -9.1, prev: { roasBid: 4.4 }, next: { roasBid: 4 }, tune: { code: 'D2', revertOf: 'a1' } },
+    });
+    const d = decide(snap({ budget: 700_000 }), S, [tried, back]);
+    expect(d.code).toBe('C9');
+    expect(d.action).toBeUndefined();
+  });
+});
+
+describe('Số chỉnh được ở Nâng cao (Sếp chốt 27/11)', () => {
+  it('C6 trường hợp tiêu vừa chỉ khi ROI thực sát ROI MT (≥ 85%): MT 8, thực 5 → không nâng', () => {
+    const far = one({ targetRoi: 8, budget: 715_000 }, { revenue: 17.5e6, cost: 3.5e6 }); // ROI 5, tiêu 70%
+    const d = decide(far, S1());
+    expect(d.code).toBe('C9');
+    expect(d.action).toBeUndefined();
+    // Hạ ngưỡng "sát" xuống 0,6 → được thử
+    expect(decide(far, withTune(S1(), { nearK: 0.6 })).code).toBe('C6');
+  });
+
+  it('headroomK / protectCutPct / recoverMinOrders đổi thì kết quả đổi theo', () => {
+    // ROI thực 6 / MT 4, tiêu 30%: headroom 1,2 → C6; nâng ngưỡng lên 2 → không còn dư địa → C3
+    const s7 = one({ targetRoi: 4, budget: 1_430_000 }, { revenue: 18e6, cost: 3e6 });
+    expect(decide(s7, withTune(S1(), { headroomK: 2 })).code).toBe('C3');
+    // H2 hạ 20% thay vì 30%
+    const zero = one({ budget: 50_000 }, { revenue: 0, cost: 350_000, orders: 0 });
+    expect(decide(zero, withTune(S1(), { protectCutPct: 20 }), [], { pRef: 100_000 }).action).toMatchObject({ pct: -20 });
+    // D6 cần 50 đơn → hôm nay 40 đơn chưa đủ
+    const brake = action({
+      executedAt: '2026-11-17T05:00:00Z',
+      actionType: 'update_budget',
+      params: { budgetChangePct: -30, prev: { budget: 1_000_000 }, next: { budget: 700_000 }, tune: { code: 'H3' } },
+    });
+    const today = { ...snap({ budget: 700_000 }, { revenue: 2.5e6, cost: 0.5e6 }, { revenue: 0.6e6, cost: 0.15e6 }), range: { from: '2026-11-18', to: '2026-11-18' } };
+    expect(decide(snap({ budget: 700_000 }), S, [brake], { pRef: 100_000, today }).code).toBe('D6');
+    expect(decide(snap({ budget: 700_000 }), withTune(S, { recoverMinOrders: 50 }), [brake], { pRef: 100_000, today }).code).not.toBe('D6');
   });
 });

@@ -812,12 +812,18 @@ function nextVerifyAt(a: AgentActionLog, now = Date.now()): string {
   return new Date(now + step.everySec * 1000).toISOString();
 }
 
-/** Ngay sau khi gửi lệnh: đọc trạng thái 3 giây/lần trong 30 giây đầu (chạy nền, không chặn Sếp) */
+/**
+ * Ngay sau khi gửi lệnh: đọc trạng thái theo `inlineChecksMs` (3 phút đầu, cách nhau tối đa 10 giây — chạy nền, không chặn Sếp).
+ * Trong lúc này hẹn bộ kiểm tra ngầm sau khi vòng đọc kết thúc (+ 30 giây dự phòng) để không đọc chồng;
+ * tiến trình tắt giữa chừng → bộ kiểm tra ngầm tiếp quản theo `verifyAfter`.
+ */
 export async function followUpCreative(actionId: string): Promise<void> {
+  const total = executorTiming.inlineChecksMs.reduce((s, ms) => s + ms, 0);
+  const holdUntil = Date.now() + total + 30_000;
   try {
     for (const ms of executorTiming.inlineChecksMs) {
       await sleep(ms);
-      if ((await checkCreative(actionId)) === 'done') return;
+      if ((await checkCreative(actionId, false, holdUntil)) === 'done') return;
     }
   } catch (e) {
     console.error('[agent] đọc trạng thái video lỗi:', e instanceof Error ? e.message : e);
@@ -840,7 +846,7 @@ function manualVerifiable(a: AgentActionLog, actions: AgentActionLog[], now: num
  * Sếp chốt 28/11: 0–3 phút "Đang chờ TikTok xác nhận", 3–90 phút "Chưa xác nhận" (vẫn running), quá 90 phút mới Lỗi.
  * `manual` = nút Kiểm tra ngay: đọc được cả dòng Lỗi (TikTok ghi nhận muộn → Thành công).
  */
-async function checkCreative(actionId: string, manual = false): Promise<'done' | 'pending'> {
+async function checkCreative(actionId: string, manual = false, holdUntil = 0): Promise<'done' | 'pending'> {
   const rt0 = getRuntime();
   const a = rt0.actions.find((x) => x.id === actionId);
   const checkable = (x: AgentActionLog, all: AgentActionLog[]) =>
@@ -884,7 +890,9 @@ async function checkCreative(actionId: string, manual = false): Promise<'done' |
       x.verifyAfter = undefined;
     } else {
       x.note = elapsedMin >= CREATIVE_UNCONFIRMED_MIN ? 'Chưa xác nhận' : 'Đang chờ TikTok xác nhận';
-      x.verifyAfter = nextVerifyAt(x, now);
+      // Đang đọc ngay trong lệnh (followUpCreative) → bộ kiểm tra ngầm chờ tới khi vòng đọc xong
+      const next = nextVerifyAt(x, now);
+      x.verifyAfter = holdUntil > Date.parse(next) ? new Date(holdUntil).toISOString() : next;
     }
   });
   return ok || (late ? lateOver || manual : timedOut) ? 'done' : 'pending';

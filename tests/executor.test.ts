@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdsSnapshot } from '../shared/adsSnapshot';
 import type { AgentActionLog, AgentActionType, AgentConfig, AgentProposal, AgentRuleParams, AgentRuntime } from '../shared/agentTypes';
 import { GUARDRAILS, snapshot, video } from './fixtures';
+import { CREATIVE_INLINE_CHECKS_MS, CREATIVE_VERIFY_STEPS } from '../shared/agentPolicy';
 
 /* Bộ thực thi (giai đoạn C) với TikTok GIẢ LẬP: không gửi lệnh thật, không đụng file thật */
 
@@ -196,16 +197,16 @@ describe('Gỡ / thêm video (gmv_max_creative_update)', () => {
   });
 
   // Sếp chốt 28/11: API báo cáo trả trạng thái chậm hơn Ads Manager → 0–3 phút đang chờ, 3–90 phút "Chưa xác nhận", quá 90 phút Lỗi
-  it('TikTok chưa đổi trạng thái → 15 giây/lần tới phút 3, 1 phút/lần tới phút 30, rồi 3 phút/lần; vẫn chờ (không Lỗi) tới 90 phút', async () => {
+  it('TikTok chưa đổi trạng thái → bộ kiểm tra ngầm 10 giây/lần tới phút 3 (dự phòng), 1 phút/lần tới phút 30, rồi 3 phút/lần; vẫn chờ (không Lỗi) tới 90 phút', async () => {
     const r = await ex.executeProposal(proposal('remove_creative').id);
     expect(r.action.status).toBe('running');
-    expect(Date.parse(r.action.verifyAfter!) - NOW.getTime()).toBe(15_000);
+    expect(Date.parse(r.action.verifyAfter!) - NOW.getTime()).toBe(10_000);
     expect(await ex.verifyPendingActions()).toBe(0); // chưa tới giờ → không đọc
 
     vi.setSystemTime(new Date(NOW.getTime() + 60_000));
     expect(await ex.verifyPendingActions()).toBe(0);
     const a1 = actionOf(r.action.id);
-    expect(Date.parse(a1.verifyAfter!) - (NOW.getTime() + 60_000)).toBe(15_000);
+    expect(Date.parse(a1.verifyAfter!) - (NOW.getTime() + 60_000)).toBe(10_000);
     expect(a1).toMatchObject({ status: 'running', note: 'Đang chờ TikTok xác nhận', verifyCount: 1 });
     expect(a1.lastCheckedAt).toBe(new Date(NOW.getTime() + 60_000).toISOString());
 
@@ -224,6 +225,32 @@ describe('Gỡ / thêm video (gmv_max_creative_update)', () => {
     vi.setSystemTime(new Date(NOW.getTime() + 44 * 60_000));
     expect(await ex.verifyPendingActions()).toBe(1);
     expect(actionOf(r.action.id)).toMatchObject({ status: 'success', note: 'TikTok xác nhận sau 44 phút' });
+  });
+
+  it('3 phút đầu đọc ngay trong lệnh, cách nhau tối đa 10 giây; bộ kiểm tra ngầm không đọc chồng; thấy trạng thái mới là dừng', () => {
+    // Nhịp chốt 28/11: 30 giây đầu 3 giây/lần, sau đó nghỉ 8 giây/lần tới hết phút 3
+    expect(CREATIVE_INLINE_CHECKS_MS.every((ms) => ms <= 8_000)).toBe(true);
+    expect(CREATIVE_INLINE_CHECKS_MS.slice(0, 10)).toEqual(Array(10).fill(3_000));
+    const total = CREATIVE_INLINE_CHECKS_MS.reduce((s, ms) => s + ms, 0);
+    expect(total).toBeGreaterThanOrEqual(180_000);
+    expect(CREATIVE_VERIFY_STEPS[0]).toEqual({ untilMin: 3, everySec: 10 });
+  });
+
+  it('trong lúc đọc ngay trong lệnh, bộ kiểm tra ngầm chờ tới hết vòng đọc', async () => {
+    ex.executorTiming.inlineChecksMs = [0, 0];
+    const r = await ex.executeProposal(proposal('remove_creative').id);
+    await ex.followUpCreative(r.action.id);
+    const a = actionOf(r.action.id);
+    expect(a).toMatchObject({ status: 'running', verifyCount: 2 });
+    // vòng đọc 0 ms + 30 giây dự phòng → bộ kiểm tra ngầm chưa đọc ngay
+    expect(Date.parse(a.verifyAfter!) - NOW.getTime()).toBe(30_000);
+    expect(await ex.verifyPendingActions()).toBe(0);
+    expect(actionOf(r.action.id).verifyCount).toBe(2);
+    // thấy trạng thái mới → dừng ngay, không đọc thêm
+    mock.videoStatus['p1/v1'] = 'EXCLUDED';
+    ex.executorTiming.inlineChecksMs = [0, 0, 0, 0];
+    await ex.followUpCreative(r.action.id);
+    expect(actionOf(r.action.id)).toMatchObject({ status: 'success', verifyCount: 3 });
   });
 
   it('nút Kiểm tra ngay: chỉ đọc, không gửi lệnh ghi', async () => {

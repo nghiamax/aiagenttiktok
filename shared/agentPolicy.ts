@@ -17,15 +17,22 @@ export const EXECUTION_ENABLED = true;
 
 /**
  * Gỡ / thêm video: TikTok nhận lệnh là trả kết quả ngay; trạng thái video đọc ở nền (Sếp chốt 28/11):
- * 30 giây đầu 3 giây/lần → tới 3 phút 15 giây/lần → tới 30 phút 1 phút/lần → tới 90 phút 3 phút/lần.
+ * 3 phút đầu cách nhau tối đa 10 giây (3 giây/lần trong 30 giây đầu) → tới 30 phút 1 phút/lần → tới 90 phút 3 phút/lần.
  * API báo cáo (`creative_delivery_status`) trả trạng thái chậm hơn Ads Manager (ca 28/11: Ads Manager đã chạy,
  * 2 phút sau API vẫn "đã gỡ") → không báo Lỗi sớm: 0–3 phút "Đang chờ TikTok xác nhận", 3–90 phút "Chưa xác nhận" (vàng),
  * quá 90 phút mới Lỗi.
  */
-export const CREATIVE_INLINE_CHECKS_MS = Array.from({ length: 10 }, () => 3_000);
-/** Nhịp kiểm tra (giây) theo thời gian đã trôi qua (phút) */
+/**
+ * 3 phút đầu đọc ngay trong lệnh (Sếp chốt 28/11: 2 lần kiểm tra cách nhau tối đa 10 giây):
+ * 30 giây đầu nghỉ 3 giây/lần, sau đó nghỉ 8 giây/lần (+ ~1–2 giây gọi TikTok ≈ 10 giây) tới hết phút 3.
+ */
+export const CREATIVE_INLINE_CHECKS_MS = [
+  ...Array.from({ length: 10 }, () => 3_000),
+  ...Array.from({ length: 19 }, () => 8_000),
+];
+/** Nhịp kiểm tra của bộ kiểm tra ngầm (giây) theo thời gian đã trôi qua (phút) — 3 phút đầu chỉ là dự phòng (tiến trình gửi lệnh tắt giữa chừng) */
 export const CREATIVE_VERIFY_STEPS: { untilMin: number; everySec: number }[] = [
-  { untilMin: 3, everySec: 15 },
+  { untilMin: 3, everySec: 10 },
   { untilMin: 30, everySec: 60 },
   { untilMin: Infinity, everySec: 180 },
 ];

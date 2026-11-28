@@ -194,7 +194,7 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
   // để nhóm, hộp Tổng quan, lọc "Đã gỡ" đổi ngay. Khoá theo các thao tác thành công → không tính lại mỗi lần tải Agent.
   const { state: agentState } = useAgentStore();
   const doneKey = creativeSuccesses(agentState.actions)
-    .map((a) => `${a.id}:${a.executedAt}`)
+    .map((a) => `${a.id}:${a.executedAt}:${a.status}`)
     .join(',');
   const done = useMemo(
     () => creativeSuccesses(agentState.actions),

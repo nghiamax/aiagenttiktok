@@ -54,9 +54,14 @@ export interface CreativeActionLike {
   target: { campaignId: string; videoId: string };
 }
 
-/** Thao tác gỡ / thêm lại đã thành công — dùng làm khoá ổn định (đổi mới tính lại) */
+/**
+ * Thao tác gỡ / thêm lại đã thành công HOẶC đang chờ TikTok xác nhận (Sếp chốt 28/11: BOT vừa gỡ thì Tổng quan / nhóm / bảng
+ * phải đổi ngay, không đợi API báo cáo TikTok xác nhận — có thể 3 phút tới 90 phút). Lệnh Lỗi → không tính (trạng thái về như cũ).
+ */
 export const creativeSuccesses = <T extends CreativeActionLike>(actions: T[]): T[] =>
-  actions.filter((a) => (a.actionType === 'remove_creative' || a.actionType === 'add_creative') && a.status === 'success');
+  actions.filter(
+    (a) => (a.actionType === 'remove_creative' || a.actionType === 'add_creative') && (a.status === 'success' || a.status === 'running'),
+  );
 
 /**
  * Snapshot lưu sẵn (cache tới 6 giờ) chưa biết video vừa được gỡ / thêm lại → đè trạng thái theo Nhật ký:

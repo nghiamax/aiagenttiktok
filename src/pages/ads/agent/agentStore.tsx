@@ -144,15 +144,27 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [guest, accept, fail]);
 
-  // Có dòng nhật ký đang chờ TikTok xác nhận, hoặc chưa kết nối được server → tải lại mỗi 5 giây
+  // Có dòng nhật ký đang chờ TikTok xác nhận, BOT đang quét, hoặc chưa kết nối được server → tải lại mỗi 5 giây
+  // (Sếp chốt 28/11: BOT vừa gỡ video thì Tổng quan / bảng phải đổi ngay, không đợi lượt tải 60 giây)
   const hasRunning = state.actions.some((a) => a.status === 'running');
   useEffect(() => {
-    if (guest || (!hasRunning && connected)) return;
+    if (guest || (!hasRunning && !running && connected)) return;
     const timer = setInterval(() => {
       api<ServerState>('/agent/state').then(accept, () => undefined);
     }, FAST_POLL_MS);
     return () => clearInterval(timer);
-  }, [guest, hasRunning, connected, accept]);
+  }, [guest, hasRunning, running, connected, accept]);
+
+  // Tới giờ lượt quét theo lịch → tải lại ngay (rồi theo nhịp 5 giây khi server báo đang quét)
+  useEffect(() => {
+    if (guest || !schedule.nextRunAt) return;
+    const wait = Date.parse(schedule.nextRunAt) - Date.now() + 3_000;
+    if (!(wait > 0) || wait > 2 * 3_600_000) return;
+    const t = window.setTimeout(() => {
+      api<ServerState>('/agent/state').then(accept, () => undefined);
+    }, wait);
+    return () => window.clearTimeout(t);
+  }, [guest, schedule.nextRunAt, accept]);
 
   /** Lưu cấu hình. Chưa tải được từ server thì KHÔNG lưu (tránh ghi đè quy tắc / giới hạn bằng mặc định) */
   const saveConfig = useCallback(

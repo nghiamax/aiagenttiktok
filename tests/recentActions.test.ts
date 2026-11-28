@@ -36,15 +36,21 @@ describe('applyRecentActions — video vừa gỡ / thêm lại', () => {
     expect(classifyVideo(s.videos[0], camp, settings)).not.toBeNull();
   });
 
-  it('thao tác trước lúc dựng snapshot, lỗi hoặc đang chờ TikTok → không đổi', () => {
+  it('thao tác trước lúc dựng snapshot hoặc lỗi → không đổi', () => {
     for (const a of [
       act({ executedAt: '2026-11-17T23:00:00Z' }),
       act({ executedAt: '2026-11-18T05:00:00Z', status: 'failed' }),
-      act({ executedAt: '2026-11-18T05:00:00Z', status: 'running' }),
       act({ executedAt: '2026-11-18T05:00:00Z', actionType: 'boost_creative' }),
     ]) {
       expect(applyRecentActions(base, [a])).toBe(base);
     }
+  });
+
+  // Sếp chốt 28/11: BOT vừa gỡ (đang chờ TikTok xác nhận) → Tổng quan / nhóm đổi ngay, không đợi xác nhận
+  it('gỡ đang chờ TikTok xác nhận → coi như đã gỡ', () => {
+    const s = applyRecentActions(base, [act({ executedAt: '2026-11-18T05:00:00Z', status: 'running' })]);
+    expect(s).not.toBe(base);
+    expect(s.videos.find((v) => v.contentType !== 'product_card')?.status).toBe('excluded');
   });
 
   it('gỡ rồi Hoàn tác (thêm lại mới hơn) → video chạy lại', () => {

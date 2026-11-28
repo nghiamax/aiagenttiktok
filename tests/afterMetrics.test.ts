@@ -243,8 +243,8 @@ describe('summarizeAction (câu kết luận)', () => {
     expect(r?.text).toMatch(/^≈ Sát hoà vốn — 1 ngày sau: 1 đơn về muộn \(DT 439k, chi 0đ\) → tính cả, ROI lúc gỡ 3,45 ≈ hoà vốn 3,5/);
   });
 
-  it('đơn về muộn ít, tính cả ROI lúc gỡ vẫn < 0,9 × hoà vốn → Đúng', () => {
-    // (878k + 100k) ÷ 382k = 2,56 < 3,15
+  it('đơn về muộn ít, tính cả ROI lúc gỡ vẫn < 0,8 × hoà vốn → Đúng', () => {
+    // (878k + 100k) ÷ 382k = 2,56 < 2,8
     const a = withAfter(action({ before: REAL }), [{ cost: 0, revenue: 100_000, orders: 1 }]);
     expect(evaluateAction(a, 24, T).verdict).toBe('good');
     expect(line(a)?.text).toMatch(/^✓ Đúng — 1 ngày sau: 1 đơn về muộn \(DT 100k, chi 0đ\), tính cả vẫn ROI lúc gỡ 2,56 < hoà vốn 3,5/);

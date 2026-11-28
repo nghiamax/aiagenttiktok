@@ -20,7 +20,7 @@ export type Verdict = 'good' | 'bad' | 'close' | 'pending' | 'insufficient' | 'u
  * Gỡ / tắt có đơn về muộn: tính cả đơn muộn mà ROI lúc gỡ ≥ tỷ lệ này × hoà vốn (nhưng < hoà vốn) → "Sát hoà vốn"
  * (không Đúng / Sai — gỡ gần như không lợi không hại, đơn muộn còn về có thể thành Gỡ sai; Sếp chốt 28/11)
  */
-export const LATE_CLOSE_RATIO = 0.9;
+export const LATE_CLOSE_RATIO = 0.8;
 
 /** Chi chênh tối thiểu (cả khoảng sau) để chấm */
 export const MIN_COST_DIFF = 50_000;

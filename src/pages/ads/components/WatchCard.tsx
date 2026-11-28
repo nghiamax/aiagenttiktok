@@ -27,6 +27,17 @@ const DAY = 86_400_000;
 const RECENT_DAYS = 7;
 const VIDEO_ACTIONS = new Set(['remove_creative', 'add_creative', 'boost_creative']);
 const OPEN_KEY = 'ads-watch-open';
+/** ID thao tác Sếp đã xoá khỏi "Vừa thao tác" (theo trình duyệt; Nhật ký giữ nguyên; video có thao tác mới → hiện lại) */
+const HIDDEN_KEY = 'ads-watch-hidden';
+
+function readHidden(): Set<string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]');
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
 
 const ago = (iso: string) => {
   const d = Math.floor((Date.now() - Date.parse(iso)) / DAY);
@@ -49,6 +60,18 @@ export default function WatchCard() {
     }
   });
   const [adding, setAdding] = useState(false);
+  const [hidden, setHidden] = useState(readHidden);
+  const hide = (id: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev).add(id);
+      try {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next].slice(-500)));
+      } catch {
+        /* bỏ qua */
+      }
+      return next;
+    });
+  };
   const toggle = () => {
     setOpen((v) => {
       try {
@@ -70,10 +93,11 @@ export default function WatchCard() {
       const k = `${a.target.campaignId}/${a.target.videoId}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push(a);
+      // Đã xoá khỏi danh sách: chỉ ẩn đúng thao tác đó — video có thao tác mới thì hiện lại
+      if (!hidden.has(a.id)) out.push(a);
     }
     return out;
-  }, [state.actions]);
+  }, [state.actions, hidden]);
 
   // Sidebar "Theo dõi video": mở hẳn ô rồi cuộn tới
   useNavAnchor(WATCH_ANCHOR, () => {
@@ -111,7 +135,7 @@ export default function WatchCard() {
         <div className="border-t border-line">
           <Section title="Vừa thao tác" count={recent.length} empty="Chưa có thao tác video nào trong 7 ngày.">
             {recent.map((a) => (
-              <RecentRow key={a.id} item={a} evaluateAfterHours={state.guardrails.evaluateAfterHours} />
+              <RecentRow key={a.id} item={a} evaluateAfterHours={state.guardrails.evaluateAfterHours} onHide={() => hide(a.id)} />
             ))}
           </Section>
           <Section
@@ -143,7 +167,7 @@ function Section({ title, count, empty, children }: { title: string; count: numb
 }
 
 /** Một thao tác gần đây: video · thao tác · Lúc quyết định → Sau thao tác · Đúng/Sai */
-function RecentRow({ item, evaluateAfterHours }: { item: AgentActionLog; evaluateAfterHours: number }) {
+function RecentRow({ item, evaluateAfterHours, onHide }: { item: AgentActionLog; evaluateAfterHours: number; onHide: () => void }) {
   const meta = actionTypeMeta(item.actionType, item.params);
   const ev = evaluateAction(item, evaluateAfterHours);
   const summary = summarizeAction(item, ev);
@@ -157,7 +181,7 @@ function RecentRow({ item, evaluateAfterHours }: { item: AgentActionLog; evaluat
           ? `Có số ngày ${dayMonth(firstAfterDate(item.executedAt))} lúc ~${formatDateTime(new Date(readyAt).toISOString())}`
           : 'Đang lấy số từ TikTok…';
   return (
-    <li className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1.2fr)_150px_minmax(0,1fr)_minmax(0,1fr)_150px] lg:items-start">
+    <li className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1.2fr)_150px_minmax(0,1fr)_minmax(0,1fr)_150px_auto] lg:items-start">
       <TargetCell target={item.target} />
       <div className="text-xs">
         <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 font-semibold ${meta.className}`}>
@@ -177,6 +201,15 @@ function RecentRow({ item, evaluateAfterHours }: { item: AgentActionLog; evaluat
           Xem ở Nhật ký
         </Link>
       </div>
+      <button
+        type="button"
+        onClick={onHide}
+        aria-label="Xoá khỏi danh sách theo dõi"
+        title="Xoá khỏi danh sách (Nhật ký vẫn giữ)"
+        className="flex size-8 items-center justify-center justify-self-end rounded-lg text-muted transition hover:bg-canvas hover:text-danger"
+      >
+        <X className="size-4" />
+      </button>
     </li>
   );
 }

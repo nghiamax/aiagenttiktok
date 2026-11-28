@@ -13,6 +13,7 @@ import { AdsDataProvider } from './data';
 import { AdsSettingsProvider } from './settings';
 import { TrendProvider } from './trend';
 import { WatchlistProvider } from './watchlist';
+import AdsLoadingGate from './components/AdsLoadingGate';
 
 /**
  * Khung chung của Quản lí chiến dịch (/ads) + Care Ads 24/7 (/care-ads, BOT AI): số liệu theo ngày + thiết lập phân loại + dữ liệu Agent (server).
@@ -54,7 +55,9 @@ export default function AdsLayout() {
         <AdsSettingsProvider>
           <TrendProvider>
             <WatchlistProvider>
-              <Outlet />
+              <AdsLoadingGate>
+                <Outlet />
+              </AdsLoadingGate>
             </WatchlistProvider>
           </TrendProvider>
         </AdsSettingsProvider>

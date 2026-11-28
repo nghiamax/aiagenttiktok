@@ -20,7 +20,7 @@ function formatDateTime(iso: string) {
 
 /** Chọn khoảng ngày + trạng thái tải số liệu của trang ADS 24/7 */
 export default function AdsRangeControl() {
-  const { snapshot, range, setRange, status, source, error, loginRequired, reload } = useAdsData();
+  const { snapshot, range, setRange, status, error, loginRequired, reload } = useAdsData();
   const today = vnDate();
   const loading = status === 'loading';
   // Server báo chưa kết nối TikTok → đọc lại trạng thái để dải "Mất kết nối" hiện ngay
@@ -40,7 +40,8 @@ export default function AdsRangeControl() {
   const shownRange = snapshot.range ? `${formatDmy(snapshot.range.from)} – ${formatDmy(snapshot.range.to)}` : '';
 
   return (
-    <div className="flex flex-col items-start gap-2 lg:items-end">
+    // z-30: nằm trên lớp phủ "Đang lấy số liệu mới" (AdsLoadingGate) để vẫn đổi ngày / tải lại được
+    <div className="relative z-30 flex flex-col items-start gap-2 lg:items-end">
       <div className="flex items-center gap-2">
         <DateRangeSelect value={range} onChange={setRange} presets={presets} max={today} maxDays={MAX_DAYS} />
         <button
@@ -68,7 +69,7 @@ export default function AdsRangeControl() {
               <span className="font-medium text-danger">
                 {loginRequired ? 'Mất kết nối TikTok' : error}
               </span>
-              {shownRange && ` · Đang hiện ${source === 'static' ? 'dữ liệu lưu sẵn' : 'số liệu'} ${shownRange}`}
+              {shownRange && ` · Đang hiện số cũ ${shownRange}${snapshot.updatedAt ? ` (lúc ${formatDateTime(snapshot.updatedAt)})` : ''}`}
             </span>
           </>
         ) : (

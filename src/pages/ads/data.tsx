@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import staticSnapshot from '../../data/ads-snapshot.json';
 import type { AdsSnapshot } from './types';
 import { annotateCrossProduct, applyRecentActions, creativeSuccesses } from '../../../shared/videoStatus';
 import { useAgentStore } from './agent/agentStore';
@@ -15,7 +14,7 @@ export interface DateRange {
 
 export type AdsDataStatus = 'loading' | 'ready' | 'error';
 
-/** live = số liệu từ server theo khoảng ngày chọn; static = file lưu sẵn src/data/ads-snapshot.json */
+/** live = số liệu từ server theo khoảng ngày chọn; static = chưa có số (trước đây là file lưu sẵn — đã bỏ 28/11: đó là số của 1 shop khác) */
 export type AdsDataSource = 'live' | 'static';
 
 interface AdsDataValue {
@@ -37,9 +36,12 @@ interface AdsDataValue {
   baseline: AdsSnapshot;
   /** 7 · 14 · 30 ngày (tính cả hôm nay) — xếp nhóm đã xác nhận (14 / 30 null khi đang tải / lỗi) */
   trendSnaps: TrendSnaps;
+  /** Đã có số thật từ server ít nhất 1 lần (trước đó trang chỉ hiện màn hình chờ) */
+  firstLoaded: boolean;
+  /** Phần số liệu đang tải (khoảng đang xem, 7 / 14 / 30 ngày, hôm nay) — trống = đủ */
+  loadingParts: string[];
 }
 
-const STATIC = annotateCrossProduct(staticSnapshot as AdsSnapshot);
 /** Chưa đăng nhập web → không có số liệu nào (không dùng file lưu sẵn — đó là số thật của shop) */
 const EMPTY = emptySnapshot();
 const STORAGE_KEY = 'ads-range';
@@ -109,10 +111,11 @@ const AdsDataContext = createContext<AdsDataValue | null>(null);
 export function AdsDataProvider({ children }: { children: ReactNode }) {
   const { guest } = useAuth();
   const [range, setRangeState] = useState<DateRange>(() => readStoredRange() ?? lastDays(7));
-  const [rawSnapshot, setSnapshot] = useState<AdsSnapshot>(guest ? EMPTY : STATIC);
+  const [rawSnapshot, setSnapshot] = useState<AdsSnapshot>(EMPTY);
   const [source, setSource] = useState<AdsDataSource>(guest ? 'live' : 'static');
   const [status, setStatus] = useState<AdsDataStatus>(guest ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
+  const [firstLoaded, setFirstLoaded] = useState(guest);
   const [loginRequired, setLoginRequired] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const forceRef = useRef(false);
@@ -147,12 +150,13 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
           }
           setSnapshot(annotateCrossProduct(body.snapshot));
           setSource('live');
+          setFirstLoaded(true);
           setLoginRequired(false);
           setError(null);
           setStatus('ready');
         } catch (e) {
           if (controller.signal.aborted) return;
-          // Server chưa chạy / lỗi → giữ số liệu đang có (lần đầu là file lưu sẵn)
+          // Server chưa chạy / lỗi → giữ số liệu đang có (lần đầu: chưa có số → màn hình chờ báo lỗi)
           setError(e instanceof TypeError ? 'Không kết nối được server số liệu (npm run server)' : (e as Error).message);
           setStatus('error');
         }
@@ -168,10 +172,23 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
   // Số liệu cố định 7 · 14 · 30 ngày (tính cả hôm nay) (cùng khung Agent xét): trùng khoảng đang xem thì dùng luôn,
   // không thì tải nền (server có cache). Dùng cho Gợi ý, nhóm đã xác nhận ở các bảng / hộp Tổng quan
   const live = source === 'live' && status === 'ready' ? rawSnapshot : null;
-  const raw7 = useFixedSnapshot(7, range, live, reloadKey, guest);
-  const raw14 = useFixedSnapshot(14, range, live, reloadKey, guest);
-  const raw30 = useFixedSnapshot(30, range, live, reloadKey, guest);
-  const d1 = useFixedSnapshot(1, range, live, reloadKey, guest);
+  const mainLoading = status === 'loading';
+  const f7 = useFixedSnapshot(7, range, live, mainLoading, reloadKey, guest);
+  const f14 = useFixedSnapshot(14, range, live, mainLoading, reloadKey, guest);
+  const f30 = useFixedSnapshot(30, range, live, mainLoading, reloadKey, guest);
+  const f1 = useFixedSnapshot(1, range, live, mainLoading, reloadKey, guest);
+  const raw7 = f7.snap;
+  const raw14 = f14.snap;
+  const raw30 = f30.snap;
+  const d1 = f1.snap;
+  const loadingParts = [
+    ...(mainLoading ? ['Số liệu khoảng ngày đang xem'] : []),
+    ...(f7.pending ? ['Số liệu 7 ngày'] : []),
+    ...(f14.pending ? ['Số liệu 14 ngày'] : []),
+    ...(f30.pending ? ['Số liệu 30 ngày'] : []),
+    ...(f1.pending ? ['Số liệu hôm nay'] : []),
+  ];
+  const loadingKey = loadingParts.join('|');
 
   // Video vừa gỡ / thêm lại thành công mà snapshot lưu sẵn (cache tới 6 giờ) chưa biết → đè trạng thái theo Nhật ký
   // để nhóm, hộp Tổng quan, lọc "Đã gỡ" đổi ngay. Khoá theo các thao tác thành công → không tính lại mỗi lần tải Agent.
@@ -204,8 +221,10 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
       days: daysOf(snapshot.range),
       baseline,
       trendSnaps,
+      firstLoaded,
+      loadingParts: loadingKey ? loadingKey.split('|') : [],
     }),
-    [snapshot, range, setRange, status, source, error, loginRequired, reload, baseline, trendSnaps],
+    [snapshot, range, setRange, status, source, error, loginRequired, reload, baseline, trendSnaps, firstLoaded, loadingKey],
   );
 
   return <AdsDataContext.Provider value={value}>{children}</AdsDataContext.Provider>;
@@ -213,30 +232,40 @@ export function AdsDataProvider({ children }: { children: ReactNode }) {
 
 /**
  * Snapshot n ngày đến hôm qua. Khoảng đang xem trùng → dùng snapshot đang xem (đã tải xong); không thì tải nền.
- * null = chưa có (đang tải / lỗi) — nơi dùng tự quay về cách cũ.
+ * snap null = chưa có (đang tải / lỗi) — nơi dùng tự quay về cách cũ. pending = đang tải (lỗi cũng tính là xong, không treo).
  */
 function useFixedSnapshot(
   n: number,
   viewing: DateRange,
   live: AdsSnapshot | null,
+  mainLoading: boolean,
   reloadKey: number,
   guest: boolean,
-): AdsSnapshot | null {
+): { snap: AdsSnapshot | null; pending: boolean } {
   const want = lastDays(n);
   const same = viewing.from === want.from && viewing.to === want.to;
   const [snap, setSnap] = useState<AdsSnapshot | null>(null);
+  const [fetching, setFetching] = useState(!guest);
   useEffect(() => {
-    if (same || guest) return;
+    if (same || guest) {
+      setFetching(false);
+      return;
+    }
     const controller = new AbortController();
+    setFetching(true);
     fetch(`/api/ads/snapshot?${new URLSearchParams({ from: want.from, to: want.to })}`, { signal: controller.signal })
       .then((res) => (res.ok ? (res.json() as Promise<{ snapshot?: AdsSnapshot }>) : null))
       .then((body) => body?.snapshot && setSnap(annotateCrossProduct(body.snapshot)))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (!controller.signal.aborted) setFetching(false);
+      });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [same, guest, want.from, want.to, reloadKey]);
-  if (guest) return EMPTY;
-  return same ? (live ?? snap) : snap;
+  if (guest) return { snap: EMPTY, pending: false };
+  // Trùng khoảng đang xem → đi theo lần tải chính
+  return same ? { snap: live ?? snap, pending: mainLoading } : { snap, pending: fetching };
 }
 
 export function useAdsData(): AdsDataValue {

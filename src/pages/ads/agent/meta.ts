@@ -83,9 +83,9 @@ export const MODE_LABEL: Record<RuleMode, string> = { off: 'Tắt', approve: 'C�
 /* ───────────── Cấp áp dụng ───────────── */
 
 export const LEVEL_OPTIONS: { value: RuleLevel; label: string }[] = [
-  { value: 'video', label: 'Video' },
-  { value: 'product', label: 'Sản phẩm' },
   { value: 'campaign', label: 'Chiến dịch' },
+  { value: 'product', label: 'Sản phẩm' },
+  { value: 'video', label: 'Video' },
 ];
 
 export const LEVEL_LABEL: Record<RuleLevel, string> = { video: 'Video', product: 'Sản phẩm', campaign: 'Chiến dịch' };

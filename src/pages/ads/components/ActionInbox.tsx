@@ -56,7 +56,7 @@ interface ActionInboxProps {
 const EMPTY: ActionSummary = { count: 0, rows: 0, cost: 0, revenue: 0 };
 
 /** Video trước vì là nơi có nhiều việc nhất; sau đó từ lớn tới nhỏ */
-const LEVEL_TABS: GroupLevel[] = ['campaign', 'video', 'product'];
+const LEVEL_TABS: GroupLevel[] = ['campaign', 'product', 'video'];
 const LEVEL_NAME: Record<GroupLevel, string> = { video: 'Video', product: 'Sản phẩm', campaign: 'Chiến dịch' };
 
 const total = (s: Record<string, ActionSummary>) => Object.values(s).reduce((acc, x) => acc + x.count, 0);

@@ -24,7 +24,7 @@ import { useSignals } from './useSignals';
 import { useSuggestions } from './useSuggestions';
 
 const VIEWS: readonly AgentView[] = ['suggest', 'pending', 'log', 'impact', 'rules', 'groups'];
-const LEVELS: readonly GroupLevel[] = ['video', 'product', 'campaign'];
+const LEVELS: readonly GroupLevel[] = ['campaign', 'product', 'video'];
 
 /** ADS 24/7 → AI Agent: Chờ duyệt / Nhật ký / Quy tắc. Giai đoạn này chỉ hiển thị, chưa thực hiện thao tác */
 export default function AgentPage() {
@@ -35,7 +35,7 @@ export default function AgentPage() {
   const rawView = params.get('view');
   const setView = (v: AgentView) => setParams({ view: v });
   // Tab Nhóm: cấp đang xem nằm trên URL (?view=groups&level=product)
-  const groupLevel = LEVELS.find((l) => l === params.get('level')) ?? 'video';
+  const groupLevel = LEVELS.find((l) => l === params.get('level')) ?? 'campaign';
   // Giữ ?product= (đang chỉnh riêng 1 sản phẩm) khi đổi cấp
   const setGroupLevel = (l: GroupLevel) => {
     const product = params.get('product');

@@ -3,11 +3,10 @@ import type { VideoStatus } from '../../shared/adsSnapshot.js';
 import type { ActorRef } from '../../shared/permissions.js';
 import {
   CREATIVE_INLINE_CHECKS_MS,
-  CREATIVE_VERIFY_FAST_MIN,
-  CREATIVE_VERIFY_MAX_SEC,
-  CREATIVE_VERIFY_MIN_SEC,
+  CREATIVE_VERIFY_STEPS,
+  CREATIVE_UNCONFIRMED_MIN,
   CREATIVE_VERIFY_TIMEOUT_MIN,
-  CREATIVE_LATE_CHECK_MIN,
+  CREATIVE_MANUAL_VERIFY_HOURS,
   CREATIVE_MAX_RETRIES,
   AUTO_MODE_ENABLED,
   EXECUTION_ENABLED,
@@ -721,7 +720,13 @@ export function undoAction(actionId: string, by?: ActorRef): Promise<ExecResult>
 export function retryInfo(actions: AgentActionLog[], a: AgentActionLog): { root: string; used: number; left: number; done: boolean } {
   const root = a.retryOf ?? a.id;
   const tries = actions.filter((x) => x.retryOf === root);
-  return { root, used: tries.length, left: Math.max(0, CREATIVE_MAX_RETRIES - tries.length), done: tries.some((x) => x.status !== 'failed') };
+  // done = đã có lần gửi lại khác (không phải chính dòng đang xét) thành công / đang chờ
+  return {
+    root,
+    used: tries.length,
+    left: Math.max(0, CREATIVE_MAX_RETRIES - tries.length),
+    done: tries.some((x) => x.status !== 'failed' && x.id !== a.id),
+  };
 }
 
 /**
@@ -735,7 +740,9 @@ export function retryAction(actionId: string, by?: ActorRef): Promise<ExecResult
     const a = rt.actions.find((x) => x.id === actionId);
     if (!a) throw new PrecheckError('Không tìm thấy thao tác');
     if (!isCreative(a)) throw new PrecheckError('Chỉ gửi lại được Gỡ / Thêm lại video');
-    if (a.status !== 'failed') throw new PrecheckError('Chỉ gửi lại được thao tác bị lỗi');
+    // Lỗi, hoặc "Chưa xác nhận" (đang chờ quá 3 phút — Sếp chốt 28/11)
+    const unconfirmed = a.status === 'running' && Date.now() - Date.parse(a.executedAt) >= CREATIVE_UNCONFIRMED_MIN * MIN;
+    if (a.status !== 'failed' && !unconfirmed) throw new PrecheckError('Chỉ gửi lại được thao tác bị lỗi hoặc chưa xác nhận sau 3 phút');
     const info = retryInfo(rt.actions, a);
     if (info.done) throw new PrecheckError('Thao tác này đã được gửi lại');
     if (info.left <= 0) {
@@ -772,7 +779,17 @@ export function retryAction(actionId: string, by?: ActorRef): Promise<ExecResult
     };
     updateRuntime((r) => {
       // Đã gửi lại → các dòng lỗi trước thôi đọc muộn ở nền (tránh 2 dòng cùng thành công)
-      for (const x of r.actions) if ((x.id === info.root || x.retryOf === info.root) && x.status === 'failed') x.lateCheckUntil = undefined;
+      for (const x of r.actions) {
+        if (!(x.id === info.root || x.retryOf === info.root)) continue;
+        if (x.status === 'failed') x.lateCheckUntil = undefined;
+        // Dòng đang chờ xác nhận → thôi đọc, ghi là đã gửi lại
+        if (x.status === 'running') {
+          x.status = 'failed';
+          x.error = 'Chưa xác nhận — đã gửi lại lệnh';
+          x.note = undefined;
+          x.verifyAfter = undefined;
+        }
+      }
       r.actions.unshift(retry);
       r.actions = r.actions.slice(0, 2000);
     });
@@ -788,17 +805,14 @@ const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : 
 
 const isCreative = (a: AgentActionLog) => a.actionType === 'remove_creative' || a.actionType === 'add_creative';
 
-/** Lần kiểm tra kế tiếp: 20 giây/lần trong 10 phút đầu, sau đó ≈ 1/4 thời gian đã trôi qua, tối đa 5 phút */
+/** Lần kiểm tra kế tiếp theo nhịp CREATIVE_VERIFY_STEPS (15 giây tới phút 3, 1 phút tới phút 30, sau đó 3 phút) */
 function nextVerifyAt(a: AgentActionLog, now = Date.now()): string {
-  const elapsedSec = Math.max(0, (now - Date.parse(a.executedAt)) / 1000);
-  const waitSec =
-    elapsedSec < CREATIVE_VERIFY_FAST_MIN * 60
-      ? CREATIVE_VERIFY_MIN_SEC
-      : Math.min(CREATIVE_VERIFY_MAX_SEC, Math.max(CREATIVE_VERIFY_MIN_SEC, elapsedSec / 4));
-  return new Date(now + waitSec * 1000).toISOString();
+  const elapsedMin = Math.max(0, (now - Date.parse(a.executedAt)) / MIN);
+  const step = CREATIVE_VERIFY_STEPS.find((s) => elapsedMin < s.untilMin) ?? CREATIVE_VERIFY_STEPS[CREATIVE_VERIFY_STEPS.length - 1];
+  return new Date(now + step.everySec * 1000).toISOString();
 }
 
-/** Ngay sau khi gửi lệnh: đọc trạng thái vài lần trong ~15 giây (chạy nền, không chặn Sếp) */
+/** Ngay sau khi gửi lệnh: đọc trạng thái 3 giây/lần trong 30 giây đầu (chạy nền, không chặn Sếp) */
 export async function followUpCreative(actionId: string): Promise<void> {
   try {
     for (const ms of executorTiming.inlineChecksMs) {
@@ -810,13 +824,28 @@ export async function followUpCreative(actionId: string): Promise<void> {
   }
 }
 
+/** Dòng Lỗi (gỡ / thêm lại) còn được bấm "Kiểm tra ngay": trong CREATIVE_MANUAL_VERIFY_HOURS giờ, chưa Gửi lại thành dòng khác */
+function manualVerifiable(a: AgentActionLog, actions: AgentActionLog[], now: number): boolean {
+  return (
+    a.status === 'failed' &&
+    isCreative(a) &&
+    now - Date.parse(a.executedAt) < CREATIVE_MANUAL_VERIFY_HOURS * 60 * MIN &&
+    !retryInfo(actions, a).done
+  );
+}
+
 /**
  * Đọc trạng thái video trên TikTok (chỉ đọc) và cập nhật dòng nhật ký đang chờ.
  * 'done' = đã thành công / lỗi; 'pending' = chưa khớp, hẹn lần kiểm tra sau.
+ * Sếp chốt 28/11: 0–3 phút "Đang chờ TikTok xác nhận", 3–90 phút "Chưa xác nhận" (vẫn running), quá 90 phút mới Lỗi.
+ * `manual` = nút Kiểm tra ngay: đọc được cả dòng Lỗi (TikTok ghi nhận muộn → Thành công).
  */
-async function checkCreative(actionId: string): Promise<'done' | 'pending'> {
-  const a = getRuntime().actions.find((x) => x.id === actionId);
-  if (!a || !isCreative(a) || !(a.status === 'running' || (a.status === 'failed' && a.lateCheckUntil))) return 'done';
+async function checkCreative(actionId: string, manual = false): Promise<'done' | 'pending'> {
+  const rt0 = getRuntime();
+  const a = rt0.actions.find((x) => x.id === actionId);
+  const checkable = (x: AgentActionLog, all: AgentActionLog[]) =>
+    isCreative(x) && (x.status === 'running' || (x.status === 'failed' && !!x.lateCheckUntil) || (manual && manualVerifiable(x, all, Date.now())));
+  if (!a || !checkable(a, rt0.actions)) return 'done';
   const late = a.status === 'failed';
   let status: VideoStatus | null;
   try {
@@ -828,14 +857,17 @@ async function checkCreative(actionId: string): Promise<'done' | 'pending'> {
   const ok = a.actionType === 'remove_creative' ? status === 'excluded' : status !== null && status !== 'excluded';
   const elapsedMin = (now - Date.parse(a.executedAt)) / MIN;
   const timedOut = elapsedMin > CREATIVE_VERIFY_TIMEOUT_MIN;
-  const lateOver = late && now > Date.parse(a.lateCheckUntil!);
+  const lateOver = late && !manual && !!a.lateCheckUntil && now > Date.parse(a.lateCheckUntil);
   updateRuntime((rt) => {
     const x = rt.actions.find((y) => y.id === actionId);
-    if (!x || !(x.status === 'running' || (x.status === 'failed' && x.lateCheckUntil))) return;
+    if (!x || !checkable(x, rt.actions)) return;
+    x.verifyCount = (x.verifyCount ?? 0) + 1;
+    x.lastCheckedAt = new Date(now).toISOString();
     if (ok) {
       x.status = 'success';
       x.error = undefined;
-      x.note = late ? `TikTok ghi nhận muộn (sau ${Math.round(elapsedMin)} phút)` : undefined;
+      x.note =
+        late ? `TikTok ghi nhận muộn (sau ${Math.round(elapsedMin)} phút)` : elapsedMin >= CREATIVE_UNCONFIRMED_MIN ? `TikTok xác nhận sau ${Math.round(elapsedMin)} phút` : undefined;
       x.verifyAfter = undefined;
       x.lateCheckUntil = undefined;
       if (x.undoOf) markUndone(rt, x.undoOf);
@@ -843,23 +875,22 @@ async function checkCreative(actionId: string): Promise<'done' | 'pending'> {
       if (lateOver) {
         x.lateCheckUntil = undefined;
         x.verifyAfter = undefined;
-      } else x.verifyAfter = nextVerifyAt(x, now);
+      } else if (x.lateCheckUntil) x.verifyAfter = nextVerifyAt(x, now);
     } else if (timedOut) {
       const what = x.actionType === 'remove_creative' ? 'gỡ' : 'thêm lại';
       x.status = 'failed';
-      x.error = `Sau ${CREATIVE_VERIFY_TIMEOUT_MIN} phút TikTok chưa ${what} video (trạng thái: ${status ?? 'không tìm thấy'}) — kiểm tra trên Ads Manager hoặc bấm Gửi lại`;
+      x.error = `Sau ${CREATIVE_VERIFY_TIMEOUT_MIN} phút TikTok vẫn chưa ${what} video (trạng thái: ${status ?? 'không tìm thấy'}). Ads Manager đã đúng → bấm Kiểm tra ngay; chưa → bấm Gửi lại`;
       x.note = undefined;
-      // Vẫn đọc ở nền: TikTok ghi nhận muộn → tự chuyển Thành công
-      x.lateCheckUntil = new Date(Date.parse(x.executedAt) + CREATIVE_LATE_CHECK_MIN * MIN).toISOString();
-      x.verifyAfter = nextVerifyAt(x, now);
+      x.verifyAfter = undefined;
     } else {
+      x.note = elapsedMin >= CREATIVE_UNCONFIRMED_MIN ? 'Chưa xác nhận' : 'Đang chờ TikTok xác nhận';
       x.verifyAfter = nextVerifyAt(x, now);
     }
   });
-  return ok || (late ? lateOver : timedOut) ? 'done' : 'pending';
+  return ok || (late ? lateOver || manual : timedOut) ? 'done' : 'pending';
 }
 
-/** Gọi định kỳ (scheduler, mỗi 30 giây): dòng đang chờ đã tới giờ → đọc trạng thái. Trả số dòng đã có kết quả. */
+/** Gọi định kỳ (scheduler, mỗi 10 giây): dòng đang chờ đã tới giờ → đọc trạng thái. Trả số dòng đã có kết quả. */
 export async function verifyPendingActions(): Promise<number> {
   const now = Date.now();
   const due = getRuntime().actions.filter(
@@ -873,18 +904,20 @@ export async function verifyPendingActions(): Promise<number> {
   return done;
 }
 
-/** Nút "Kiểm tra ngay" — chỉ đọc trạng thái, không gửi lệnh ghi */
+/** Nút "Kiểm tra ngay" — chỉ đọc trạng thái, không gửi lệnh ghi. Dòng đang chờ, chưa xác nhận, hoặc Lỗi trong 24 giờ. */
 export async function verifyAction(actionId: string): Promise<ExecResult> {
-  const a = getRuntime().actions.find((x) => x.id === actionId);
+  const rt = getRuntime();
+  const a = rt.actions.find((x) => x.id === actionId);
   if (!a) throw new PrecheckError('Không tìm thấy thao tác');
-  if (a.status !== 'running' || !isCreative(a)) throw new PrecheckError('Thao tác không còn chờ TikTok xác nhận');
-  await checkCreative(actionId);
+  const ok = isCreative(a) && (a.status === 'running' || manualVerifiable(a, rt.actions, Date.now()));
+  if (!ok) throw new PrecheckError('Thao tác không còn chờ TikTok xác nhận');
+  await checkCreative(actionId, true);
   const after = getRuntime().actions.find((x) => x.id === actionId)!;
   const message =
     after.status === 'success'
       ? 'TikTok đã ghi nhận'
       : after.status === 'failed'
-        ? (after.error ?? 'Lỗi')
-        : 'TikTok chưa cập nhật trạng thái — Agent sẽ tự kiểm tra lại';
+        ? 'TikTok vẫn chưa cập nhật trạng thái'
+        : 'TikTok chưa cập nhật trạng thái — trạng thái sẽ cập nhật sớm, bạn không cần làm gì thêm';
   return { action: after, message };
 }

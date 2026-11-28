@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, RotateCw, Trash2, Undo2 } from 'lucide-react';
-import { CREATIVE_MAX_RETRIES } from '../../../../../shared/agentPolicy';
+import { Hourglass, Loader2, RefreshCw, RotateCw, Trash2, Undo2 } from 'lucide-react';
+import { CREATIVE_MANUAL_VERIFY_HOURS, CREATIVE_MAX_RETRIES, CREATIVE_UNCONFIRMED_MIN } from '../../../../../shared/agentPolicy';
 import { formatDateTime } from '../../../../lib/format';
 import { useAdsData } from '../../data';
 import { useAuth } from '../../../../auth/AuthProvider';
@@ -59,7 +59,7 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
       : item.actionType === 'remind'
         ? 'Nhắc việc — không đo'
         : item.status === 'running'
-          ? 'Đo sau khi TikTok xác nhận xong'
+          ? 'Chờ TikTok xác nhận'
           : Date.now() < readyAt
             ? `Có số ngày ${day1} lúc ~${formatDateTime(new Date(readyAt).toISOString())}`
             : `Đang lấy số ngày ${day1} từ TikTok…`;
@@ -71,8 +71,21 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
   const retryLeft = Math.max(0, CREATIVE_MAX_RETRIES - retries.length);
   const isCreative = item.actionType === 'remove_creative' || item.actionType === 'add_creative';
   const latestTry = [item, ...retries].sort((a, b) => b.executedAt.localeCompare(a.executedAt))[0];
+  // Gỡ / thêm lại (Sếp chốt 28/11): 0–3 phút "Đang chờ TikTok xác nhận", 3–90 phút "Chưa xác nhận" (vàng), quá 90 phút Lỗi
+  const elapsedMin = (Date.now() - Date.parse(item.executedAt)) / 60_000;
+  const waiting = isCreative && item.status === 'running';
+  const unconfirmed = waiting && elapsedMin >= CREATIVE_UNCONFIRMED_MIN;
   const retryable =
-    canExec && isCreative && item.status === 'failed' && latestTry.id === item.id && !retries.some((x) => x.status !== 'failed');
+    canExec &&
+    isCreative &&
+    (item.status === 'failed' || unconfirmed) &&
+    latestTry.id === item.id &&
+    !retries.some((x) => x.status !== 'failed' && x.id !== item.id);
+  // Kiểm tra ngay: dòng đang chờ, hoặc dòng gỡ / thêm lại Lỗi trong 24 giờ (TikTok ghi nhận muộn → Thành công)
+  const verifiable =
+    canExec &&
+    (item.status === 'running' ||
+      (isCreative && item.status === 'failed' && elapsedMin < CREATIVE_MANUAL_VERIFY_HOURS * 60 && !retries.some((x) => x.status !== 'failed')));
   const retryVerb = item.actionType === 'remove_creative' ? 'gỡ' : 'thêm lại';
   // Người bấm: dòng có tên (sau khi có đăng nhập) → "Duyệt bởi …"; dòng cũ giữ nhãn cũ
   const actorText = item.undoOf
@@ -118,10 +131,14 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
       </div>
 
       <div className="flex flex-row flex-wrap items-center justify-between gap-2 lg:flex-col lg:items-end">
-        <p className={`flex items-center gap-1.5 text-sm font-semibold ${status.className}`}>
-          <status.icon className={`size-4 ${item.status === 'running' ? 'animate-spin' : ''}`} />
-          {item.status === 'running' ? (item.note ?? 'Chờ TikTok xác nhận') : status.label}
-        </p>
+        {waiting ? (
+          <CreativeWaiting item={item} unconfirmed={unconfirmed} />
+        ) : (
+          <p className={`flex items-center gap-1.5 text-sm font-semibold ${status.className}`}>
+            <status.icon className={`size-4 ${item.status === 'running' ? 'animate-spin' : ''}`} />
+            {item.status === 'running' ? (item.note ?? 'Chờ TikTok xác nhận') : status.label}
+          </p>
+        )}
         {item.status !== 'running' && item.note && <p className="text-xs text-muted lg:text-right">{item.note}</p>}
         {item.error && (
           <p title={item.error} className="max-w-xs break-words text-xs text-danger lg:text-right">
@@ -129,7 +146,7 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
           </p>
         )}
         <VerdictBadge ev={ev} />
-        {item.status === 'running' && canExec && (
+        {verifiable && (
           <button
             type="button"
             disabled={checking}
@@ -232,5 +249,37 @@ function ReAddLink({ item, all }: { item: AgentActionLog; all: AgentActionLog[] 
     <Link to={logLink(re.id)} className="mt-1.5 block text-xs font-medium text-primary hover:text-primary-hover">
       → Đã thêm lại lúc {formatDateTime(re.executedAt)}
     </Link>
+  );
+}
+
+/** "14:18:42" */
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** Gỡ / thêm lại đang chờ TikTok xác nhận (Sếp chốt 28/11): xanh 0–3 phút, vàng "Chưa xác nhận" 3–90 phút */
+function CreativeWaiting({ item, unconfirmed }: { item: AgentActionLog; unconfirmed: boolean }) {
+  const checked = item.verifyCount
+    ? `Đã kiểm tra ${item.verifyCount} lần${item.lastCheckedAt ? ` · lần cuối ${clock(item.lastCheckedAt)}` : ''}`
+    : null;
+  if (unconfirmed) {
+    return (
+      <div className="max-w-xs space-y-1 lg:text-right">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 lg:justify-end">
+          <Hourglass className="size-4" />
+          Chưa xác nhận
+        </p>
+        <p className="text-xs text-amber-700">TikTok đã nhận lệnh, trạng thái sẽ cập nhật sớm, bạn không cần làm gì thêm</p>
+        {checked && <p className="text-xs text-muted">{checked}</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="max-w-xs space-y-1 lg:text-right">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-primary lg:justify-end">
+        <Loader2 className="size-4 animate-spin" />
+        Đang chờ TikTok xác nhận
+      </p>
+      {checked && <p className="text-xs text-muted">{checked}</p>}
+      <p className="text-xs text-muted">Trạng thái sẽ cập nhật sớm, bạn không cần làm gì thêm</p>
+    </div>
   );
 }

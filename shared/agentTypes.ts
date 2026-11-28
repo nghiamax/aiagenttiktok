@@ -202,6 +202,9 @@ export interface AgentActionLog {
   lateCheckUntil?: string;
   /** Gỡ / thêm video: thời điểm kiểm tra lại trạng thái trên TikTok (ISO) */
   verifyAfter?: string;
+  /** Gỡ / thêm video: số lần đã đọc trạng thái trên TikTok + lần cuối (ISO) — hiện "Đã kiểm tra N lần · lần cuối …" */
+  verifyCount?: number;
+  lastCheckedAt?: string;
   /** Ghi chú trạng thái (vd "Chờ TikTok xác nhận") */
   note?: string;
   /** Đề xuất gốc */

@@ -9,6 +9,8 @@ import type { AgentActionLog, AgentProposal, AgentRule, MetricWindow, RuleMode }
  *   đang tắt (thêm lại video, bật SP) → 0 (không chi, không đơn).
  * - Sau ≥ trước → Đúng, thấp hơn → Sai. Tác động = chênh lãi/lỗ mỗi ngày × số ngày sau.
  * - Chênh quá nhỏ (chi chênh < MIN_COST_DIFF và đơn chênh < 1) → Chưa đủ số liệu, chưa chấm.
+ * - Gỡ video / tắt sản phẩm (Sếp chốt 28/11): doanh thu / đơn SAU khi gỡ là ĐƠN VỀ MUỘN (khách bấm lúc còn chạy) →
+ *   cộng vào khoảng TRƯỚC, không tính là lãi của việc gỡ; sau chỉ còn chi. Tính cả đơn muộn mà ROI ≥ hoà vốn → Sai.
  */
 
 export type Verdict = 'good' | 'bad' | 'pending' | 'insufficient' | 'unscorable' | 'excluded';
@@ -18,6 +20,8 @@ export const MIN_COST_DIFF = 50_000;
 
 /** Thao tác bật lại thứ đang tắt → mốc "trước" = 0 */
 const STARTS_FROM_ZERO = new Set(['add_creative', 'enable_product']);
+/** Gỡ / tắt → doanh thu sau đó là đơn về muộn */
+const CUT_ACTIONS = new Set(['remove_creative', 'disable_product']);
 
 export interface ActionEvaluation {
   verdict: Verdict;
@@ -72,7 +76,8 @@ export function evaluateAction(a: AgentActionLog, evaluateAfterHours: number, no
 
   if (!be) return { ...EMPTY, ...parts, verdict: 'unscorable' };
   if (Math.abs(dCost) < MIN_COST_DIFF && Math.abs(dOrders) < 1) return { ...EMPTY, ...parts, verdict: 'insufficient' };
-  const profitEffect = (dailyProfit(after, be) - dailyProfit(base, be)) * aDays;
+  const w = CUT_ACTIONS.has(a.actionType) ? cutWindows(a) : { base, after };
+  const profitEffect = (dailyProfit(w.after, be) - dailyProfit(w.base, be)) * aDays;
   return { ...EMPTY, ...parts, verdict: profitEffect >= 0 ? 'good' : 'bad', profitEffect };
 }
 
@@ -102,6 +107,30 @@ export function compareWindows(a: AgentActionLog): { base: PerDay; after: PerDay
     total,
     aDays,
     after: { cost: total.cost / aDays, revenue: total.revenue / aDays, orders: total.orders / aDays },
+  };
+}
+
+/**
+ * Gỡ video / tắt sản phẩm: đơn về muộn (DT / đơn sau khi gỡ) cộng vào khoảng trước — khoản chi trước khi gỡ mới là thứ tạo ra chúng;
+ * sau khi gỡ chỉ còn chi (nếu có). roi = ROI lúc gỡ tính cả đơn về muộn.
+ */
+export function cutWindows(a: AgentActionLog): {
+  base: PerDay;
+  after: PerDay;
+  late: { revenue: number; orders: number };
+  roi: number | null;
+} {
+  const bDays = windowDays(a.before);
+  const w = a.after;
+  const aDays = w ? windowDays(w) : 1;
+  const late = { revenue: w?.revenue ?? 0, orders: w?.orders ?? 0 };
+  const cost = a.before.cost ?? 0;
+  const revenue = (a.before.revenue ?? 0) + late.revenue;
+  return {
+    base: { cost: cost / bDays, revenue: revenue / bDays, orders: ((a.before.orders ?? 0) + late.orders) / bDays },
+    after: { cost: (w?.cost ?? 0) / aDays, revenue: 0, orders: 0 },
+    late,
+    roi: cost > 0 ? revenue / cost : null,
   };
 }
 
@@ -317,13 +346,32 @@ export function summarizeAction(a: AgentActionLog, ev: ActionEvaluation, now = D
   if (ev.verdict === 'insufficient') return { tone: 'muted', text: `Chưa đủ số liệu để chấm — ${head}: ${facts}` };
   if (ev.verdict !== 'good' && ev.verdict !== 'bad') return { tone: 'muted', text: `${head}: ${facts}` };
 
-  // Cùng 1 mẫu cho mọi thao tác: lãi/lỗ mỗi ngày sau vs trước
   const be = a.before.breakEven!;
+  const profit = ev.profitEffect ?? 0;
+  const hint = UNDO_HINT[a.actionType];
+  if (CUT_ACTIONS.has(a.actionType)) {
+    const c = cutWindows(a);
+    if (c.late.revenue > 0 || c.late.orders > 0) {
+      // Có đơn về muộn → nói rõ, chấm theo ROI lúc gỡ tính cả đơn này
+      const lateText = `${formatNumber(c.late.orders)} đơn về muộn (DT ${vndShort(c.late.revenue)}, chi ${vndShort(total.cost)})`;
+      const roiText = `ROI lúc ${a.actionType === 'remove_creative' ? 'gỡ' : 'tắt'} ${formatNumber(c.roi, 2)}`;
+      if (ev.verdict === 'good') {
+        return {
+          tone: 'good',
+          text: `✓ Đúng — ${head}: ${lateText}, tính cả vẫn ${roiText} < hoà vốn ${formatNumber(be, 2)} · tránh lỗ ~${vndShort(-dailyProfit(c.base, be))}/ngày → lợi ~${vndShort(profit)}`,
+        };
+      }
+      const verb = a.actionType === 'remove_creative' ? 'Gỡ sai' : 'Tắt sai';
+      return {
+        tone: 'bad',
+        text: `✗ ${verb} — ${head}: ${lateText} → tính cả, ${roiText} ≥ hoà vốn ${formatNumber(be, 2)}: thực ra lãi ${signed(dailyProfit(c.base, be))}/ngày → lỗ ~${vndShort(-profit)}${hint ? ` · cân nhắc ${hint}` : ''}`,
+      };
+    }
+  }
+  // Cùng 1 mẫu cho mọi thao tác: lãi/lỗ mỗi ngày sau vs trước
   const beforeText = fromZero ? '0đ — đang tắt' : signed(dailyProfit(base, be));
   const line = `${head}: lãi/lỗ ${signed(dailyProfit(after, be))}/ngày (trước ${beforeText}) · ${facts}`;
-  const profit = ev.profitEffect ?? 0;
   if (ev.verdict === 'good') return { tone: 'good', text: `✓ Đúng — ${line} → lợi ~${vndShort(profit)}` };
-  const hint = UNDO_HINT[a.actionType];
   return { tone: 'bad', text: `✗ Sai — ${line} → lỗ ~${vndShort(-profit)}${hint ? ` · cân nhắc ${hint}` : ''}` };
 }
 

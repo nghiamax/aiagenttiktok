@@ -100,6 +100,20 @@ describe('runAgent (giai đoạn B: chỉ đề xuất)', () => {
     expect(mock.runtime.proposals.every((p) => p.ruleMode === 'auto' && !p.note)).toBe(true);
   });
 
+  it('đề xuất đang chờ của quy tắc BOT chạy (lần trước BOT chưa chạy được) → lượt sau vào lại autoIds (lỗi hosting 27/11)', async () => {
+    mock.config.rules[0] = { ...mock.config.rules[0], mode: 'auto' };
+    const first = await runAgent();
+    expect(first.autoIds).toHaveLength(3);
+    // BOT chưa chạy được (vd đủ thao tác hôm qua) → vẫn pending; lượt sau thử lại, không tạo trùng
+    vi.setSystemTime(new Date('2026-11-18T06:00:00Z'));
+    const next = await runAgent();
+    expect(next.proposals).toBe(0);
+    expect(next.autoIds.sort()).toEqual(first.autoIds.sort());
+    // Đổi quy tắc về Cần duyệt → không tự chạy nữa
+    mock.config.rules[0] = { ...mock.config.rules[0], mode: 'approve' };
+    expect((await runAgent()).autoIds).toEqual([]);
+  });
+
   it('chạy lại ngay → không tạo trùng', async () => {
     await runAgent();
     const s = await runAgent();

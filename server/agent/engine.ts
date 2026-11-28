@@ -199,6 +199,9 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
         if (r.match.offset) p.offset = r.match.offset;
         else delete p.offset;
         applyWindows(p, r.match);
+        // Đề xuất cũ của quy tắc "BOT chạy" (lần trước BOT chưa chạy được — vd đủ thao tác hôm qua, TikTok lỗi tạm)
+        // → BOT thử lại mỗi lượt, không nằm Chờ duyệt tới hết hạn (lỗi hosting 27/11 — Sếp chốt 28/11)
+        if (cfg.rules.find((x) => x.id === p.ruleId)?.mode === 'auto') summary.autoIds.push(p.id);
       } else {
         p.status = 'outdated';
         p.decidedAt = ranAt;

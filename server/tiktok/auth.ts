@@ -41,10 +41,13 @@ interface OAuthMeta {
   revocation_endpoint?: string;
 }
 
+/** Thời gian chờ tối đa khi đọc cấu hình OAuth / gia hạn token */
+const AUTH_TIMEOUT_MS = 30_000;
+
 let metaCache: OAuthMeta | null = null;
 export async function oauthMeta(): Promise<OAuthMeta> {
   if (!metaCache) {
-    const res = await fetch(`${AUTH_BASE}/.well-known/oauth-authorization-server`);
+    const res = await fetch(`${AUTH_BASE}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`Không đọc được cấu hình OAuth TikTok (HTTP ${res.status})`);
     metaCache = (await res.json()) as OAuthMeta;
   }
@@ -77,6 +80,8 @@ export async function tokenRequest(params: Record<string, string>) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ resource: config.tiktok.mcpUrl, ...params }),
+    // Gia hạn treo → mọi lời gọi của shop chờ chung 1 lần gia hạn mãi (refreshing) — giới hạn thời gian (28/11)
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);

@@ -96,6 +96,23 @@ export const getNextRunAt = () => (nextRunAt ? new Date(nextRunAt).toISOString()
 
 export const AGENT_INTERVAL_MINUTES = INTERVAL_MIN;
 
+/**
+ * Giới hạn thời gian phần quét (đọc số liệu + tạo đề xuất) — lớp chặn thứ 2 sau giới hạn từng lời gọi TikTok.
+ * Lỗi 28/11: lượt treo nằm mãi trong `running` → Quét ngay / quét theo giờ dùng lại lượt treo, không làm gì.
+ * Quá giờ → lượt báo lỗi, `running` được xoá (lượt sau chạy lại bình thường); kết quả muộn của lượt cũ không thực thi BOT.
+ */
+export const runTiming = { timeoutMs: 15 * 60_000 };
+function withRunTimeout<T>(job: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Lượt quét quá ${Math.round(runTiming.timeoutMs / 60_000)} phút (TikTok không phản hồi) — lượt sau quét lại`)),
+      runTiming.timeoutMs,
+    );
+  });
+  return Promise.race([job, limit]).finally(() => clearTimeout(timer));
+}
+
 /** Chạy 1 lượt cho shop đang mở (currentShopId); đang có lượt của shop đó thì dùng chung (không chạy chồng) */
 export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary> {
   const shop = maybeShopId();
@@ -103,7 +120,7 @@ export function runAgentOnce(trigger: 'schedule' | 'manual'): Promise<RunSummary
   const existing = running.get(shop);
   if (existing) return existing;
   // Quét ngay: lấy số liệu mới từ TikTok; lịch tự động: dùng cache (tối đa 6 tiếng)
-  const p = runAgent({ fresh: trigger === 'manual' })
+  const p = withRunTimeout(runAgent({ fresh: trigger === 'manual' }))
     // BOT chạy: thực thi ngay đề xuất của quy tắc chế độ "BOT chạy" (cùng shop, lần lượt, đủ lớp kiểm tra như Duyệt)
     .then(async (s) => (s.autoIds.length ? { ...s, auto: await runAutoProposals(s.autoIds) } : s))
     .then((s) => {

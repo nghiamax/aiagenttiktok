@@ -37,7 +37,7 @@ const mock = vi.hoisted(() => ({
 }));
 
 vi.mock('../server/ads/cache', () => ({
-  todayVN: () => '2026-11-19',
+  todayVN: () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10), // theo giờ giả lập (NOW = 19/11)
   getSnapshot: async () => ({ snapshot: mock.snapshot, cached: true }),
 }));
 
@@ -65,6 +65,7 @@ vi.mock('../server/tiktok/link', () => {
 });
 
 vi.mock('../server/tiktok/mcpClient', () => ({
+  TikTokTimeoutError: class TikTokTimeoutError extends Error {},
   callReadTool: async (tool: string, params: Record<string, unknown>) => {
     if (tool === 'campaign_gmv_max_info_get') return structuredClone(mock.info);
     if (tool === 'gmv_max_store_list_get') {
@@ -327,6 +328,26 @@ describe('Gỡ / thêm video (gmv_max_creative_update)', () => {
     expect(r.action.error).toContain('40002');
     expect(mock.writes).toHaveLength(1);
   });
+
+  it('TikTok không trả lời (quá giờ) → không báo lỗi ngay, đọc trạng thái video (TikTok có thể đã gỡ) — 28/11', async () => {
+    const { TikTokTimeoutError } = await import('../server/tiktok/mcpClient');
+    mock.writeError = new TikTokTimeoutError(90);
+    const r = await ex.executeProposal(proposal('remove_creative').id);
+    expect(r.action.status).toBe('running');
+    expect(r.action.note).toMatch(/chưa trả lời/);
+    expect(mock.writes).toHaveLength(1);
+    // Thực ra TikTok đã gỡ → lần đọc trạng thái chuyển Thành công
+    mock.videoStatus['p1/v1'] = 'EXCLUDED';
+    expect((await ex.verifyAction(r.action.id)).action.status).toBe('success');
+  });
+
+  it('lệnh ngân sách quá giờ → Lỗi kèm nhắc kiểm tra Ads Manager (có thể TikTok đã nhận)', async () => {
+    const { TikTokTimeoutError } = await import('../server/tiktok/mcpClient');
+    mock.writeError = new TikTokTimeoutError(90);
+    const r = await ex.executeProposal(proposal('update_budget', { budgetChangePct: 10 }).id);
+    expect(r.action.status).toBe('failed');
+    expect(r.action.error).toMatch(/Ads Manager/);
+  });
 });
 
 describe('Tăng cường (campaign_gmv_max_session_create)', () => {
@@ -563,6 +584,11 @@ describe('BOT chạy (runAutoProposals — quy tắc chế độ "BOT chạy")',
     const x = mock.runtime.proposals.find((y) => y.id === p.id)!;
     expect(x.status).toBe('pending');
     expect(x.note).toMatch(/^BOT chưa chạy được: .*thao tác hôm nay.* — chờ Sếp duyệt$/);
+    // Sang ngày mới (giới hạn tính lại) → lượt quét đưa đề xuất cũ vào lại → BOT chạy được (lỗi hosting 27/11)
+    vi.setSystemTime(new Date(NOW.getTime() + 13 * 3_600_000)); // 01:00 giờ VN hôm sau, đề xuất còn hạn
+    expect(await ex.runAutoProposals([p.id])).toEqual({ ran: 1, failed: 0 });
+    expect(mock.writes).toHaveLength(2);
+    expect(mock.runtime.proposals.find((y) => y.id === p.id)!.status).toBe('approved');
   });
 
   it('quy tắc đã đổi về Cần duyệt / BOT tạm dừng → không tự chạy', async () => {

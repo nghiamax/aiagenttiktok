@@ -42,6 +42,21 @@ interface JsonRpcMessage {
   error?: unknown;
 }
 
+/**
+ * Thời gian chờ tối đa 1 lần gọi TikTok (gồm cả đọc hết nội dung trả về).
+ * Lỗi 28/11 (localhost): không có giới hạn → lời gọi treo giữ chỗ (MAX_CONCURRENT) mãi, mọi việc sau
+ * (tải trang, Quét ngay, quét theo giờ, kiểm tra video) xếp hàng chờ vô hạn, không lỗi, không nhật ký.
+ * Ghi được (test đặt ngắn lại).
+ */
+export const mcpTiming = { timeoutMs: 90_000 };
+
+export class TikTokTimeoutError extends TikTokApiError {
+  constructor(seconds: number) {
+    super(`TikTok không phản hồi sau ${seconds} giây — sẽ thử lại ở lượt sau`);
+    this.name = 'TikTokTimeoutError';
+  }
+}
+
 /** MCP TikTok giới hạn tần suất ngắn hạn khi nhiều báo cáo nặng chạy cùng lúc */
 const MAX_CONCURRENT = 2;
 let active = 0;
@@ -73,13 +88,27 @@ class McpSession {
     };
     if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
     const id = notification ? undefined : ++this.rpcId;
-    const res = await fetch(config.tiktok.mcpUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ jsonrpc: '2.0', method, params, ...(id !== undefined && { id }) }),
-    });
-    this.sessionId = res.headers.get('mcp-session-id') ?? this.sessionId;
-    const text = await res.text();
+    const timeoutMs = mcpTiming.timeoutMs;
+    let res: Response;
+    let text: string;
+    try {
+      // signal huỷ cả lúc chờ phản hồi lẫn lúc đọc nội dung (luồng event-stream không đóng)
+      res = await fetch(config.tiktok.mcpUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ jsonrpc: '2.0', method, params, ...(id !== undefined && { id }) }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      this.sessionId = res.headers.get('mcp-session-id') ?? this.sessionId;
+      text = await res.text();
+    } catch (e) {
+      if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+        const tool = (params as { name?: string } | null)?.name ?? method;
+        console.error(`[tiktok] ${tool}: TikTok không phản hồi sau ${Math.round(timeoutMs / 1000)} giây — đã huỷ lời gọi`);
+        throw new TikTokTimeoutError(Math.round(timeoutMs / 1000));
+      }
+      throw e;
+    }
 
     if (res.status === 401 && !retried) {
       await getAccessToken(true); // gia hạn rồi thử lại 1 lần

@@ -72,7 +72,9 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
   // Người bấm: dòng có tên (sau khi có đăng nhập) → "Duyệt bởi …"; dòng cũ giữ nhãn cũ
   const actorText = item.undoOf
     ? `Hoàn tác${item.by ? ` · ${item.by.name}` : ''}`
-    : item.by
+    : item.actor === 'agent'
+      ? actor.label // BOT tự chạy (by = BOT AI) — trước đây rơi vào "Thủ công · BOT AI"
+      : item.by
       ? item.actor === 'approved'
         ? `Duyệt bởi ${item.by.name}`
         : `Thủ công · ${item.by.name}`

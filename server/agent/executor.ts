@@ -24,7 +24,7 @@ import type {
 import { getSnapshot, todayVN } from '../ads/cache.js';
 import { videoStatus, type ReportRow } from '../ads/mapping.js';
 import { requireAccount } from '../tiktok/link.js';
-import { callReadTool } from '../tiktok/mcpClient.js';
+import { callReadTool, TikTokTimeoutError } from '../tiktok/mcpClient.js';
 import { callWriteTool, type WriteTool } from '../tiktok/writeTools.js';
 import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
 import { loadConfirmSnaps, recheckProposal, withRecentActions } from './engine.js';
@@ -370,6 +370,24 @@ async function send(plan: Plan, actionId: string, campaignId: string): Promise<E
   try {
     await callWriteTool(plan.tool, plan.params);
   } catch (e) {
+    // Quá giờ chờ: TikTok có thể đã nhận lệnh. Gỡ / thêm video → đọc trạng thái như khi gửi thành công (không gửi lại)
+    if (e instanceof TikTokTimeoutError && plan.verify === 'creative') {
+      const rt = patch((a) => {
+        a.status = 'running';
+        a.verifyAfter = nextVerifyAt(a);
+        a.note = 'TikTok chưa trả lời lệnh — đang kiểm tra trạng thái video';
+      });
+      if (executorTiming.followUp) void followUpCreative(actionId);
+      return { action: rt.actions.find((x) => x.id === actionId)!, message: `${plan.summary} — TikTok chưa trả lời, đang kiểm tra trạng thái video` };
+    }
+    if (e instanceof TikTokTimeoutError) {
+      const rt = patch((a) => {
+        a.status = 'failed';
+        a.error = `${errText(e)} · TikTok có thể vẫn đã nhận lệnh — kiểm tra trên Ads Manager trước khi làm lại`;
+        a.note = undefined;
+      });
+      return { action: rt.actions.find((x) => x.id === actionId)!, message: `TikTok không phản hồi: ${errText(e)}` };
+    }
     const rt = patch((a) => {
       a.status = 'failed';
       a.error = errText(e);

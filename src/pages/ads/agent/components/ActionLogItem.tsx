@@ -28,12 +28,14 @@ interface ActionLogItemProps {
   onRetry: (actionId: string) => Promise<ExecOutcome>;
   /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
   onVerify: (actionId: string) => Promise<ExecOutcome>;
+  /** Mở từ link "Xem ở Nhật ký" → làm nổi dòng này */
+  highlight?: boolean;
 }
 
 const DELAY_HINT = 'Đơn TikTok thường về trễ vài giờ nên số ngay sau thao tác có thể chưa đủ.';
 
 /** Một dòng nhật ký: thời gian · hành động · đối tượng · lúc quyết định → sau thao tác · trạng thái */
-export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onRetry, onVerify }: ActionLogItemProps) {
+export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onRetry, onVerify, highlight }: ActionLogItemProps) {
   const { snapshot } = useAdsData();
   const [confirming, setConfirming] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -81,7 +83,10 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
       : actor.label;
 
   return (
-    <li className={`${ITEM_GRID} transition-colors hover:bg-canvas/50`}>
+    <li
+      id={`log-${item.id}`}
+      className={`${ITEM_GRID} scroll-mt-20 transition-colors duration-700 ${highlight ? 'bg-primary-soft ring-2 ring-inset ring-primary' : 'hover:bg-canvas/50'}`}
+    >
       <div>
         <p className="text-sm font-semibold tabular-nums">{formatDateTime(item.executedAt)}</p>
         <p className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${actor.className}`}>

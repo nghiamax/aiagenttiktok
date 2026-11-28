@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bot, ListFilter, Tag } from 'lucide-react';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
@@ -44,6 +45,44 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
   const [type, setType] = useState<string | null>(null);
   const [ruleId, setRuleId] = useState<string | null>(null);
   const [actor, setActor] = useState<string | null>(null);
+  // Link "Xem ở Nhật ký" (Theo dõi video): ?log=<id> → bỏ lọc nếu đang giấu dòng đó, cuộn tới và làm nổi vài giây
+  const [params, setParams] = useSearchParams();
+  const focusId = params.get('log');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const focusItem = focusId ? actions.find((a) => a.id === focusId) : undefined;
+  useEffect(() => {
+    if (!focusId) return;
+    if (!focusItem) {
+      // Nhật ký chưa tải xong → chờ; đã có dữ liệu mà không có dòng đó → bỏ tham số
+      if (actions.length > 0) {
+        setParams((p) => {
+          p.delete('log');
+          return p;
+        }, { replace: true });
+      }
+      return;
+    }
+    setPeriod('all');
+    setType(null);
+    setRuleId(null);
+    setActor(null);
+    setHighlightId(focusId);
+    setParams((p) => {
+      p.delete('log');
+      return p;
+    }, { replace: true });
+  }, [focusId, focusItem, actions.length, setParams]);
+  useEffect(() => {
+    if (!highlightId) return;
+    const t1 = window.setTimeout(() => {
+      document.getElementById(`log-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+    const t2 = window.setTimeout(() => setHighlightId(null), 3500);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [highlightId]);
 
   const ruleName = (id: string | null) => (id ? (rules.find((r) => r.id === id)?.name ?? id) : null);
   const list = actions
@@ -107,6 +146,7 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
               onUndo={onUndo}
               onRetry={onRetry}
               onVerify={onVerify}
+              highlight={a.id === highlightId}
             />
           ))}
         </ul>

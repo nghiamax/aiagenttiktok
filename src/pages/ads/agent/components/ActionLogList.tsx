@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bot, ListFilter, Tag } from 'lucide-react';
+import { Bot, ListFilter, Tag, Trash2 } from 'lucide-react';
+import { useAuth } from '../../../../auth/AuthProvider';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SegmentedControl from '../../../../components/ui/SegmentedControl';
 import EmptyTableState from '../../components/EmptyTableState';
@@ -19,6 +20,8 @@ interface ActionLogListProps {
   onUndo: (actionId: string) => Promise<ExecOutcome>;
   onRetry: (actionId: string) => Promise<ExecOutcome>;
   onVerify: (actionId: string) => Promise<ExecOutcome>;
+  /** Xoá dòng nhật ký (chỉ ẩn) */
+  onHide: (ids: string[]) => Promise<ExecOutcome>;
 }
 
 type Period = 'today' | '7d' | 'all';
@@ -39,7 +42,7 @@ function inPeriod(iso: string, period: Period): boolean {
 }
 
 /** Tab Nhật ký: mọi hành động đã thực hiện, mới nhất trên cùng */
-export default function ActionLogList({ actions, proposals, rules, evaluateAfterHours, onUndo, onRetry, onVerify }: ActionLogListProps) {
+export default function ActionLogList({ actions, proposals, rules, evaluateAfterHours, onUndo, onRetry, onVerify, onHide }: ActionLogListProps) {
   const proposedAt = new Map(proposals.map((p) => [p.id, p.createdAt]));
   const [period, setPeriod] = useState<Period>('7d');
   const [type, setType] = useState<string | null>(null);
@@ -84,10 +87,17 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
     };
   }, [highlightId]);
 
+  const canDelete = useAuth().can('configure');
+  const [hideMsg, setHideMsg] = useState<ExecOutcome | null>(null);
+  const hide = async (ids: string[], question: string) => {
+    if (ids.length === 0 || !window.confirm(question)) return;
+    setHideMsg(await onHide(ids));
+  };
   const ruleName = (id: string | null) => (id ? (rules.find((r) => r.id === id)?.name ?? id) : null);
   const list = actions
     .filter(
       (a) =>
+        !a.hidden &&
         inPeriod(a.executedAt, period) &&
         (!type || a.actionType === type) &&
         (!ruleId || a.ruleId === ruleId) &&
@@ -130,7 +140,21 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
             onChange={setActor}
             searchPlaceholder="Gõ để lọc…"
           />
+          {canDelete && list.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const ids = list.filter((a) => a.status !== 'running').map((a) => a.id);
+                void hide(ids, `Xoá ${ids.length} dòng nhật ký đang hiện (theo bộ lọc)?\n\nChỉ ẩn khỏi Nhật ký / Hiệu quả / Theo dõi video — BOT vẫn dùng để tính giới hạn an toàn và thời gian chờ. Dòng đang chờ TikTok xác nhận không bị xoá.`);
+              }}
+              className="flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-sm font-medium text-muted transition hover:border-danger hover:bg-rose-50 hover:text-danger sm:ml-auto"
+            >
+              <Trash2 className="size-4" />
+              Xoá {list.length} dòng đang hiện
+            </button>
+          )}
         </div>
+        {hideMsg && <p className={`text-sm ${hideMsg.ok ? 'text-accent-green' : 'text-danger'}`}>{hideMsg.message}</p>}
       </div>
 
       {list.length > 0 ? (
@@ -147,6 +171,11 @@ export default function ActionLogList({ actions, proposals, rules, evaluateAfter
               onRetry={onRetry}
               onVerify={onVerify}
               highlight={a.id === highlightId}
+              onDelete={
+                canDelete && a.status !== 'running'
+                  ? () => void hide([a.id], 'Xoá dòng nhật ký này?\n\nChỉ ẩn khỏi Nhật ký / Hiệu quả / Theo dõi video — BOT vẫn dùng để tính giới hạn an toàn và thời gian chờ.')
+                  : undefined
+              }
             />
           ))}
         </ul>

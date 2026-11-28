@@ -188,6 +188,11 @@ export interface AgentActionLog {
   undoOf?: string;
   /** Dòng này là lần Gửi lại của dòng gỡ / thêm lại bị lỗi (ID dòng lỗi đầu tiên) */
   retryOf?: string;
+  /**
+   * Sếp xoá khỏi Nhật ký (Sếp yêu cầu 28/11) — chỉ ẩn: không hiện ở Nhật ký / Hiệu quả / Theo dõi video,
+   * vẫn giữ để tính giới hạn an toàn, thời gian chờ, Hoàn tác, trạng thái video.
+   */
+  hidden?: { at: string; by?: ActorRef };
   /** Gỡ / thêm video đã báo lỗi sau 2 phút: vẫn đọc trạng thái ở nền tới lúc này (TikTok ghi nhận muộn → Thành công) */
   lateCheckUntil?: string;
   /** Gỡ / thêm video: thời điểm kiểm tra lại trạng thái trên TikTok (ISO) */

@@ -94,7 +94,8 @@ export default function WatchCard() {
       if (seen.has(k)) continue;
       seen.add(k);
       // Đã xoá khỏi danh sách: chỉ ẩn đúng thao tác đó — video có thao tác mới thì hiện lại
-      if (!hidden.has(a.id)) out.push(a);
+      // Xoá khỏi Nhật ký cũng ẩn ở đây
+      if (!hidden.has(a.id) && !a.hidden) out.push(a);
     }
     return out;
   }, [state.actions, hidden]);

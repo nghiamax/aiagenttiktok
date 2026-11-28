@@ -72,6 +72,8 @@ interface AgentStoreValue {
   retry: (actionId: string) => Promise<ExecOutcome>;
   /** Kiểm tra ngay kết quả gỡ / thêm video (chỉ đọc) */
   verify: (actionId: string) => Promise<ExecOutcome>;
+  /** Xoá dòng Nhật ký (chỉ ẩn, đã qua hộp xác nhận) */
+  hideActions: (ids: string[]) => Promise<ExecOutcome>;
   /** Thao tác thủ công từ bảng Video (chạy thật — chỉ gọi sau hộp xác nhận) */
   runManual: (actionType: AgentActionType, target: AgentTarget, params?: AgentRuleParams) => Promise<ExecOutcome>;
 }
@@ -225,6 +227,19 @@ export function AgentStoreProvider({ children }: { children: ReactNode }) {
       undo: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/undo`),
       retry: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/retry`),
       verify: (actionId) => execute(`/agent/actions/${encodeURIComponent(actionId)}/verify`),
+      hideActions: async (ids) => {
+        try {
+          const res = await api<ServerState & { hidden: number; skippedRunning: number }>('/agent/actions/hide', {
+            method: 'POST',
+            body: { ids, confirm: true },
+          });
+          accept(res);
+          const skip = res.skippedRunning ? ` · bỏ qua ${res.skippedRunning} dòng đang chờ TikTok` : '';
+          return { ok: true, message: `Đã xoá ${res.hidden} dòng${skip}` };
+        } catch (e) {
+          return { ok: false, message: e instanceof Error ? e.message : String(e) };
+        }
+      },
       runManual: (actionType, target, params) => execute('/agent/actions/manual', { actionType, target, params }),
     }),
     [state, running, connected, error, schedule, saveConfig, accept, fail, execute],

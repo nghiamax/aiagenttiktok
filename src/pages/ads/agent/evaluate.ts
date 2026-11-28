@@ -63,7 +63,8 @@ function windowDays(w: MetricWindow): number {
 }
 
 export function evaluateAction(a: AgentActionLog, evaluateAfterHours: number, now = Date.now()): ActionEvaluation {
-  if (a.actionType === 'remind' || a.status !== 'success') return { verdict: 'excluded', ...EMPTY };
+  // Đã xoá khỏi Nhật ký → không tính vào Hiệu quả
+  if (a.hidden || a.actionType === 'remind' || a.status !== 'success') return { verdict: 'excluded', ...EMPTY };
   // Video thay đổi trước khi có ngày nào để đo → không chấm
   if (a.measureStop && !a.after) return { verdict: 'excluded', ...EMPTY };
   if (!a.after || now - new Date(a.executedAt).getTime() < evaluateAfterHours * HOUR) {

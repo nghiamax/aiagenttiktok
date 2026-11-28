@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCw, RotateCw, Undo2 } from 'lucide-react';
+import { RefreshCw, RotateCw, Trash2, Undo2 } from 'lucide-react';
 import { CREATIVE_MAX_RETRIES } from '../../../../../shared/agentPolicy';
 import { formatDateTime } from '../../../../lib/format';
 import { useAdsData } from '../../data';
@@ -30,12 +30,14 @@ interface ActionLogItemProps {
   onVerify: (actionId: string) => Promise<ExecOutcome>;
   /** Mở từ link "Xem ở Nhật ký" → làm nổi dòng này */
   highlight?: boolean;
+  /** Xoá dòng (chỉ ẩn) — không có = không được xoá */
+  onDelete?: () => void;
 }
 
 const DELAY_HINT = 'Đơn TikTok thường về trễ vài giờ nên số ngay sau thao tác có thể chưa đủ.';
 
 /** Một dòng nhật ký: thời gian · hành động · đối tượng · lúc quyết định → sau thao tác · trạng thái */
-export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onRetry, onVerify, highlight }: ActionLogItemProps) {
+export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours, proposedAt, onUndo, onRetry, onVerify, highlight, onDelete }: ActionLogItemProps) {
   const { snapshot } = useAdsData();
   const [confirming, setConfirming] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -167,6 +169,18 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
           <p className="text-xs text-muted lg:text-right">Không hoàn tác được — tự kết thúc khi hết số ngày</p>
         )}
         {result && <p className={`text-xs lg:text-right ${result.ok ? 'text-accent-green' : 'text-danger'}`}>{result.message}</p>}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Xoá dòng nhật ký"
+            title="Xoá khỏi Nhật ký"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-rose-50 hover:text-danger"
+          >
+            <Trash2 className="size-3.5" />
+            Xoá
+          </button>
+        )}
       </div>
 
       {retrying && (

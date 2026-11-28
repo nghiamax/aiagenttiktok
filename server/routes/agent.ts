@@ -3,6 +3,7 @@ import type { AdsSettings } from '../../shared/settings.js';
 import type { AgentConfig, AgentGuardrails, AgentRule } from '../../shared/agentTypes.js';
 import { executeManual, executeProposal, PrecheckError, retryAction, undoAction, verifyAction, type ExecResult, type ManualInput } from '../agent/executor.js';
 import { actorOf, requirePermission } from '../auth/middleware.js';
+import { hideActionLogs } from '../agent/hideActions.js';
 import { BOOT_VERSION } from '../buildInfo.js';
 import { AGENT_INTERVAL_MINUTES, getNextRunAt, isAgentRunning, runAgentOnce } from '../agent/scheduler.js';
 import {
@@ -140,6 +141,22 @@ agentRouter.post('/proposals/:id/reject', requirePermission('execute'), (req, re
   if (!found) return res.status(404).json({ code: 'NOT_FOUND', error: 'Không tìm thấy đề xuất' });
   if (!wasPending) return res.status(409).json({ code: 'NOT_PENDING', error: 'Đề xuất không còn chờ duyệt' });
   res.json(stateResponse());
+});
+
+/**
+ * Xoá dòng Nhật ký (chỉ ẩn — vẫn giữ cho giới hạn an toàn / thời gian chờ / Hoàn tác), bắt buộc { confirm: true, ids: string[] }.
+ * Không xoá dòng đang chờ TikTok xác nhận.
+ */
+agentRouter.post('/actions/hide', requirePermission('configure'), (req, res) => {
+  const body = req.body as { confirm?: unknown; ids?: unknown } | undefined;
+  if (body?.confirm !== true) return res.status(400).json({ code: 'CONFIRM_REQUIRED', error: 'Cần xác nhận trước khi xoá nhật ký' });
+  const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === 'string') : [];
+  if (ids.length === 0 || ids.length > 500) return bad(res, 'Danh sách dòng cần xoá không hợp lệ');
+  const { hidden, skippedRunning: running } = hideActionLogs(ids, actorOf(req));
+  if (hidden === 0 && running > 0) {
+    return res.status(409).json({ code: 'ACTION_RUNNING', error: 'Thao tác đang chờ TikTok xác nhận — chưa xoá được' });
+  }
+  res.json({ ...stateResponse(), hidden, skippedRunning: running });
 });
 
 /** Hoàn tác thao tác (cũng cần { confirm: true }) */

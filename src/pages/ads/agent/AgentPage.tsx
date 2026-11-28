@@ -73,7 +73,7 @@ export default function AgentPage() {
   const { settings, save: saveSettings, reset: resetBreakEven } = useAdsSettings();
   const [breakEvenOpen, setBreakEvenOpen] = useState(false);
   const closeBreakEven = useCallback(() => setBreakEvenOpen(false), []);
-  const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide, undo, retry, verify } =
+  const { state: agentState, running, connected, error: agentError, schedule, runNow, setPaused, decide, undo, retry, verify, hideActions } =
     useAgentStore();
   const pending = pendingProposals(agentState.proposals);
   // Dấu hiệu (7 ngày thuộc nhóm, 14 ngày chưa) — chỉ báo, không có nút Duyệt
@@ -112,7 +112,7 @@ export default function AgentPage() {
               counts={{
                 suggest: suggestCount ? String(suggestCount) : '',
                 pending: `${pending.length}${signals.length ? ` · ${signals.length} dấu hiệu` : ''}`,
-                log: String(agentState.actions.length),
+                log: String(agentState.actions.filter((a) => !a.hidden).length),
                 rules: `${active}/${config.rules.length}`,
                 groups: '',
                 impact: '',
@@ -144,6 +144,7 @@ export default function AgentPage() {
                 onUndo={undo}
                 onRetry={retry}
                 onVerify={verify}
+                onHide={hideActions}
               />
             )}
             {view === 'rules' && (

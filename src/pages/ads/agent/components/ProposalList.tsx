@@ -176,7 +176,7 @@ export default function ProposalList({ proposals, rules, signals, onDecide, onOp
           title="Không có đề xuất nào đang chờ"
           description={
             signals.length > 0
-              ? 'Chưa có việc nào đủ chắc chắn để duyệt. Các dấu hiệu bên dưới Agent đang theo dõi — đủ 14 ngày cùng nhóm sẽ đưa lên đây.'
+              ? 'Chưa có việc nào đủ chắc chắn để duyệt. Các dấu hiệu bên dưới BOT đang theo dõi — đủ 14 ngày cùng nhóm sẽ đưa lên đây.'
               : 'Khi quy tắc ở chế độ Cần duyệt, các việc BOT muốn làm sẽ hiện ở đây. Sếp duyệt + xác nhận thì BOT chạy thật trên TikTok, kết quả xem ở Nhật ký.'
           }
         />

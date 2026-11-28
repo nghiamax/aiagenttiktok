@@ -56,7 +56,7 @@ interface ActionInboxProps {
 const EMPTY: ActionSummary = { count: 0, rows: 0, cost: 0, revenue: 0 };
 
 /** Video trước vì là nơi có nhiều việc nhất; sau đó từ lớn tới nhỏ */
-const LEVEL_TABS: GroupLevel[] = ['video', 'product', 'campaign'];
+const LEVEL_TABS: GroupLevel[] = ['campaign', 'video', 'product'];
 const LEVEL_NAME: Record<GroupLevel, string> = { video: 'Video', product: 'Sản phẩm', campaign: 'Chiến dịch' };
 
 const total = (s: Record<string, ActionSummary>) => Object.values(s).reduce((acc, x) => acc + x.count, 0);
@@ -64,7 +64,7 @@ const total = (s: Record<string, ActionSummary>) => Object.values(s).reduce((acc
 /** "Agent đang theo dõi": tab Video | Sản phẩm | Chiến dịch, mỗi nhóm là một ô + quy tắc Agent xử lý nhóm đó */
 export default function ActionInbox({ summary, missingBreakEven, onOpenAction, onOpenSettings, agent }: ActionInboxProps) {
   const { settings } = useAdsSettings();
-  const [level, setLevel] = useState<GroupLevel>('video');
+  const [level, setLevel] = useState<GroupLevel>('campaign');
   const groups = groupsOf(settings, level);
   const levelSummary = summary[level];
   const unit = LEVEL_UNIT[level];
@@ -82,10 +82,10 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
       <div className="flex flex-col gap-3 border-b border-line px-5 py-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-3">
           <div>
-            <h2 className="text-lg font-semibold">Agent đang theo dõi</h2>
+            <h2 className="text-lg font-semibold">BOT đang theo dõi</h2>
             <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted">
               <Bot className="size-4" />
-              {agent.paused ? 'Agent tạm dừng' : 'Agent'} · Lần chạy gần nhất:{' '}
+              {agent.paused ? 'BOT tạm dừng' : 'BOT'} · Lần chạy gần nhất:{' '}
               {agent.lastRunAt ? formatDateTime(agent.lastRunAt) : 'chưa chạy'} ·{' '}
               <span className={agent.activeRules > 0 ? 'font-medium text-accent-violet' : ''}>
                 {formatNumber(agent.activeRules)}/{formatNumber(agent.totalRules)} quy tắc đang bật
@@ -201,7 +201,7 @@ export default function ActionInbox({ summary, missingBreakEven, onOpenAction, o
                           onOpenAction(level, group.id, 'signals');
                         }}
                         className="block text-xs text-muted underline decoration-dotted underline-offset-2 hover:text-primary"
-                        title="7 ngày gần nhất thuộc nhóm này, 14 ngày chưa — Agent chờ thêm, chưa đề xuất. Bấm để xem"
+                        title="7 ngày gần nhất thuộc nhóm này, 14 ngày chưa — BOT chờ thêm, chưa đề xuất. Bấm để xem"
                       >
                         {formatNumber(s.unconfirmed)} dấu hiệu
                       </span>

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdsSnapshot } from '../shared/adsSnapshot';
 import type { AgentActionLog, AgentRuntime } from '../shared/agentTypes';
 import { evaluateAction, firstAfterDate, firstAfterReadyAt, summarizeAction } from '../src/pages/ads/agent/evaluate';
+import { isWrongCut } from '../shared/actionVerdict';
 import { campaign, product, snapshot, video } from './fixtures';
 
 /* "Sau thao tác" theo NGÀY LỊCH (snapshot 1 ngày, CHỈ ĐỌC) + câu kết luận */
@@ -114,7 +115,16 @@ describe('fillAfterMetrics', () => {
     ]);
     expect(after).toMatchObject({ cost: 180, revenue: 800, orders: 2, breakEven: 4.5, from: '2026-11-20T00:00:00+07:00' });
     expect(after.to).toBe(new Date(NOW).toISOString());
-    expect(mock.calls.sort()).toEqual(['2026-11-20_2026-11-20', '2026-11-21_2026-11-21']);
+    expect(mock.calls.filter((c) => !c.startsWith('2026-11-12')).sort()).toEqual(['2026-11-20_2026-11-20', '2026-11-21_2026-11-21']);
+  });
+
+  it('gỡ video: ghi số đủ từ ngày đầu "Lúc quyết định" tới hết ngày gỡ (beforeFull); tăng cường thì không', async () => {
+    mock.byDate['2026-11-12'] = day([video({ id: 'v1', campaignId: 'c1', productId: 'p1', cost: 800, revenue: 5000, orders: 3 })]);
+    mock.runtime.actions = [action(), action({ id: 'b', actionType: 'boost_creative' })];
+    await m.fillAfterMetrics(NOW);
+    expect(mock.runtime.actions[0].beforeFull).toMatchObject({ from: '2026-11-12', to: '2026-11-19', cost: 800, revenue: 5000, orders: 3 });
+    expect(mock.runtime.actions[1].beforeFull).toBeUndefined();
+    expect(mock.calls.filter((c) => c === '2026-11-12_2026-11-19')).toHaveLength(1);
   });
 
   it('bỏ dữ liệu khối giờ cũ (có from) và đo lại theo ngày', async () => {
@@ -240,14 +250,14 @@ describe('summarizeAction (câu kết luận)', () => {
     expect(ev.profitEffect).toBeNull();
     const r = line(a);
     expect(r?.tone).toBe('muted');
-    expect(r?.text).toMatch(/^≈ Sát hoà vốn — 1 ngày sau: 1 đơn về muộn \(DT 439k, chi 0đ\) → tính cả, ROI lúc gỡ 3,45 ≈ hoà vốn 3,5/);
+    expect(r?.text).toMatch(/^≈ Sát hoà vốn — 1 đơn về muộn \(DT 439k, chi 0đ\) · tạm tính, chưa đủ số ngày gỡ → ROI lúc gỡ 3,45 ≈ hoà vốn 3,5/);
   });
 
   it('đơn về muộn ít, tính cả ROI lúc gỡ vẫn < 0,8 × hoà vốn → Đúng', () => {
     // (878k + 100k) ÷ 382k = 2,56 < 2,8
     const a = withAfter(action({ before: REAL }), [{ cost: 0, revenue: 100_000, orders: 1 }]);
     expect(evaluateAction(a, 24, T).verdict).toBe('good');
-    expect(line(a)?.text).toMatch(/^✓ Đúng — 1 ngày sau: 1 đơn về muộn \(DT 100k, chi 0đ\), tính cả vẫn ROI lúc gỡ 2,56 < hoà vốn 3,5/);
+    expect(line(a)?.text).toMatch(/^✓ Đúng — 1 đơn về muộn \(DT 100k, chi 0đ\) · tạm tính, chưa đủ số ngày gỡ → vẫn ROI lúc gỡ 2,56 < hoà vốn 3,5/);
   });
 
   it('đơn về muộn đẩy ROI lúc gỡ ≥ hoà vốn → Gỡ sai, gợi ý Thêm lại', () => {
@@ -257,7 +267,41 @@ describe('summarizeAction (câu kết luận)', () => {
     expect(ev.profitEffect!).toBeLessThan(0);
     const r = line(a);
     expect(r?.tone).toBe('bad');
-    expect(r?.text).toMatch(/^✗ Gỡ sai — 1 ngày sau: 3 đơn về muộn .*ROI lúc gỡ 4,77 ≥ hoà vốn 4,5.*cân nhắc Thêm lại$/);
+    expect(r?.text).toMatch(/^✗ Gỡ sai — 3 đơn về muộn .*ROI lúc gỡ 4,77 ≥ hoà vốn 4,5.*cân nhắc Thêm lại$/);
+  });
+
+  // Ngày gỡ bị bỏ sót (Sếp phát hiện 28/11): video 7674145968920562965 gỡ 26/11 — ngày 26/11 có 2 đơn 878k,
+  // không thuộc "Lúc quyết định" (19–25/11) lẫn "Sau thao tác" (từ 27/11). beforeFull = 19/11 → hết 26/11.
+  it('ca thật: tính đủ ngày gỡ 26/11 + 1 đơn về sau → ROI 5,03 ≥ hoà vốn 3,5 → Gỡ sai', () => {
+    const at = '2026-11-26T10:00:00+07:00';
+    const now = Date.parse('2026-11-28T12:00:00+07:00');
+    const a: AgentActionLog = {
+      ...action({ before: REAL, executedAt: at }),
+      beforeFull: { from: '2026-11-19', to: '2026-11-26', cost: 436_000, revenue: 1_756_000, orders: 4, at: '2026-11-28T00:00:00Z' },
+      after: m.windowOfDays([{ date: '2026-11-27', cost: 0, revenue: 439_000, orders: 1, roi: null }], 3.5),
+    };
+    const ev = evaluateAction(a, 24, now);
+    expect(ev.verdict).toBe('bad');
+    const r = summarizeAction(a, ev, now);
+    expect(r?.tone).toBe('bad');
+    expect(r?.text).toMatch(
+      /^✗ Gỡ sai — tính đủ 19\/11–27\/11 \(gồm ngày gỡ 26\/11: DT 878k · 2 đơn, 1 đơn về sau gỡ 439k\): chi 436k · DT 2,2 tr · 5 đơn → ROI lúc gỡ 5,03 ≥ hoà vốn 3,5/,
+    );
+    expect(isWrongCut(a, 24, now)).toBe(true);
+    // Chưa có số đủ ngày gỡ → tạm tính, không đủ cơ sở để BOT thêm lại
+    expect(isWrongCut({ ...a, beforeFull: undefined }, 24, now)).toBe(false);
+  });
+
+  it('beforeFullRange: chỉ gỡ / tắt, sau khi ngày gỡ hết; chốt sau 48h', () => {
+    const a = action({ executedAt: '2026-11-26T10:00:00+07:00', before: REAL });
+    expect(m.beforeFullRange(a, Date.parse('2026-11-26T20:00:00+07:00'))).toBeNull();
+    expect(m.beforeFullRange(a, Date.parse('2026-11-27T01:00:00+07:00'))).toEqual({ from: '2026-11-19', to: '2026-11-26' });
+    const got = { ...a, beforeFull: { from: '2026-11-19', to: '2026-11-26', cost: 1, revenue: 1, orders: 0, at: '2026-11-27T00:30:00+07:00' } };
+    // lấy rồi, chưa quá 1 giờ → không lấy lại; quá 1 giờ, chưa chốt → lấy lại; đã chốt → thôi
+    expect(m.beforeFullRange(got, Date.parse('2026-11-27T01:00:00+07:00'))).toBeNull();
+    expect(m.beforeFullRange(got, Date.parse('2026-11-27T05:00:00+07:00'))).not.toBeNull();
+    expect(m.beforeFullRange(got, Date.parse('2026-11-30T01:00:00+07:00'))).toBeNull();
+    expect(m.beforeFullRange({ ...a, actionType: 'boost_creative' }, Date.parse('2026-11-27T05:00:00+07:00'))).toBeNull();
   });
 
   it('gỡ không có đơn về muộn → Đúng, tác động = lỗ tránh được', () => {

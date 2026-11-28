@@ -86,6 +86,25 @@ const tracked = (a: AgentActionLog, now: number) =>
   a.actionType !== 'remind' &&
   now - Date.parse(a.executedAt) < TRACK_DAYS * DAY;
 
+/** Gỡ / tắt: lấy số đủ ngày gỡ (`beforeFull`) */
+const CUT_TYPES = new Set<AgentActionLog['actionType']>(['remove_creative', 'disable_product']);
+/** Chưa chốt (ngày gỡ chưa qua 48h) thì lấy lại tối đa mỗi giờ */
+const FULL_REFRESH_MS = HOUR;
+
+/**
+ * Cần lấy (lại) số đủ ngày gỡ không: gỡ / tắt, ngày gỡ đã hết; chưa có, hoặc ngày gỡ chưa chốt (48h — đơn về trễ) và lần lấy trước đã quá 1 giờ.
+ * Trả khoảng ngày cần lấy: ngày đầu "Lúc quyết định" → ngày gỡ.
+ */
+export function beforeFullRange(a: AgentActionLog, now: number): { from: string; to: string } | null {
+  if (!CUT_TYPES.has(a.actionType)) return null;
+  const day = vnDate(Date.parse(a.executedAt));
+  if (vnMidnight(day) + DAY > now) return null; // ngày gỡ chưa hết
+  const f = a.beforeFull;
+  if (f && (settled(day, now) || now - Date.parse(f.at) < FULL_REFRESH_MS)) return null;
+  const from = vnDate(Date.parse(a.before.from));
+  return { from: from < day ? from : day, to: day };
+}
+
 /** Dữ liệu cũ đo theo khối giờ (có `from`) → bỏ, đo lại theo ngày */
 const isDayEntry = (d: DayMetric) => !d.from;
 
@@ -188,6 +207,7 @@ export async function fillAfterMetrics(now = Date.now()): Promise<number> {
     const today = vnDate(now);
     const actions = getRuntime().actions;
     const results = new Map<string, DayMetric[]>();
+    const fulls = new Map<string, NonNullable<AgentActionLog['beforeFull']>>();
     const stops = new Map<string, MeasureStop>();
     for (const a of actions) {
       if (!tracked(a, now)) continue;
@@ -202,6 +222,16 @@ export async function fillAfterMetrics(now = Date.now()): Promise<number> {
         }
       }
       if (stop && stop.date !== a.measureStop?.date) stops.set(a.id, stop);
+      // Gỡ / tắt: số đủ tới hết ngày gỡ (đơn cùng ngày gỡ không nằm ở "Lúc quyết định" lẫn "Sau thao tác")
+      const fr = beforeFullRange(a, now);
+      if (fr) {
+        try {
+          const m = dayMetric((await getSnapshot(fr, false)).snapshot, a.target, fr.to);
+          fulls.set(a.id, { from: fr.from, to: fr.to, cost: m.cost, revenue: m.revenue, orders: m.orders, at: new Date(now).toISOString() });
+        } catch (e) {
+          console.error(`[agent] chưa lấy được số đủ ngày gỡ ${a.id}:`, e instanceof Error ? e.message : e);
+        }
+      }
       const have = new Set((a.after?.days ?? []).filter(isDayEntry).map((d) => d.date));
       const need = afterDates(a.executedAt, now).filter((d) => (!stop || d < stop.date) && (!have.has(d) || !settled(d, now)));
       if (need.length === 0) continue;
@@ -217,10 +247,12 @@ export async function fillAfterMetrics(now = Date.now()): Promise<number> {
       }
       if (got.length) results.set(a.id, got);
     }
-    if (results.size === 0 && stops.size === 0) return 0;
+    if (results.size === 0 && stops.size === 0 && fulls.size === 0) return 0;
 
     updateRuntime((rt) => {
       for (const a of rt.actions) {
+        const full = fulls.get(a.id);
+        if (full) a.beforeFull = full;
         const got = results.get(a.id) ?? [];
         const stop = stops.get(a.id);
         if (!got.length && !stop) continue;
@@ -234,7 +266,7 @@ export async function fillAfterMetrics(now = Date.now()): Promise<number> {
         a.after = days.length ? windowOfDays(days, a.before.breakEven, now) : null;
       }
     });
-    return new Set([...results.keys(), ...stops.keys()]).size;
+    return new Set([...results.keys(), ...stops.keys(), ...fulls.keys()]).size;
   } finally {
     running = false;
   }

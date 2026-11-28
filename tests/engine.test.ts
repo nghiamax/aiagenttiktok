@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdsSnapshot } from '../shared/adsSnapshot';
-import type { AgentConfig, AgentRuntime } from '../shared/agentTypes';
+import type { AgentActionLog, AgentConfig, AgentRuntime } from '../shared/agentTypes';
 import { campaign, GUARDRAILS, product, rule, settingsWith, snapshot, video } from './fixtures';
 
 /* Bộ máy Agent chạy trên dữ liệu giả: không gọi TikTok, không đọc / ghi file thật */
@@ -400,5 +400,117 @@ describe('BOT chỉnh ROI & ngân sách (Sếp chốt 26/11)', () => {
     // Sếp bỏ qua → lượt sau không đề xuất lại trong 72h
     mock.runtime.proposals[0].status = 'rejected';
     expect((await runAgent()).proposals).toBe(0);
+  });
+});
+
+describe('Gỡ sai → Thêm lại video theo chế độ quy tắc (Sếp chốt 28/11)', () => {
+  /** Lần gỡ video v9 ngày 15/11: tính đủ ngày gỡ + đơn về sau → ROI 5,03 ≥ hoà vốn 3,5 = Gỡ sai */
+  function wrongCut(over: Partial<AgentActionLog> = {}): AgentActionLog {
+    return {
+      id: 'cut-v9',
+      executedAt: '2026-11-15T03:00:00Z',
+      actor: 'agent',
+      ruleId: 'cut',
+      actionType: 'remove_creative',
+      target: { campaignId: 'c1', productId: 'p1', videoId: 'v9' },
+      params: {},
+      before: { from: '2026-11-09T00:00:00+07:00', to: '2026-11-14T23:59:59+07:00', cost: 382_000, revenue: 878_000, orders: 2, roi: 2.3, breakEven: 3.5 },
+      beforeFull: { from: '2026-11-09', to: '2026-11-15', cost: 436_000, revenue: 1_756_000, orders: 4, at: '2026-11-17T00:00:00Z' },
+      after: {
+        from: '2026-11-16T00:00:00+07:00',
+        to: '2026-11-17T23:59:59+07:00',
+        cost: 0,
+        revenue: 439_000,
+        orders: 1,
+        roi: null,
+        breakEven: 3.5,
+        days: [
+          { date: '2026-11-16', cost: 0, revenue: 439_000, orders: 1, roi: null },
+          { date: '2026-11-17', cost: 0, revenue: 0, orders: 0, roi: null },
+        ],
+      },
+      status: 'success',
+      ...over,
+    };
+  }
+  const reAdds = () => mock.runtime.proposals.filter((p) => p.reAddOf);
+
+  it('quy tắc Cần duyệt → đề xuất Thêm lại ở Chờ duyệt (không tự chạy), lý do ghi rõ gỡ sai', async () => {
+    mock.runtime.actions = [wrongCut()];
+    const s = await runAgent();
+    expect(reAdds()).toHaveLength(1);
+    const p = reAdds()[0];
+    expect(p).toMatchObject({ actionType: 'add_creative', ruleId: 'cut', ruleMode: 'approve', reAddOf: 'cut-v9', status: 'pending' });
+    expect(p.target.videoId).toBe('v9');
+    expect(p.reason).toMatch(/^Gỡ sai — video có lãi: tính đủ 09\/11–17\/11 .*ROI lúc gỡ 5,03 ≥ hoà vốn 3,5/);
+    expect(s.autoIds).not.toContain(p.id);
+    // Lượt sau không tạo trùng
+    await runAgent();
+    expect(reAdds()).toHaveLength(1);
+  });
+
+  it('quy tắc BOT chạy → đề xuất vào autoIds (BOT tự thêm lại)', async () => {
+    mock.config.rules[0] = { ...mock.config.rules[0], mode: 'auto' };
+    mock.runtime.actions = [wrongCut()];
+    const s = await runAgent();
+    expect(reAdds()[0].ruleMode).toBe('auto');
+    expect(s.autoIds).toContain(reAdds()[0].id);
+  });
+
+  it('quy tắc Tắt → không làm; gỡ thủ công → đề xuất Cần duyệt (không theo quy tắc)', async () => {
+    mock.config.rules[0] = { ...mock.config.rules[0], mode: 'off' };
+    mock.runtime.actions = [wrongCut()];
+    await runAgent();
+    expect(reAdds()).toHaveLength(0);
+    mock.runtime.actions = [wrongCut({ ruleId: null, actor: 'manual' })];
+    const s = await runAgent();
+    expect(reAdds()[0]).toMatchObject({ ruleId: '', ruleMode: 'approve' });
+    expect(s.autoIds).toHaveLength(0);
+  });
+
+  it('không thêm lại: chưa đủ số ngày gỡ / Sếp đã bỏ qua / video đã có thao tác mới / đã hoàn tác / video đang chạy lại', async () => {
+    mock.runtime.actions = [wrongCut({ beforeFull: undefined })];
+    await runAgent();
+    expect(reAdds()).toHaveLength(0);
+
+    mock.runtime.actions = [wrongCut()];
+    await runAgent();
+    reAdds()[0].status = 'rejected';
+    await runAgent();
+    expect(reAdds()).toHaveLength(1);
+
+    mock.runtime.proposals = [];
+    mock.runtime.actions = [
+      wrongCut(),
+      { ...wrongCut({ id: 'manual-add', actionType: 'add_creative', actor: 'manual', ruleId: null }), executedAt: '2026-11-17T03:00:00Z' },
+    ];
+    await runAgent();
+    expect(reAdds()).toHaveLength(0);
+
+    mock.runtime.actions = [wrongCut({ status: 'undone' })];
+    await runAgent();
+    expect(reAdds()).toHaveLength(0);
+
+    mock.runtime.actions = [wrongCut()];
+    mock.snapshot.videos.push(video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost: 10_000, status: 'delivering' }));
+    await runAgent();
+    expect(reAdds()).toHaveLength(0);
+  });
+
+  it('đề xuất thêm lại đang chờ mà video đã chạy lại → Không còn khớp', async () => {
+    mock.runtime.actions = [wrongCut()];
+    await runAgent();
+    mock.snapshot.videos.push(video({ id: 'v9', campaignId: 'c1', productId: 'p1', cost: 10_000, status: 'delivering' }));
+    await runAgent();
+    expect(reAdds()[0]).toMatchObject({ status: 'outdated', note: 'Video chưa bị gỡ' });
+  });
+
+  it('video vừa thêm lại vì gỡ sai → quy tắc gỡ bỏ qua video đó 7 ngày', async () => {
+    mock.runtime.actions = [
+      { ...wrongCut({ id: 'readd-v1', actionType: 'add_creative', reAddOf: 'x', target: { campaignId: 'c1', productId: 'p1', videoId: 'v1' } }), executedAt: '2026-11-17T03:00:00Z' },
+    ];
+    const s = await runAgent();
+    expect(mock.runtime.proposals.filter((p) => p.actionType === 'remove_creative').map((p) => p.target.videoId).sort()).toEqual(['v2', 'v3']);
+    expect(s.skippedTargets['Vừa thêm lại vì gỡ sai — chưa gỡ lại']).toBe(1);
   });
 });

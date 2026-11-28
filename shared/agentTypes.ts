@@ -164,6 +164,11 @@ export interface AgentProposal {
   long?: boolean;
   /** Lỗ âm thầm: 7 ngày chi ít chưa tới ngưỡng nhưng 14 + 30 ngày đều thuộc nhóm */
   slowLoss?: boolean;
+  /**
+   * Thêm lại video vì GỠ SAI (Sếp chốt 28/11): ID dòng nhật ký gỡ video đã chấm Gỡ sai (tính cả ngày gỡ + đơn về sau, ROI ≥ hoà vốn).
+   * Đề xuất theo chế độ quy tắc đã gỡ (Cần duyệt / BOT chạy); gỡ thủ công → `ruleId` = "" (luôn Cần duyệt).
+   */
+  reAddOf?: string;
 }
 
 export type ActionActor = 'agent' | 'approved' | 'manual';
@@ -208,6 +213,13 @@ export interface AgentActionLog {
   measureStop?: { date: string; reason: string };
   /** Người bấm trên web (Duyệt / Thủ công / Hoàn tác); thiếu = dòng cũ trước khi có đăng nhập, hoặc Agent tự chạy */
   by?: ActorRef;
+  /**
+   * Gỡ video / tắt sản phẩm: số ĐỦ NGÀY từ ngày đầu "Lúc quyết định" tới HẾT NGÀY GỠ (server lấy sau khi ngày gỡ hết,
+   * lấy lại tới khi qua 48h) — để chấm không bỏ sót đơn cùng ngày gỡ. `from` / `to` = yyyy-MM-dd, `at` = lúc lấy.
+   */
+  beforeFull?: { from: string; to: string; cost: number; revenue: number; orders: number; at: string };
+  /** Dòng này là lần Thêm lại video vì gỡ sai — ID dòng gỡ */
+  reAddOf?: string;
 }
 
 export interface AgentGuardrails {

@@ -516,6 +516,7 @@ export function executeProposal(proposalId: string, by?: ActorRef, actor: 'appro
       note: 'Đang gửi lệnh lên TikTok',
       proposalId: p.id,
       ...(by ? { by } : {}),
+      ...(p.reAddOf ? { reAddOf: p.reAddOf } : {}),
     };
     updateRuntime((r: AgentRuntime) => {
       const x = r.proposals.find((y) => y.id === proposalId);

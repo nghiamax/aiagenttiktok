@@ -321,6 +321,14 @@ describe('Gỡ / thêm video (gmv_max_creative_update)', () => {
     expect(mock.writes[0].params.action).toBe('ADD');
   });
 
+  it('thêm lại vì gỡ sai (BOT chạy) → Nhật ký ghi reAddOf = lần gỡ, người làm BOT', async () => {
+    mock.videoStatus['p1/v1'] = 'EXCLUDED';
+    const p = proposal('add_creative', {}, { reAddOf: 'cut-1', ruleMode: 'auto' });
+    const r = await ex.executeProposal(p.id, ex.BOT_ACTOR, 'agent');
+    expect(mock.writes[0].params.action).toBe('ADD');
+    expect(r.action).toMatchObject({ actionType: 'add_creative', actor: 'agent', reAddOf: 'cut-1', proposalId: p.id });
+  });
+
   it('TikTok báo lỗi → nhật ký Lỗi, không thử lại', async () => {
     mock.writeError = new Error('TikTok trả lỗi 40002: invalid');
     const r = await ex.executeProposal(proposal('remove_creative').id);

@@ -73,6 +73,19 @@ export default function ProposalItem({ item, ruleName, selected, busy, onToggle,
             </Link>
           </div>
         )}
+        {/* Thêm lại vì gỡ sai (Sếp chốt 28/11) → nhãn + mở đúng dòng gỡ ở Nhật ký */}
+        {item.reAddOf && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-danger">Thêm lại vì gỡ sai</span>
+            {!item.ruleId && <span className="rounded-full bg-canvas px-2.5 py-1 text-xs font-medium text-muted">Gỡ thủ công</span>}
+            <Link
+              to={`/care-ads/product?view=log&log=${encodeURIComponent(item.reAddOf)}`}
+              className="text-xs font-medium text-primary hover:text-primary-hover"
+            >
+              Xem lần gỡ
+            </Link>
+          </div>
+        )}
         {offset && (
           <button
             type="button"

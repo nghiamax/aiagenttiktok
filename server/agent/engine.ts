@@ -26,6 +26,15 @@ import { getSnapshot, todayVN } from '../ads/cache.js';
 import { BOOT_VERSION } from '../buildInfo.js';
 import { getAgentConfig, getRuntime, getSettings, updateRuntime } from '../store.js';
 import { applyRecentActions } from '../../shared/videoStatus.js';
+import {
+  findWrongCuts,
+  reAddBlockReason,
+  reAddMatch,
+  reAddReason,
+  reAddWindow,
+  recentlyReAdded,
+  REREMOVE_BLOCK_REASON,
+} from './reAdd.js';
 
 /**
  * Một lượt chạy của Agent: CHỈ ĐỌC số liệu, tạo đề xuất (chờ Sếp duyệt) và ghi nhắc việc.
@@ -110,9 +119,25 @@ export function recheckProposal(
   /** Nhật ký thao tác (BOT chỉnh ROI & ngân sách xét lịch sử bước thử) */
   actions: AgentActionLog[] = [],
 ): { ok: true; match: ConfirmedTarget } | { ok: false; reason: string } {
+  // Thêm lại video vì gỡ sai: không theo nhóm của quy tắc — xét lại lần gỡ (vẫn Gỡ sai, video vẫn đang gỡ)
+  if (p.reAddOf) {
+    const cut = actions.find((a) => a.id === p.reAddOf);
+    if (!cut) return { ok: false, reason: 'Không tìm thấy lần gỡ trong Nhật ký' };
+    if (p.ruleId) {
+      const r = cfg.rules.find((x) => x.id === p.ruleId);
+      if (!r) return { ok: false, reason: 'Quy tắc đã bị xoá' };
+      if (r.mode === 'off') return { ok: false, reason: 'Quy tắc đã tắt' };
+    }
+    const why = reAddBlockReason(cut, actions, snapshot, cfg.guardrails.evaluateAfterHours, Date.now());
+    return why ? { ok: false, reason: why } : { ok: true, match: reAddMatch(cut) };
+  }
   const rule = cfg.rules.find((r) => r.id === p.ruleId);
   if (!rule) return { ok: false, reason: 'Quy tắc đã bị xoá' };
   if (rule.mode === 'off') return { ok: false, reason: 'Quy tắc đã tắt' };
+  // Video vừa được thêm lại vì gỡ sai → chưa gỡ lại (chống gỡ ↔ thêm lặp)
+  if (p.actionType === 'remove_creative' && recentlyReAdded(actions, p.target, Date.now())) {
+    return { ok: false, reason: REREMOVE_BLOCK_REASON };
+  }
   if (!rule.trigger) return { ok: false, reason: 'Quy tắc chưa chọn nhóm' };
   const k = keyOf(p.actionType, p.target);
   // Đủ 3 khung: đã xác nhận (7 = 14) + lỗ âm thầm (14 + 30, 7 ngày chi ít); dấu hiệu / đang hồi phục → không làm
@@ -194,7 +219,8 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
       if (r.ok) {
         // BOT chỉnh ROI & ngân sách: % đổi tính lại theo số mới
         if (r.match.params) p.params = { ...r.match.params };
-        p.before = windowOf(r.match, range);
+        const cut = p.reAddOf ? rt.actions.find((a) => a.id === p.reAddOf) : undefined;
+        p.before = cut ? reAddWindow(cut) : windowOf(r.match, range);
         p.reason = r.match.reason;
         if (r.match.offset) p.offset = r.match.offset;
         else delete p.offset;
@@ -254,6 +280,10 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
         const k = keyOf(actionType, t.target);
         if (pendingKeys.has(k)) {
           skip('Đã có đề xuất đang chờ');
+          continue;
+        }
+        if (actionType === 'remove_creative' && recentlyReAdded(rt.actions, t.target, now)) {
+          skip(REREMOVE_BLOCK_REASON);
           continue;
         }
         // BOT chỉnh chiến dịch: bảo vệ / lùi không chờ; bước thử chỉ chờ sau khi Sếp bỏ qua
@@ -335,6 +365,39 @@ export async function runAgent(opts?: { fresh?: boolean }): Promise<RunSummary> 
         todayCount++;
         summary.proposals++;
       }
+    }
+
+    // Gỡ sai (tính đủ ngày gỡ + đơn về sau, ROI ≥ hoà vốn) → Thêm lại theo chế độ quy tắc đã gỡ (Sếp chốt 28/11)
+    for (const { cut, ruleId, mode } of findWrongCuts(rt.actions, rt.proposals, cfg, snapshot, now)) {
+      const k = keyOf('add_creative', cut.target);
+      if (pendingKeys.has(k)) {
+        skip('Đã có đề xuất đang chờ');
+        continue;
+      }
+      if (todayCount >= guardrails.maxActionsPerDay) {
+        skip('Đủ số thao tác tối đa hôm nay');
+        continue;
+      }
+      const proposal: AgentProposal = {
+        id: crypto.randomUUID(),
+        createdAt: ranAt,
+        expiresAt: new Date(now + PROPOSAL_TTL_HOURS * HOUR).toISOString(),
+        ruleId,
+        actionType: 'add_creative',
+        target: cut.target,
+        params: {},
+        reason: reAddReason(cut),
+        before: reAddWindow(cut),
+        status: 'pending',
+        ruleMode: mode,
+        reAddOf: cut.id,
+      };
+      if (mode === 'auto') summary.autoIds.push(proposal.id);
+      rt.proposals.unshift(proposal);
+      pendingKeys.add(k);
+      touch(k, ranAt);
+      todayCount++;
+      summary.proposals++;
     }
 
     rt.lastRunAt = ranAt;

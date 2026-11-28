@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCw, RotateCw, Trash2, Undo2 } from 'lucide-react';
 import { CREATIVE_MAX_RETRIES } from '../../../../../shared/agentPolicy';
 import { formatDateTime } from '../../../../lib/format';
@@ -98,7 +99,10 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
         {proposedAt && <p className="mt-0.5 text-xs text-muted">Đề xuất lúc {formatDateTime(proposedAt)}</p>}
       </div>
 
-      <ActionCell actionType={item.actionType} ruleName={ruleName} params={item.params} />
+      <div className="min-w-0">
+        <ActionCell actionType={item.actionType} ruleName={ruleName} params={item.params} />
+        <ReAddLink item={item} all={all} />
+      </div>
       <TargetCell target={item.target} />
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -205,5 +209,28 @@ export default function ActionLogItem({ item, all, ruleName, evaluateAfterHours,
         />
       )}
     </li>
+  );
+}
+
+/** Gỡ sai ↔ Thêm lại (Sếp chốt 28/11): dòng thêm lại → link lần gỡ; dòng gỡ đã được thêm lại → link dòng thêm lại */
+function ReAddLink({ item, all }: { item: AgentActionLog; all: AgentActionLog[] }) {
+  const logLink = (id: string) => `/care-ads/product?view=log&log=${encodeURIComponent(id)}`;
+  if (item.reAddOf) {
+    return (
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-danger">Thêm lại vì gỡ sai — video có lãi</span>
+        <Link to={logLink(item.reAddOf)} className="text-xs font-medium text-primary hover:text-primary-hover">
+          Xem lần gỡ
+        </Link>
+      </div>
+    );
+  }
+  if (item.actionType !== 'remove_creative') return null;
+  const re = all.find((a) => a.reAddOf === item.id && a.status !== 'failed');
+  if (!re) return null;
+  return (
+    <Link to={logLink(re.id)} className="mt-1.5 block text-xs font-medium text-primary hover:text-primary-hover">
+      → Đã thêm lại lúc {formatDateTime(re.executedAt)}
+    </Link>
   );
 }

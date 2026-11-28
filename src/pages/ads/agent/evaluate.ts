@@ -10,10 +10,17 @@ import type { AgentActionLog, AgentProposal, AgentRule, MetricWindow, RuleMode }
  * - Sau ≥ trước → Đúng, thấp hơn → Sai. Tác động = chênh lãi/lỗ mỗi ngày × số ngày sau.
  * - Chênh quá nhỏ (chi chênh < MIN_COST_DIFF và đơn chênh < 1) → Chưa đủ số liệu, chưa chấm.
  * - Gỡ video / tắt sản phẩm (Sếp chốt 28/11): doanh thu / đơn SAU khi gỡ là ĐƠN VỀ MUỘN (khách bấm lúc còn chạy) →
- *   cộng vào khoảng TRƯỚC, không tính là lãi của việc gỡ; sau chỉ còn chi. Tính cả đơn muộn mà ROI ≥ hoà vốn → Sai.
+ *   cộng vào khoảng TRƯỚC, không tính là lãi của việc gỡ; sau chỉ còn chi. Tính cả đơn muộn mà ROI ≥ hoà vốn → Sai;
+ *   ≥ LATE_CLOSE_RATIO × hoà vốn → Sát hoà vốn (không chấm Đúng / Sai).
  */
 
-export type Verdict = 'good' | 'bad' | 'pending' | 'insufficient' | 'unscorable' | 'excluded';
+export type Verdict = 'good' | 'bad' | 'close' | 'pending' | 'insufficient' | 'unscorable' | 'excluded';
+
+/**
+ * Gỡ / tắt có đơn về muộn: tính cả đơn muộn mà ROI lúc gỡ ≥ tỷ lệ này × hoà vốn (nhưng < hoà vốn) → "Sát hoà vốn"
+ * (không Đúng / Sai — gỡ gần như không lợi không hại, đơn muộn còn về có thể thành Gỡ sai; Sếp chốt 28/11)
+ */
+export const LATE_CLOSE_RATIO = 0.9;
 
 /** Chi chênh tối thiểu (cả khoảng sau) để chấm */
 export const MIN_COST_DIFF = 50_000;
@@ -77,6 +84,9 @@ export function evaluateAction(a: AgentActionLog, evaluateAfterHours: number, no
   if (!be) return { ...EMPTY, ...parts, verdict: 'unscorable' };
   if (Math.abs(dCost) < MIN_COST_DIFF && Math.abs(dOrders) < 1) return { ...EMPTY, ...parts, verdict: 'insufficient' };
   const w = CUT_ACTIONS.has(a.actionType) ? cutWindows(a) : { base, after };
+  if ('late' in w && (w.late.revenue > 0 || w.late.orders > 0) && w.roi != null && w.roi >= LATE_CLOSE_RATIO * be && w.roi < be) {
+    return { ...EMPTY, ...parts, verdict: 'close' };
+  }
   const profitEffect = (dailyProfit(w.after, be) - dailyProfit(w.base, be)) * aDays;
   return { ...EMPTY, ...parts, verdict: profitEffect >= 0 ? 'good' : 'bad', profitEffect };
 }
@@ -171,7 +181,8 @@ export function summarize(list: { action: AgentActionLog; ev: ActionEvaluation }
     good,
     bad,
     // Chưa đủ số liệu = vẫn đang chờ thêm ngày
-    pending: count('pending') + count('insufficient'),
+    // Sát hoà vốn (gỡ có đơn về muộn): đơn muộn còn có thể về → coi như còn chờ, không tính vào tỷ lệ đúng
+    pending: count('pending') + count('insufficient') + count('close'),
     unscorable: count('unscorable'),
     accuracy: good + bad > 0 ? good / (good + bad) : null,
     profitEffect: sum(scored, (e) => e.profitEffect),
@@ -344,6 +355,14 @@ export function summarizeAction(a: AgentActionLog, ev: ActionEvaluation, now = D
 
   if (ev.verdict === 'unscorable') return { tone: 'muted', text: `${head}: ${facts} · chưa chấm được — thiếu ROI hoà vốn` };
   if (ev.verdict === 'insufficient') return { tone: 'muted', text: `Chưa đủ số liệu để chấm — ${head}: ${facts}` };
+  if (ev.verdict === 'close') {
+    const c = cutWindows(a);
+    const verb = a.actionType === 'remove_creative' ? 'gỡ' : 'tắt';
+    return {
+      tone: 'muted',
+      text: `≈ Sát hoà vốn — ${head}: ${formatNumber(c.late.orders)} đơn về muộn (DT ${vndShort(c.late.revenue)}, chi ${vndShort(total.cost)}) → tính cả, ROI lúc ${verb} ${formatNumber(c.roi, 2)} ≈ hoà vốn ${formatNumber(a.before.breakEven, 2)}: ${verb} gần như không lợi không hại · đơn về muộn còn về thì có thể thành ${verb === 'gỡ' ? 'Gỡ' : 'Tắt'} sai`,
+    };
+  }
   if (ev.verdict !== 'good' && ev.verdict !== 'bad') return { tone: 'muted', text: `${head}: ${facts}` };
 
   const be = a.before.breakEven!;

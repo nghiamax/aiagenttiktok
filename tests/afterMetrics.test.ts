@@ -231,16 +231,23 @@ describe('summarizeAction (câu kết luận)', () => {
   });
 
   // Đơn về muộn sau khi gỡ (Sếp chốt 28/11): cộng vào khoảng trước, không tính là lãi của việc gỡ
-  it('ca thật 26/11: gỡ rồi có 1 đơn về muộn 439k → không còn "lợi 144k"; tính cả vẫn ROI 3,45 < hoà vốn → Đúng sát hoà vốn', () => {
-    const real = action({
-      before: { from: '2026-11-19T00:00:00+07:00', to: '2026-11-25T23:59:59+07:00', cost: 382_000, revenue: 878_000, orders: 2, roi: 2.3, breakEven: 3.5 },
-    });
-    const a = withAfter(real, [{ cost: 0, revenue: 439_000, orders: 1 }]);
+  const REAL = { from: '2026-11-19T00:00:00+07:00', to: '2026-11-25T23:59:59+07:00', cost: 382_000, revenue: 878_000, orders: 2, roi: 2.3, breakEven: 3.5 };
+
+  it('ca thật 26/11: 1 đơn về muộn 439k → ROI lúc gỡ 3,45 sát hoà vốn 3,5 → "Sát hoà vốn", không chấm Đúng', () => {
+    const a = withAfter(action({ before: REAL }), [{ cost: 0, revenue: 439_000, orders: 1 }]);
     const ev = evaluateAction(a, 24, T);
-    expect(ev.verdict).toBe('good');
-    expect(ev.profitEffect!).toBeGreaterThan(0);
-    expect(ev.profitEffect!).toBeLessThan(2_000);
-    expect(line(a)?.text).toMatch(/^✓ Đúng — 1 ngày sau: 1 đơn về muộn \(DT 439k, chi 0đ\), tính cả vẫn ROI lúc gỡ 3,45 < hoà vốn 3,5/);
+    expect(ev.verdict).toBe('close');
+    expect(ev.profitEffect).toBeNull();
+    const r = line(a);
+    expect(r?.tone).toBe('muted');
+    expect(r?.text).toMatch(/^≈ Sát hoà vốn — 1 ngày sau: 1 đơn về muộn \(DT 439k, chi 0đ\) → tính cả, ROI lúc gỡ 3,45 ≈ hoà vốn 3,5/);
+  });
+
+  it('đơn về muộn ít, tính cả ROI lúc gỡ vẫn < 0,9 × hoà vốn → Đúng', () => {
+    // (878k + 100k) ÷ 382k = 2,56 < 3,15
+    const a = withAfter(action({ before: REAL }), [{ cost: 0, revenue: 100_000, orders: 1 }]);
+    expect(evaluateAction(a, 24, T).verdict).toBe('good');
+    expect(line(a)?.text).toMatch(/^✓ Đúng — 1 ngày sau: 1 đơn về muộn \(DT 100k, chi 0đ\), tính cả vẫn ROI lúc gỡ 2,56 < hoà vốn 3,5/);
   });
 
   it('đơn về muộn đẩy ROI lúc gỡ ≥ hoà vốn → Gỡ sai, gợi ý Thêm lại', () => {

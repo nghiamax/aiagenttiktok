@@ -1,10 +1,11 @@
-import { CircleCheck, CircleHelp, CircleX, Clock } from 'lucide-react';
+import { CircleCheck, CircleHelp, CircleX, Clock, Scale } from 'lucide-react';
 import { shortVnd } from '../../../../lib/format';
 import type { ActionEvaluation } from '../evaluate';
 
 const META = {
   good: { label: 'Đúng', icon: CircleCheck, className: 'bg-green-50 text-accent-green' },
   bad: { label: 'Sai', icon: CircleX, className: 'bg-rose-50 text-danger' },
+  close: { label: 'Sát hoà vốn', icon: Scale, className: 'bg-amber-50 text-amber-700' },
   pending: { label: 'Chờ đánh giá', icon: Clock, className: 'bg-blue-50 text-primary' },
   insufficient: { label: 'Chưa đủ số liệu', icon: Clock, className: 'bg-canvas text-muted' },
   unscorable: { label: 'Chưa chấm được', icon: CircleHelp, className: 'bg-canvas text-muted' },
@@ -24,7 +25,9 @@ export default function VerdictBadge({ ev }: { ev: ActionEvaluation }) {
       ? 'Thiếu ROI hoà vốn lúc quyết định nên chưa tính được lời/lỗ'
       : ev.verdict === 'pending'
         ? 'Chưa đủ thời gian hoặc chưa có số liệu sau thao tác'
-        : ev.verdict === 'insufficient'
+        : ev.verdict === 'close'
+          ? 'Có đơn về muộn sau khi gỡ: tính cả thì ROI lúc gỡ sát hoà vốn — gỡ gần như không lợi không hại, đơn muộn còn về có thể thành Gỡ sai'
+          : ev.verdict === 'insufficient'
           ? 'Chi tiêu / số đơn thay đổi quá ít so với trước — chờ thêm ngày để chấm'
           : 'Lãi/lỗ QC thay đổi so với trước thao tác (ước tính)';
   return (
